@@ -231,3 +231,27 @@ select:focus[data-flux-control] {
 /* \[:where(&)\]:size-4 {
     @apply size-4;
 } */
+
+/* Official mark uses a solid black artboard; tile frames it. Light UI: white tile; dark UI: near-black. */
+.docutrust-logo-tile {
+    @apply inline-flex items-center justify-center rounded-lg leading-none;
+    padding: 2px;
+    @apply bg-white ring-1 ring-zinc-200 shadow-sm;
+}
+
+/* Light UI only: slight lift kung iisang PNG lang */
+html:not(.dark) .docutrust-logo-tile img {
+    filter: brightness(1.12) contrast(1.05);
+}
+
+html:not(.dark) .docutrust-logo-tile:has(picture) img {
+    filter: none;
+}
+
+html.dark .docutrust-logo-tile {
+    @apply bg-zinc-950 shadow-none ring-0 ring-transparent;
+}
+
+html.dark .docutrust-logo-tile img {
+    filter: none;
+}

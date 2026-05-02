@@ -1,11 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+(function () {
+  function docuTrustSyncColorScheme () {
+    var m = window.matchMedia('(prefers-color-scheme: light)');
+    document.documentElement.classList.toggle('light-scheme', m.matches);
+  }
+  docuTrustSyncColorScheme();
+  var mq = window.matchMedia('(prefers-color-scheme: light)');
+  if (typeof mq.addEventListener === 'function') {
+    mq.addEventListener('change', docuTrustSyncColorScheme);
+  } else if (typeof mq.addListener === 'function') {
+    mq.addListener(docuTrustSyncColorScheme);
+  }
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#060d10" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f0f7f5" media="(prefers-color-scheme: light)">
 <title>DocuTrust | Secure & Tamper-Proof Digital Signatures</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" href="{{ asset('images/docutrust-logo.png') }}" type="image/png">
 <style>
 :root {
   --teal: #2EC4B6;
@@ -22,10 +41,134 @@
   --text: #e8f4f2;
   --text-muted: #7a9e9b;
   --text-dim: #4a706d;
+  --headline: #ffffff;
+  --header-bg: rgba(6,13,16,0.88);
+  --mobile-nav-bg: rgba(6,13,16,0.98);
+  --trust-bar-bg: rgba(13,26,31,0.7);
+  --badge-float2-bg: rgba(6,13,16,0.92);
+  --footer-bg: rgba(6,13,16,0.9);
+  --overlay-dark: rgba(0,0,0,0.3);
+  --overlay-signer: rgba(0,0,0,0.25);
+  --overlay-kpi: rgba(0,0,0,0.3);
+  --progress-track: rgba(255,255,255,0.06);
+  --chip-bg: rgba(255,255,255,0.04);
+  --ai-bubble-bg: rgba(0,0,0,0.3);
+  --logo-tile-bg: #0a0a0a;
+  --logo-tile-shadow: 0 0 20px rgba(46,196,182,0.2);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --teal: #0d9488;
+    --teal-dark: #0f766e;
+    --teal-light: #0f766e;
+    --green: #166534;
+    --green-mid: #15803d;
+    --gold: #b45309;
+    --bg: #f0f7f5;
+    --surface: #ffffff;
+    --surface2: #e8f3f0;
+    --border: rgba(13, 148, 136, 0.2);
+    --border2: rgba(13, 148, 136, 0.1);
+    --text: #0f172a;
+    --text-muted: #475569;
+    --text-dim: #64748b;
+    --headline: #0a1917;
+    --header-bg: rgba(255, 255, 255, 0.92);
+    --mobile-nav-bg: rgba(255, 255, 255, 0.98);
+    --trust-bar-bg: rgba(255, 255, 255, 0.86);
+    --badge-float2-bg: rgba(255, 255, 255, 0.96);
+    --footer-bg: rgba(248, 252, 251, 0.97);
+    --overlay-dark: rgba(15, 23, 42, 0.06);
+    --overlay-signer: rgba(15, 23, 42, 0.05);
+    --overlay-kpi: rgba(15, 23, 42, 0.05);
+    --progress-track: rgba(15, 23, 42, 0.08);
+    --chip-bg: rgba(15, 23, 42, 0.04);
+    --ai-bubble-bg: rgba(15, 23, 42, 0.06);
+    --logo-tile-bg: #ffffff;
+    --logo-tile-shadow: 0 2px 10px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.08);
+  }
+
+  body::before {
+    opacity: 0.35;
+  }
+
+  body::after {
+    background-image:
+      linear-gradient(rgba(46,196,182,0.07) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(46,196,182,0.07) 1px,transparent 1px);
+  }
+
+  .doc-card {
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(46,196,182,0.06);
+  }
+
+  .ai-visual {
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
+  }
+
+  .orb {
+    opacity: 0.12;
+  }
+
+  .feature-card:hover {
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(46,196,182,0.12);
+  }
+
+  .about-media {
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
+  }
+
+  .about-media::after {
+    background: linear-gradient(to top,rgba(15,23,42,0.35),rgba(15,23,42,0.06) 45%,transparent 75%);
+  }
+
+  .about-surepay {
+    background: rgba(255,255,255,0.86);
+    border: 1px solid rgba(13, 148, 136, 0.24);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  }
+
+  .about-surepay-label {
+    color: var(--green);
+  }
+
+  .feature-card {
+    background: linear-gradient(180deg, rgba(13, 148, 136, 0.06), rgba(22, 163, 74, 0.04));
+    border-color: rgba(13, 148, 136, 0.2);
+  }
+
+  .feature-card.featured {
+    background: linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(22, 163, 74, 0.1));
+    border-color: rgba(13, 148, 136, 0.3);
+  }
+
+  .feature-icon {
+    background: rgba(13, 148, 136, 0.12);
+    border-color: rgba(13, 148, 136, 0.24);
+  }
+
+  .badge-float {
+    background: rgba(13, 148, 136, 0.14);
+    border: 1px solid rgba(13, 148, 136, 0.25);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  }
+
+  .badge-float-text {
+    color: var(--green);
+  }
+
+  .badge-float-icon {
+    background: rgba(13, 148, 136, 0.14);
+  }
+
+  .badge-float-icon svg {
+    color: var(--teal-dark);
+  }
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
+html{color-scheme:dark light;scroll-behavior:smooth}
 body{
   font-family:'DM Sans',sans-serif;
   background:var(--bg);
@@ -84,7 +227,7 @@ header{
   top:0;
   z-index:100;
   border-bottom:1px solid var(--border);
-  background:rgba(6,13,16,0.88);
+  background:var(--header-bg);
   backdrop-filter:blur(20px);
 }
 .header-inner{
@@ -104,15 +247,121 @@ header{
   text-decoration:none;
   flex-shrink:0;
 }
-.logo-icon{
-  width:38px;height:38px;
+/* PNG mark includes a black artboard; tile uses theme vars (+ .light-scheme fallback). */
+.logo-mark{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:0;
+  background:var(--logo-tile-bg);
   border-radius:10px;
-  background:linear-gradient(135deg,var(--teal),var(--green));
-  display:flex;align-items:center;justify-content:center;
-  box-shadow:0 0 20px rgba(46,196,182,0.35);
+  padding:2px;
+  box-shadow:var(--logo-tile-shadow);
 }
-.logo-icon svg{width:20px;height:20px;color:#fff}
-.logo-text{font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:var(--text)}
+/* JS adds .light-scheme on <html> so tile + wordmark track system light mode reliably */
+html.light-scheme{
+  --logo-tile-bg:#ffffff;
+  --logo-tile-shadow:0 2px 10px rgba(0,0,0,0.06),0 0 0 1px rgba(0,0,0,0.08);
+}
+html.light-scheme .feature-card{
+  background: linear-gradient(180deg, rgba(13, 148, 136, 0.06), rgba(22, 163, 74, 0.04));
+  border-color: rgba(13, 148, 136, 0.2);
+}
+html.light-scheme .feature-card.featured{
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(22, 163, 74, 0.1));
+  border-color: rgba(13, 148, 136, 0.3);
+}
+html.light-scheme .feature-icon{
+  background: rgba(13, 148, 136, 0.12);
+  border-color: rgba(13, 148, 136, 0.24);
+}
+html.light-scheme .about-media{
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
+}
+html.light-scheme .about-media::after{
+  background: linear-gradient(to top,rgba(15,23,42,0.35),rgba(15,23,42,0.06) 45%,transparent 75%);
+}
+html.light-scheme .about-surepay{
+  background: rgba(255,255,255,0.86);
+  border: 1px solid rgba(13, 148, 136, 0.24);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+html.light-scheme .about-surepay-label{
+  color: var(--green);
+}
+html.light-scheme .badge-float{
+  background: rgba(13, 148, 136, 0.14);
+  border: 1px solid rgba(13, 148, 136, 0.25);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+html.light-scheme .badge-float-text{
+  color: var(--green);
+}
+html.light-scheme .badge-float-icon{
+  background: rgba(13, 148, 136, 0.14);
+}
+html.light-scheme .badge-float-icon svg{
+  color: var(--teal-dark);
+}
+.logo-img{
+  height:40px;
+  width:auto;
+  max-width:200px;
+  object-fit:contain;
+  display:block;
+  border-radius:8px;
+}
+/* Light theme: huwag gumamit ng screen blend — nagpapawala sa buong icon. Banayad na filter lang; pinakamaganda ay PNG na may transparent background. */
+@media (prefers-color-scheme: light) {
+  .logo-mark{
+    background:#ffffff;
+  }
+  /* Banayad na ayos lang kung isang PNG lang; kung may docutrust-logo-light.png, walang filter */
+  .logo-mark .logo-img{
+    filter:brightness(1.12) contrast(1.05);
+  }
+  .logo-mark:has(picture) .logo-img{
+    filter:none;
+  }
+}
+html.light-scheme .logo-mark{
+  background:#ffffff;
+}
+html.light-scheme .logo-mark .logo-img{
+  filter:brightness(1.12) contrast(1.05);
+}
+html.light-scheme .logo-mark:has(picture) .logo-img{
+  filter:none;
+}
+.logo-text{
+  font-family:'Syne',sans-serif;
+  font-weight:800;
+  font-size:1.2rem;
+  color:var(--text);
+}
+/* Light theme: solid brand color — mas mabasa kaysa gradient+transparent (iwas puti/hindi lumilitaw) */
+@media (prefers-color-scheme: light) {
+  .logo-text,
+  .footer-logo > .logo-text {
+    color:var(--teal-dark);
+    background:none;
+    -webkit-text-fill-color:currentColor;
+    background-clip:border-box;
+  }
+}
+html.light-scheme .logo-text,
+html.light-scheme .footer-logo > .logo-text{
+  color:var(--teal-dark);
+  background:none;
+  -webkit-text-fill-color:currentColor;
+  background-clip:border-box;
+}
+.footer-logo .logo-mark{
+  box-shadow:none;
+}
+.footer-logo .logo-img{
+  height:36px;
+}
 
 nav{display:flex;align-items:center;gap:28px}
 nav a{
@@ -199,7 +448,7 @@ section{position:relative;z-index:1}
   font-size:clamp(1.75rem,3.6vw,2.75rem);
   font-weight:800;
   line-height:1.18;
-  color:#fff;
+  color:var(--headline);
   margin-bottom:18px;
   letter-spacing:-0.01em;
 }
@@ -281,7 +530,7 @@ section{position:relative;z-index:1}
   font-family:'Syne',sans-serif;
   font-weight:700;
   font-size:1rem;
-  color:#fff;
+  color:var(--headline);
 }
 .doc-status{
   font-size:.7rem;font-weight:700;
@@ -294,7 +543,7 @@ section{position:relative;z-index:1}
   letter-spacing:.06em;
 }
 .chain-vis{
-  background:rgba(0,0,0,0.3);
+  background:var(--overlay-dark);
   border:1px solid var(--border2);
   border-radius:12px;
   padding:16px;
@@ -330,7 +579,7 @@ section{position:relative;z-index:1}
   display:flex;
   align-items:center;
   justify-content:space-between;
-  background:rgba(0,0,0,0.25);
+  background:var(--overlay-signer);
   border:1px solid var(--border2);
   padding:10px 14px;
   border-radius:10px;
@@ -345,7 +594,7 @@ section{position:relative;z-index:1}
 
 .progress-bar{
   height:4px;
-  background:rgba(255,255,255,0.06);
+  background:var(--progress-track);
   border-radius:2px;
   overflow:hidden;
   margin-bottom:8px;
@@ -388,7 +637,7 @@ section{position:relative;z-index:1}
   position:absolute;
   bottom:-20px;
   left:-20px;
-  background:rgba(6,13,16,0.92);
+  background:var(--badge-float2-bg);
   border:1px solid var(--border);
   backdrop-filter:blur(16px);
   border-radius:14px;
@@ -406,7 +655,7 @@ section{position:relative;z-index:1}
   border-top:1px solid var(--border2);
   border-bottom:1px solid var(--border2);
   padding:20px 0;
-  background:rgba(13,26,31,0.7);
+  background:var(--trust-bar-bg);
 }
 .trust-bar-inner{
   display:flex;
@@ -422,7 +671,7 @@ section{position:relative;z-index:1}
   white-space:nowrap;
 }
 .trust-chip{
-  background:rgba(255,255,255,0.04);
+  background:var(--chip-bg);
   border:1px solid var(--border2);
   padding:6px 14px;
   border-radius:8px;
@@ -477,7 +726,7 @@ section{position:relative;z-index:1}
 .csc-badge svg{width:12px;height:12px}
 .csc-card h2{
   font-family:'Syne',sans-serif;
-  font-size:1.65rem;font-weight:800;color:#fff;
+  font-size:1.65rem;font-weight:800;color:var(--headline);
   line-height:1.2;margin-bottom:14px;
   letter-spacing:-0.01em;
 }
@@ -493,7 +742,7 @@ section{position:relative;z-index:1}
 .csc-link:hover{color:var(--teal-light);border-color:var(--teal-light)}
 .csc-stats{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .csc-stat{
-  background:rgba(0,0,0,0.3);
+  background:var(--overlay-dark);
   border:1px solid var(--border);
   border-radius:14px;
   padding:20px;
@@ -517,7 +766,7 @@ section{position:relative;z-index:1}
 .section-title{
   font-family:'Syne',sans-serif;font-weight:800;
   font-size:clamp(1.55rem,3vw,2.1rem);
-  color:#fff;line-height:1.2;margin-bottom:14px;
+  color:var(--headline);line-height:1.2;margin-bottom:14px;
   letter-spacing:-0.01em;
 }
 .section-sub{color:var(--text-muted);font-size:.9rem;max-width:540px;line-height:1.7}
@@ -576,7 +825,7 @@ section{position:relative;z-index:1}
 }
 .feature-card h3{
   font-family:'Syne',sans-serif;font-weight:700;
-  font-size:1rem;color:#fff;margin-bottom:8px;
+  font-size:1rem;color:var(--headline);margin-bottom:8px;
 }
 .feature-card p{font-size:.875rem;color:var(--text-muted);line-height:1.65}
 
@@ -599,7 +848,7 @@ section{position:relative;z-index:1}
 .blockchain-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:60px;align-items:center}
 .kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .kpi-card{
-  background:rgba(0,0,0,0.3);
+  background:var(--overlay-kpi);
   border:1px solid var(--border2);
   border-radius:14px;
   padding:20px;
@@ -626,7 +875,7 @@ section{position:relative;z-index:1}
 .blockchain-certs{display:flex;flex-direction:column;gap:12px;margin-top:24px}
 .cert-item{
   display:flex;align-items:center;gap:12px;
-  background:rgba(0,0,0,0.25);
+  background:var(--overlay-signer);
   border:1px solid var(--border2);
   border-radius:10px;
   padding:12px 16px;
@@ -665,7 +914,7 @@ section{position:relative;z-index:1}
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
 .ai-feature-icon svg{width:16px;height:16px;color:var(--teal)}
-.ai-feature-title{font-size:.875rem;font-weight:600;color:#fff;margin-bottom:3px}
+.ai-feature-title{font-size:.875rem;font-weight:600;color:var(--headline);margin-bottom:3px}
 .ai-feature-desc{font-size:.8rem;color:var(--text-muted)}
 
 .ai-visual{
@@ -686,7 +935,7 @@ section{position:relative;z-index:1}
   flex-shrink:0;font-size:.6rem;font-weight:700;color:#fff;
 }
 .ai-msg-bubble{
-  background:rgba(0,0,0,0.3);
+  background:var(--ai-bubble-bg);
   border:1px solid var(--border2);
   border-radius:10px;
   padding:10px 14px;
@@ -746,7 +995,7 @@ section{position:relative;z-index:1}
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
 .industry-icon svg{width:18px;height:18px;color:var(--teal)}
-.industry-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;color:#fff;margin-bottom:4px}
+.industry-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;color:var(--headline);margin-bottom:4px}
 .industry-desc{font-size:.78rem;color:var(--text-dim)}
 
 /* ── ABOUT ── */
@@ -765,6 +1014,57 @@ section{position:relative;z-index:1}
 .about-highlight-text strong{color:var(--teal-light)}
 .about-desc{color:var(--text-muted);line-height:1.75;margin-top:20px}
 .about-desc + .about-desc{margin-top:12px}
+.about-media{
+  position:relative;
+  border-radius:20px;
+  overflow:hidden;
+  border:1px solid var(--border);
+  background:var(--surface);
+  box-shadow:0 18px 50px rgba(0,0,0,0.35);
+}
+.about-media img{
+  width:100%;
+  height:320px;
+  object-fit:cover;
+  display:block;
+}
+.about-media::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to top,rgba(6,13,16,0.62),rgba(6,13,16,0.12) 45%,transparent 75%);
+  pointer-events:none;
+}
+.about-surepay{
+  position:absolute;
+  right:16px;
+  bottom:16px;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  max-width:280px;
+  border-radius:14px;
+  padding:10px 12px;
+  backdrop-filter:blur(10px);
+  background:rgba(6,13,16,0.68);
+  border:1px solid rgba(46,196,182,0.24);
+  box-shadow:0 8px 28px rgba(0,0,0,0.4);
+}
+.about-surepay img{
+  width:90px;
+  height:auto;
+  object-fit:contain;
+  display:block;
+}
+.about-surepay-label{
+  font-size:.68rem;
+  font-weight:600;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--teal-light);
+  line-height:1.35;
+}
 .about-stats{
   display:grid;grid-template-columns:1fr 1fr;gap:16px;
   margin-top:28px;
@@ -810,7 +1110,7 @@ section{position:relative;z-index:1}
   display:flex;align-items:center;justify-content:center;
   font-family:'Syne',sans-serif;font-weight:700;font-size:.8rem;color:#fff;
 }
-.testimonial-name{font-weight:600;font-size:.85rem;color:#fff}
+.testimonial-name{font-weight:600;font-size:.85rem;color:var(--headline)}
 .testimonial-role{font-size:.75rem;color:var(--text-dim)}
 .stars{display:flex;gap:3px;margin-bottom:14px}
 .stars svg{width:13px;height:13px;color:var(--gold)}
@@ -828,7 +1128,7 @@ section{position:relative;z-index:1}
 .faq-item:hover{border-color:rgba(46,196,182,0.25)}
 .faq-item summary{
   padding:18px 22px;
-  font-size:.9rem;font-weight:600;color:#fff;
+  font-size:.9rem;font-weight:600;color:var(--headline);
   cursor:pointer;list-style:none;
   display:flex;justify-content:space-between;align-items:center;
   transition:color .2s;
@@ -877,9 +1177,22 @@ section{position:relative;z-index:1}
 }
 .cta-inner h2{
   font-family:'Syne',sans-serif;font-weight:800;
-  font-size:clamp(1.6rem,3.5vw,2.4rem);color:#fff;
+  font-size:clamp(1.6rem,3.5vw,2.4rem);color:var(--headline);
   margin-bottom:14px;position:relative;z-index:1;
   letter-spacing:-0.01em;
+}
+.cta-talk-sales{
+  border-color:color-mix(in srgb,var(--headline) 22%,transparent);
+  color:color-mix(in srgb,var(--headline) 78%,transparent);
+}
+.cta-talk-sales:hover{
+  border-color:var(--teal);
+  color:var(--teal);
+}
+.text-on-body{color:var(--headline)}
+.ai-msg-user-avatar{background:rgba(255,255,255,0.1)}
+@media (prefers-color-scheme: light) {
+  .ai-msg-user-avatar{background:rgba(15,23,42,0.08)}
 }
 .cta-inner p{color:var(--text-muted);max-width:520px;margin:0 auto 32px;position:relative;z-index:1}
 .cta-actions{
@@ -891,7 +1204,7 @@ section{position:relative;z-index:1}
 footer{
   border-top:1px solid var(--border2);
   padding:60px 0 32px;
-  background:rgba(6,13,16,0.9);
+  background:var(--footer-bg);
 }
 .footer-grid{
   display:grid;
@@ -900,7 +1213,7 @@ footer{
   margin-bottom:40px;
 }
 .footer-logo{display:flex;align-items:center;gap:10px;margin-bottom:16px;text-decoration:none}
-.footer-logo span{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:#fff}
+.footer-logo .logo-text{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:var(--headline)}
 .footer-desc{font-size:.82rem;color:var(--text-dim);line-height:1.65;max-width:240px}
 .footer-csc{
   display:inline-flex;align-items:center;gap:6px;
@@ -961,6 +1274,14 @@ footer{
   .blockchain-grid{grid-template-columns:1fr}
   .ai-inner{grid-template-columns:1fr}
   .about-grid{grid-template-columns:1fr}
+  .about-media img{height:260px}
+  .about-surepay{
+    right:12px;
+    bottom:12px;
+    padding:8px 10px;
+    max-width:230px;
+  }
+  .about-surepay img{width:72px}
   .testimonials-grid{grid-template-columns:1fr}
   .features-grid{grid-template-columns:1fr}
   .industries-grid{grid-template-columns:1fr 1fr}
@@ -981,7 +1302,7 @@ footer{
 .mobile-nav{
   display:none;
   position:fixed;inset:0;z-index:200;
-  background:rgba(6,13,16,0.98);
+  background:var(--mobile-nav-bg);
   backdrop-filter:blur(20px);
   flex-direction:column;
   align-items:center;justify-content:center;
@@ -1001,6 +1322,12 @@ footer{
 </style>
 </head>
 <body>
+@php
+    $docutrustLogoDefault = asset('images/docutrust-logo.png');
+    $docutrustLogoLight = file_exists(public_path('images/docutrust-logo-light.png'))
+        ? asset('images/docutrust-logo-light.png')
+        : null;
+@endphp
 
 <div class="orb orb1"></div>
 <div class="orb orb2"></div>
@@ -1013,20 +1340,44 @@ footer{
   </button>
   <a href="#features" onclick="closeMobileNav()">Features</a>
   <a href="#blockchain" onclick="closeMobileNav()">Security</a>
+  <a href="#ai" onclick="closeMobileNav()">AI Engine</a>
   <a href="#about" onclick="closeMobileNav()">About</a>
   <a href="#industries" onclick="closeMobileNav()">Industries</a>
   <a href="#faq" onclick="closeMobileNav()">FAQ</a>
-  <a href="#" class="btn-cta" style="font-size:.9rem">Get Started Free</a>
+  <a href="{{ route('register') }}" class="btn-cta" style="font-size:.9rem">Get Started Free</a>
 </div>
 
 <!-- HEADER -->
 <header>
   <div class="header-inner">
-    <a href="#" class="logo">
-      <div class="logo-icon">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-      </div>
-      <span class="logo-text">DocuTrust</span>
+    <a href="{{ route('home') }}" class="logo">
+      <span class="logo-mark">
+        @if ($docutrustLogoLight)
+          <picture>
+            <source media="(prefers-color-scheme: light)" srcset="{{ $docutrustLogoLight }}">
+            <img
+              src="{{ $docutrustLogoDefault }}"
+              alt=""
+              class="logo-img"
+              width="40"
+              height="40"
+              loading="eager"
+              decoding="async"
+            >
+          </picture>
+        @else
+          <img
+            src="{{ $docutrustLogoDefault }}"
+            alt=""
+            class="logo-img"
+            width="40"
+            height="40"
+            loading="eager"
+            decoding="async"
+          >
+        @endif
+      </span>
+      <span class="logo-text">{{ config('app.name') }}</span>
     </a>
     <nav>
       <a href="#features">Features</a>
@@ -1037,8 +1388,8 @@ footer{
       <a href="#faq">FAQ</a>
     </nav>
     <div class="header-actions">
-      <a href="#" class="btn-ghost">Login</a>
-      <a href="#" class="btn-primary">Start Free Trial</a>
+      <a href="{{ route('login') }}" class="btn-ghost">Login</a>
+      <a href="{{ route('register') }}" class="btn-primary">Start Free Trial</a>
       <button class="nav-mobile-toggle" id="mobileNavToggle" aria-label="Open menu">
         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
@@ -1063,7 +1414,7 @@ footer{
           Ditch paper contracts and give your customers a seamless eSigning experience — with full document automation, AI-powered processing, and blockchain-verified trust.
         </p>
         <div class="hero-actions reveal">
-          <a href="#" class="btn-cta">
+          <a href="{{ route('register') }}" class="btn-cta">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
             Start Free Trial
           </a>
@@ -1347,7 +1698,7 @@ footer{
           </div>
           <div class="ai-chat">
             <div class="ai-msg user">
-              <div class="ai-msg-avatar" style="background:rgba(255,255,255,0.1);font-size:.65rem">You</div>
+              <div class="ai-msg-avatar ai-msg-user-avatar" style="font-size:.65rem">You</div>
               <div class="ai-msg-bubble">What's the contract expiry date in NDA_2025.pdf?</div>
             </div>
             <div class="ai-msg">
@@ -1355,7 +1706,7 @@ footer{
               <div class="ai-msg-bubble">The NDA expires on <strong>December 31, 2025</strong>. There's also an auto-renewal clause on Page 4, Section 3.2 — would you like me to flag it for review?</div>
             </div>
             <div class="ai-msg user">
-              <div class="ai-msg-avatar" style="background:rgba(255,255,255,0.1);font-size:.65rem">You</div>
+              <div class="ai-msg-avatar ai-msg-user-avatar" style="font-size:.65rem">You</div>
               <div class="ai-msg-bubble">Yes, and send a reminder to all signers 30 days before.</div>
             </div>
             <div class="ai-msg">
@@ -1444,7 +1795,7 @@ footer{
           DocuTrust is a next-generation digital signing platform built to transform how organizations manage agreements, approvals, and document workflows. Designed for speed, security, and scalability, it empowers teams to move faster while maintaining complete trust in every transaction.
         </div>
         <div class="about-desc reveal">
-          Backed by <strong style="color:#fff">Surepay Technologies Inc.</strong>, a <strong style="color:var(--teal-light)">BSP-licensed</strong> payment service operator and trusted Philippine fintech, DocuTrust is built on a foundation of bank-grade security and continuous innovation.
+          Backed by <strong class="text-on-body">Surepay Technologies Inc.</strong>, a <strong style="color:var(--teal-light)">BSP-licensed</strong> payment service operator and trusted Philippine fintech, DocuTrust is built on a foundation of bank-grade security and continuous innovation.
         </div>
         <div style="margin-top:24px" class="reveal">
           <div class="about-highlight">
@@ -1462,6 +1813,13 @@ footer{
         </div>
       </div>
       <div class="reveal">
+        <div class="about-media">
+          <img src="{{ asset('images/about-us.jpg') }}" alt="Digital document workflow and signing interface">
+          <div class="about-surepay">
+            <img src="{{ asset('images/surepay.png') }}" alt="Surepay Technologies Inc.">
+            <div class="about-surepay-label">Powered by Surepay Technologies Inc.</div>
+          </div>
+        </div>
         <div class="about-stats">
           <div class="about-stat">
             <span class="about-stat-num">10K+</span>
@@ -1598,11 +1956,11 @@ footer{
       <h2>Start Signing Smarter Today</h2>
       <p>Move from manual paperwork to secure, blockchain-verified, AI-powered digital workflows — trusted by 10,000+ teams worldwide.</p>
       <div class="cta-actions">
-        <a href="#" class="btn-cta">
+        <a href="{{ route('register') }}" class="btn-cta">
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
           Create Free Account
         </a>
-        <a href="#" class="btn-secondary" style="border-color:rgba(255,255,255,0.2);color:rgba(255,255,255,0.8)">
+        <a href="mailto:{{ config('mail.from.address') }}?subject=Sales%20inquiry" class="btn-secondary cta-talk-sales">
           Talk to Sales
         </a>
       </div>
@@ -1615,11 +1973,34 @@ footer{
   <div class="container">
     <div class="footer-grid">
       <div>
-        <a href="#" class="footer-logo">
-          <div class="logo-icon">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-          </div>
-          <span>DocuTrust</span>
+        <a href="{{ route('home') }}" class="footer-logo">
+          <span class="logo-mark">
+            @if ($docutrustLogoLight)
+              <picture>
+                <source media="(prefers-color-scheme: light)" srcset="{{ $docutrustLogoLight }}">
+                <img
+                  src="{{ $docutrustLogoDefault }}"
+                  alt=""
+                  class="logo-img"
+                  width="36"
+                  height="36"
+                  loading="lazy"
+                  decoding="async"
+                >
+              </picture>
+            @else
+              <img
+                src="{{ $docutrustLogoDefault }}"
+                alt=""
+                class="logo-img"
+                width="36"
+                height="36"
+                loading="lazy"
+                decoding="async"
+              >
+            @endif
+          </span>
+          <span class="logo-text">{{ config('app.name') }}</span>
         </a>
         <p class="footer-desc">Secure, tamper-proof digital signatures powered by Agentic AI and blockchain-certified trust.</p>
         <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener" class="footer-csc">
@@ -1633,8 +2014,8 @@ footer{
           <a href="#features">Features</a>
           <a href="#blockchain">Security</a>
           <a href="#ai">AI Engine</a>
-          <a href="#">Integrations</a>
-          <a href="#">API Docs</a>
+          <a href="#industries">Integrations</a>
+          <a href="{{ route('verify.index') }}">Verify document</a>
         </div>
       </div>
       <div class="footer-col">
@@ -1643,23 +2024,23 @@ footer{
           <a href="#about">About Us</a>
           <a href="#">Blog</a>
           <a href="#">Careers</a>
-          <a href="#">Contact</a>
+          <a href="mailto:{{ config('mail.from.address') }}">Contact</a>
           <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener">CSC Membership</a>
         </div>
       </div>
       <div class="footer-col">
         <h4>Support</h4>
         <div class="footer-links">
-          <a href="#">Help Center</a>
-          <a href="#">Privacy Policy</a>
-          <a href="#">Terms of Service</a>
-          <a href="#">Trust & Compliance</a>
+          <a href="#faq">Help Center</a>
+          <a href="#faq">Privacy Policy</a>
+          <a href="#faq">Terms of Service</a>
+          <a href="#blockchain">Trust &amp; Compliance</a>
           <a href="#">Status</a>
         </div>
       </div>
     </div>
     <div class="footer-bottom">
-      <div class="footer-copy">© 2025 DocuTrust. All rights reserved.</div>
+      <div class="footer-copy">© {{ date('Y') }} {{ config('app.name') }}. All rights reserved.</div>
       <div class="footer-powered">Powered by <a href="#">Surepay Technologies Inc.</a> · BSP-Licensed · ISO 9001:2015</div>
     </div>
   </div>

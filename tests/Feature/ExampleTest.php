@@ -13,6 +13,10 @@ class ExampleTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        $response->assertOk()
+            ->assertSee(route('login'), false)
+            ->assertSee(route('register'), false)
+            ->assertSee(route('home'), false)
+            ->assertSee(asset('images/docutrust-logo.png'), false);
     }
 }
