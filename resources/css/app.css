@@ -1,0 +1,208 @@
+@import 'tailwindcss';
+@import '../../vendor/livewire/flux/dist/flux.css';
+
+@source "../views";
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../vendor/livewire/flux-pro/stubs/**/*.blade.php';
+@source '../../vendor/livewire/flux/stubs/**/*.blade.php';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Slightly larger type scale for readability (body defaults to ~18px at 16px root). */
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: calc(1.25 / 0.8125);
+    --text-sm: 0.9375rem;
+    --text-sm--line-height: calc(1.5 / 0.9375);
+    --text-base: 1.125rem;
+    --text-base--line-height: calc(1.75 / 1.125);
+    --text-lg: 1.25rem;
+    --text-lg--line-height: calc(1.75 / 1.25);
+    --text-xl: 1.375rem;
+    --text-xl--line-height: calc(1.75 / 1.375);
+    --text-2xl: 1.625rem;
+    --text-2xl--line-height: calc(2 / 1.625);
+    --text-3xl: 2rem;
+    --text-3xl--line-height: calc(2.25 / 2);
+    --text-4xl: 2.25rem;
+    --text-4xl--line-height: calc(2.5 / 2.25);
+
+    --color-zinc-50: #fafafa;
+    --color-zinc-100: #f5f5f5;
+    --color-zinc-200: #e5e5e5;
+    --color-zinc-300: #d4d4d4;
+    --color-zinc-400: #a3a3a3;
+    --color-zinc-500: #737373;
+    --color-zinc-600: #525252;
+    --color-zinc-700: #404040;
+    --color-zinc-800: #262626;
+    --color-zinc-900: #171717;
+    --color-zinc-950: #0a0a0a;
+
+    --color-accent: var(--color-neutral-800);
+    --color-accent-content: var(--color-neutral-800);
+    --color-accent-foreground: var(--color-white);
+}
+
+@layer theme {
+    .dark {
+        --color-accent: var(--color-white);
+        --color-accent-content: var(--color-white);
+        --color-accent-foreground: var(--color-neutral-800);
+    }
+}
+
+@layer base {
+
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-gray-200, currentColor);
+    }
+
+    html {
+        scroll-behavior: smooth;
+        height: 100%;
+    }
+
+    body {
+        @apply antialiased text-base;
+    }
+
+    /*
+     | Authenticated shell: Flux grid (sidebar + main). Lock viewport height so only
+     | [data-flux-main] scrolls — sidebar stays in place (hindi sabay sa scroll).
+     */
+    body:has(> [data-flux-main]) {
+        height: 100%;
+        min-height: 100dvh;
+        max-height: 100dvh;
+        overflow: hidden;
+    }
+
+    body:has(> [data-flux-main]) > [data-flux-main] {
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    body:has(> [data-flux-main]) .main-scroll-area {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    ::selection {
+        @apply bg-teal-500/25 text-teal-950;
+    }
+
+    .dark ::selection {
+        @apply bg-teal-500/30 text-zinc-50;
+    }
+}
+
+@layer components {
+    /* Main authenticated workspace: subtle depth + soft brand wash (professional SaaS). */
+    .app-workspace {
+        background-color: rgb(250 250 250);
+        background-image:
+            radial-gradient(ellipse 120% 80% at 50% -30%, rgb(20 184 166 / 0.09), transparent 55%),
+            radial-gradient(ellipse 70% 50% at 100% 0%, rgb(99 102 241 / 0.06), transparent 45%),
+            linear-gradient(to bottom, rgb(255 255 255 / 0.9), rgb(244 244 245 / 0.5));
+    }
+
+    .dark .app-workspace {
+        background-color: rgb(9 9 11);
+        background-image:
+            radial-gradient(ellipse 100% 60% at 50% -20%, rgb(20 184 166 / 0.12), transparent 50%),
+            radial-gradient(ellipse 80% 50% at 90% 5%, rgb(99 102 241 / 0.08), transparent 45%),
+            linear-gradient(to bottom, rgb(24 24 27 / 0.98), rgb(9 9 11));
+    }
+
+    /* Public signing / minimal guest pages */
+    .guest-sign-surface {
+        background-color: rgb(250 250 250);
+        background-image:
+            radial-gradient(ellipse 100% 70% at 50% -25%, rgb(20 184 166 / 0.11), transparent 55%),
+            radial-gradient(ellipse 60% 45% at 0% 30%, rgb(99 102 241 / 0.06), transparent 50%),
+            linear-gradient(to bottom, rgb(255 255 255), rgb(244 244 245));
+    }
+
+    .dark .guest-sign-surface {
+        background-color: rgb(9 9 11);
+        background-image:
+            radial-gradient(ellipse 90% 55% at 50% -15%, rgb(20 184 166 / 0.14), transparent 52%),
+            linear-gradient(to bottom, rgb(24 24 27), rgb(9 9 11));
+    }
+
+    .ui-panel {
+        @apply rounded-2xl border border-zinc-200/70 bg-white/95 shadow-[0_1px_2px_rgb(15_23_42/0.06),0_8px_24px_rgb(15_23_42/0.04)] ring-1 ring-zinc-950/[0.035] backdrop-blur-sm dark:border-white/[0.08] dark:bg-zinc-900/85 dark:shadow-[0_4px_32px_rgb(0_0_0/0.45)] dark:ring-white/[0.05];
+    }
+
+    .ui-panel-hover {
+        @apply rounded-2xl border border-zinc-200/70 bg-white/95 shadow-[0_1px_2px_rgb(15_23_42/0.06),0_8px_24px_rgb(15_23_42/0.04)] ring-1 ring-zinc-950/[0.035] backdrop-blur-sm transition duration-300 dark:border-white/[0.08] dark:bg-zinc-900/85 dark:shadow-[0_4px_32px_rgb(0_0_0/0.45)] dark:ring-white/[0.05];
+    }
+
+    .ui-panel-hover:hover {
+        @apply border-zinc-300/90 shadow-[0_4px_24px_rgb(15_23_42/0.08)] dark:border-white/15 dark:shadow-[0_8px_40px_rgb(0_0_0/0.55)];
+    }
+
+    /* Signer / guest flows: elevated surface */
+    .ui-signsurface {
+        @apply rounded-3xl border border-zinc-200/60 bg-white/95 shadow-[0_12px_48px_rgb(15_23_42/0.08)] ring-1 ring-zinc-950/[0.04] backdrop-blur-md dark:border-white/[0.07] dark:bg-zinc-900/90 dark:shadow-[0_12px_48px_rgb(0_0_0/0.5)] dark:ring-white/[0.05];
+    }
+
+    .ui-page-heading {
+        @apply text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-4xl;
+    }
+
+    .ui-muted {
+        @apply text-base text-zinc-500 dark:text-zinc-400;
+    }
+
+    .ui-table-wrap {
+        @apply overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/60 shadow-sm ring-1 ring-zinc-950/[0.03] dark:border-white/10 dark:bg-zinc-900/50 dark:ring-white/[0.04];
+    }
+
+    /* Sidebar: match larger typography (Flux navlist / profile use text-sm in components). */
+    .sidebar-nav-text [data-flux-navlist-item] {
+        @apply !h-11 lg:!h-10;
+    }
+
+    .sidebar-nav-text [data-flux-navlist-item] [data-content] {
+        @apply text-base;
+    }
+
+    .sidebar-nav-text [data-flux-navlist] .text-sm.text-zinc-400 {
+        @apply text-base;
+    }
+
+    .sidebar-nav-text [data-flux-navlist-item] svg[data-flux-icon] {
+        @apply size-5!;
+    }
+
+    [data-flux-sidebar] [data-flux-profile] span.mx-2 {
+        @apply text-base;
+    }
+}
+
+[data-flux-field] {
+    @apply grid gap-2;
+}
+
+[data-flux-label] {
+    @apply  !mb-0 !leading-tight;
+}
+
+input:focus[data-flux-control],
+textarea:focus[data-flux-control],
+select:focus[data-flux-control] {
+    @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
+}
+
+/* \[:where(&)\]:size-4 {
+    @apply size-4;
+} */

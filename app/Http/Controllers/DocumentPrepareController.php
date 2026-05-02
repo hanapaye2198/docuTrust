@@ -1,0 +1,83 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Enums\DocumentStatus;
+use App\Http\Requests\StoreSignatureFieldsRequest;
+use App\Models\Document;
+use App\Models\SignatureField;
+use App\Services\SignatureAuditLogger;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
+
+class DocumentPrepareController extends Controller
+{
+    public function show(Document $document): View
+    {
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Draft) {
+            abort(403);
+        }
+
+        $document->loadMissing(['documentSigners' => fn ($q) => $q->orderBy('signing_order')]);
+
+        $firstSignerId = $document->documentSigners
+            ->pluck('id')
+            ->filter(fn (mixed $id): bool => is_int($id) || ctype_digit((string) $id))
+            ->map(fn (mixed $id): int => (int) $id)
+            ->first();
+
+        return view('documents.prepare', [
+            'document' => $document,
+            'pdfUrl' => route('documents.stream', $document),
+            'firstSignerId' => $firstSignerId,
+            'initialFields' => $document->signatureFields()
+                ->orderBy('id')
+                ->get()
+                ->map(fn (SignatureField $f) => [
+                    'id' => $f->id,
+                    'signer_id' => $f->signer_id,
+                    'type' => $f->type->value,
+                    'page_number' => $f->page_number ?? 1,
+                    'position_data' => $f->position_data,
+                ])
+                ->values(),
+        ]);
+    }
+
+    public function store(StoreSignatureFieldsRequest $request, Document $document): RedirectResponse
+    {
+        /** @var array<int, array{signer_id: int, type: string, page_number: int, position_data: array{x: float, y: float, width: float, height: float}}> $fields */
+        $fields = $request->validated()['fields'];
+
+        foreach ($fields as $field) {
+            $signer = $document->documentSigners()->whereKey($field['signer_id'])->first();
+            if ($signer === null) {
+                abort(422, __('Invalid signer for this document.'));
+            }
+        }
+
+        $ip = (string) $request->ip();
+
+        DB::transaction(function () use ($document, $fields, $ip): void {
+            $document->signatureFields()->delete();
+
+            foreach ($fields as $field) {
+                SignatureField::query()->create([
+                    'document_id' => $document->id,
+                    'signer_id' => $field['signer_id'],
+                    'type' => $field['type'],
+                    'page_number' => $field['page_number'],
+                    'position_data' => $field['position_data'],
+                ]);
+                SignatureAuditLogger::fieldPlaced($document, $field['signer_id'], $ip);
+            }
+        });
+
+        return redirect()
+            ->route('documents.prepare', $document)
+            ->with('status', __('Signature fields saved.'));
+    }
+}

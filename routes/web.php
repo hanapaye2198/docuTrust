@@ -1,0 +1,66 @@
+<?php
+
+use App\Http\Controllers\DocumentPrepareController;
+use App\Http\Controllers\DocumentCertificateController;
+use App\Http\Controllers\DocumentStreamController;
+use App\Http\Controllers\SignDocumentController;
+use App\Http\Controllers\TemplatePrepareController;
+use App\Http\Controllers\TemplateUseController;
+use Illuminate\Support\Facades\Route;
+use Livewire\Volt\Volt;
+
+Route::get('/', function () {
+    return view('welcome');
+})->name('home');
+
+Route::middleware('throttle:signing-links')->group(function () {
+    Route::get('/sign/{token}', [SignDocumentController::class, 'show'])->name('sign.show');
+    Route::get('/sign/{token}/pdf', [SignDocumentController::class, 'streamPdf'])->name('sign.document.pdf');
+    Route::get('/sign/{token}/signature-image/{signatureField}', [SignDocumentController::class, 'streamSignatureImage'])->name('sign.signature.image');
+    Route::post('/sign/{token}', [SignDocumentController::class, 'sign'])->name('sign.store');
+    Route::post('/sign/{token}/signature', [SignDocumentController::class, 'storeSignature'])->name('sign.signature.store');
+    Route::post('/sign/{token}/complete', [SignDocumentController::class, 'complete'])->name('sign.complete');
+});
+Volt::route('verify', 'pages.verify')->name('verify.index');
+
+Route::middleware(['auth', 'role:admin'])->group(function () {
+    Volt::route('dashboard', 'pages.dashboard')->name('dashboard');
+});
+
+Route::middleware(['auth', 'role:notary'])->group(function () {
+    Volt::route('notary/dashboard', 'notary.dashboard')->name('notary.dashboard');
+});
+
+Route::middleware(['auth', 'role:admin,signer'])->group(function () {
+    Volt::route('contacts', 'contacts.index')->name('contacts.index');
+
+    Volt::route('documents', 'documents.index')->name('documents.index');
+    Volt::route('documents/create', 'documents.create')->name('documents.create');
+    Volt::route('documents/{document}', 'documents.show')->name('documents.show');
+
+    Route::get('documents/{document}/stream', DocumentStreamController::class)->name('documents.stream');
+    Route::get('documents/{document}/certificate', [DocumentCertificateController::class, 'show'])->name('documents.certificate.show');
+    Route::get('documents/{document}/certificate/download', [DocumentCertificateController::class, 'download'])->name('documents.certificate.download');
+    Route::get('documents/{document}/prepare', [DocumentPrepareController::class, 'show'])->name('documents.prepare');
+    Route::post('documents/{document}/signature-fields', [DocumentPrepareController::class, 'store'])->name('documents.signature-fields.store');
+
+    Volt::route('templates', 'templates.index')->name('templates.index');
+    Volt::route('templates/create', 'templates.wizard')->name('templates.create');
+    Volt::route('templates/{template}/edit', 'templates.wizard')->name('templates.edit');
+    Route::get('templates/{template}/file', [TemplatePrepareController::class, 'file'])->name('templates.file');
+    Route::get('templates/{template}/prepare', [TemplatePrepareController::class, 'show'])->name('templates.prepare');
+    Route::post('templates/{template}/fields', [TemplatePrepareController::class, 'store'])->name('templates.fields.store');
+    Volt::route('templates/{template}/use', 'templates.use')->name('templates.use');
+    Route::post('templates/{template}/documents', [TemplateUseController::class, 'store'])->name('templates.documents.store');
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::redirect('settings', 'settings/profile');
+
+    Volt::route('settings/profile', 'settings.profile')->name('settings.profile');
+    Volt::route('settings/password', 'settings.password')->name('settings.password');
+    Volt::route('settings/security', 'settings.security')->name('settings.security');
+    Volt::route('settings/appearance', 'settings.appearance')->name('settings.appearance');
+});
+
+require __DIR__.'/auth.php';
