@@ -151,7 +151,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                             required
                             autofocus
                             autocomplete="email"
-                            placeholder="email@example.com"
+                            placeholder="Email"
                             class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
                         />
 

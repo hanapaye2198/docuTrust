@@ -40,6 +40,7 @@
                 </div>
             </div>
         </div>
+        @include('partials.idle-session')
         @fluxScripts
         <script>
             const authThemeToggleButton = document.getElementById("theme-toggle-auth");

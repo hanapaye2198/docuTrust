@@ -2,13 +2,11 @@
 
 namespace App\Enums;
 
-enum OnboardingStep: string
+enum OnboardingStep: int
 {
-    case Registered = 'registered';
-    case EmailVerified = 'email_verified';
-    case PhoneVerified = 'phone_verified';
-    case EkycPending = 'ekyc_pending';
-    case EkycVerified = 'ekyc_verified';
-    case MfaSetup = 'mfa_setup';
-    case Completed = 'completed';
+    case EmailVerification = 1;
+    case MobileVerification = 2;
+    case Kyc = 3;
+    case Mfa = 4;
+    case Completed = 5;
 }

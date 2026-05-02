@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
-use App\Enums\OrganizationRole;
 use App\Enums\EkycStatus;
 use App\Enums\OnboardingStep;
+use App\Enums\OrganizationRole;
 use App\Enums\UserRole;
-use Illuminate\Database\Eloquent\Relations\HasOne;
+use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -18,7 +19,7 @@ use RuntimeException;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     protected static function booted(): void
@@ -59,6 +60,14 @@ class User extends Authenticatable implements MustVerifyEmail
         'organization_role',
         'onboarding_step',
         'ekyc_status',
+        'email_otp',
+        'email_otp_expires_at',
+        'mobile_number',
+        'mobile_verified_at',
+        'kyc_id_type',
+        'kyc_file_path',
+        'kyc_verified_at',
+        'mfa_enabled',
         'two_factor_secret',
         'two_factor_enabled',
         'two_factor_onboarding_completed_at',
@@ -92,6 +101,10 @@ class User extends Authenticatable implements MustVerifyEmail
             'two_factor_enabled' => 'boolean',
             'two_factor_secret' => 'encrypted',
             'two_factor_onboarding_completed_at' => 'datetime',
+            'email_otp_expires_at' => 'datetime',
+            'mobile_verified_at' => 'datetime',
+            'kyc_verified_at' => 'datetime',
+            'mfa_enabled' => 'boolean',
         ];
     }
 
@@ -102,7 +115,26 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function hasCompletedOnboarding(): bool
     {
-        return $this->onboarding_step === OnboardingStep::Completed;
+        return $this->onboarding_step === OnboardingStep::Completed
+            && $this->mfa_enabled;
+    }
+
+    /**
+     * Named route for the authenticated user's current onboarding screen.
+     */
+    public function onboardingRouteName(): string
+    {
+        if ($this->onboarding_step === OnboardingStep::Completed && ! $this->mfa_enabled) {
+            return 'onboarding.mfa';
+        }
+
+        return match ($this->onboarding_step) {
+            OnboardingStep::EmailVerification => 'onboarding.email.verify',
+            OnboardingStep::MobileVerification => 'onboarding.mobile',
+            OnboardingStep::Kyc => 'onboarding.kyc',
+            OnboardingStep::Mfa => 'onboarding.mfa',
+            default => 'onboarding.email.verify',
+        };
     }
 
     public function hasVerifiedEkyc(): bool

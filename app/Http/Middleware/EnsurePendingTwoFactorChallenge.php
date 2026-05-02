@@ -33,7 +33,7 @@ class EnsurePendingTwoFactorChallenge
         if (! $user->hasCompletedOnboarding()) {
             $request->session()->put(AuthSession::TWO_FACTOR_PASSED, true);
 
-            return redirect()->route('onboarding.start');
+            return redirect()->route($user->onboardingRouteName());
         }
 
         if ((bool) $request->session()->get(AuthSession::TWO_FACTOR_PASSED, false)) {

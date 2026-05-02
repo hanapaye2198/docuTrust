@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Enums\OnboardingStep;
+use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\OnboardingAuditLogger;
-use App\Http\Controllers\Controller;
+use App\Support\AuthSession;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\URL;
 class VerifyEmailController extends Controller
 {
     /**
-     * Mark the authenticated user's email address as verified.
+     * Mark the user's email address as verified (signed URL).
      */
     public function __invoke(Request $request, OnboardingAuditLogger $auditLogger): RedirectResponse
     {
@@ -35,21 +36,30 @@ class VerifyEmailController extends Controller
             event(new Verified($user));
         }
 
-        if ($user->onboarding_step === OnboardingStep::Registered) {
+        if ($user->onboarding_step === OnboardingStep::EmailVerification) {
             $user->forceFill([
-                'onboarding_step' => OnboardingStep::EmailVerified,
+                'onboarding_step' => OnboardingStep::MobileVerification,
+                'email_otp' => null,
+                'email_otp_expires_at' => null,
             ])->save();
         }
 
-        $auditLogger->log($user, 'email_verified', $request);
+        $auditLogger->log($user->fresh(), 'email_verified', $request);
         Auth::login($user);
         $request->session()->regenerate();
-        $request->session()->put(\App\Support\AuthSession::TWO_FACTOR_PASSED, true);
+        $request->session()->put(AuthSession::TWO_FACTOR_PASSED, true);
 
-        $redirectRoute = $user->hasCompletedOnboarding()
-            ? $user->homeRouteName()
-            : 'onboarding.phone.verify';
+        $fresh = $user->fresh();
+        if ($fresh === null) {
+            return redirect()->route('login');
+        }
 
-        return redirect()->route($redirectRoute);
+        if ($fresh->hasCompletedOnboarding()) {
+            $url = route($fresh->homeRouteName(), absolute: false).'?verified=1';
+
+            return redirect()->to($url);
+        }
+
+        return redirect()->route('onboarding.mobile');
     }
 }

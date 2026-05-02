@@ -1,7 +1,10 @@
 <?php
 
-use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\Auth\ResetSessionController;
+use App\Http\Controllers\Auth\TwoFactorChallengeController;
+use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Livewire\Actions\Logout;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
@@ -27,25 +30,41 @@ Route::middleware('guest')->group(function () {
 
 });
 
-Route::redirect('onboarding/email', '/documents')->name('onboarding.email.notice');
+Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
+    ->middleware(['signed', 'throttle:6,1'])
+    ->name('verification.verify');
 
 Route::middleware('auth')->group(function () {
-    Route::redirect('onboarding', '/documents')->name('onboarding');
-    Route::redirect('onboarding/start', '/documents')->name('onboarding.start');
-    Route::redirect('onboarding/phone-verification', '/documents')->name('onboarding.phone.verify');
-    Route::redirect('onboarding/ekyc', '/documents')->name('onboarding.ekyc');
-    Route::redirect('onboarding/mfa-setup', '/documents')->name('onboarding.mfa-setup');
-    Route::redirect('verify-email', '/documents')->name('verification.notice');
+    Volt::route('onboarding/email-verify', 'auth.onboarding-email-verify')->name('onboarding.email.verify');
+    Volt::route('onboarding/mobile', 'auth.onboarding-mobile')->name('onboarding.mobile');
+    Volt::route('onboarding/kyc', 'auth.onboarding-kyc')->name('onboarding.kyc');
+    Volt::route('onboarding/mfa', 'auth.onboarding-mfa')->name('onboarding.mfa');
+
+    Route::get('onboarding/change-email', function () {
+        Auth::guard('web')->logout();
+
+        request()->session()->invalidate();
+        request()->session()->regenerateToken();
+
+        return redirect()->route('register');
+    })->name('onboarding.change-email');
+
+    Route::redirect('onboarding', '/onboarding/email-verify')->name('onboarding');
+    Route::redirect('onboarding/start', '/onboarding/email-verify')->name('onboarding.start');
+    Route::redirect('onboarding/email', '/onboarding/email-verify')->name('onboarding.email.notice');
+    Route::redirect('onboarding/phone-verification', '/onboarding/mobile')->name('onboarding.phone.verify');
+    Route::redirect('onboarding/ekyc', '/onboarding/kyc')->name('onboarding.ekyc');
+    Route::redirect('onboarding/mfa-setup', '/onboarding/mfa')->name('onboarding.mfa-setup');
+
+    Route::redirect('verify-email', '/onboarding/email-verify')->name('verification.notice');
 
     Volt::route('confirm-password', 'auth.confirm-password')
         ->name('password.confirm');
 });
 
-Route::redirect('verify-email/{id}/{hash}', '/documents')->name('verification.verify');
-
 Route::redirect('register/two-factor', '/documents');
 
-Route::post('logout', App\Livewire\Actions\Logout::class)
+Route::post('logout', Logout::class)
     ->name('logout');
 
 Route::get('reset-session', ResetSessionController::class)

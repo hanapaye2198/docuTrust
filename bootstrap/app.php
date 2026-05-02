@@ -1,9 +1,10 @@
 <?php
 
+use App\Http\Middleware\AddSecurityHeaders;
+use App\Http\Middleware\EnsureOnboardingProgress;
 use App\Http\Middleware\EnsurePendingTwoFactorChallenge;
 use App\Http\Middleware\EnsureTwoFactorIsVerified;
 use App\Http\Middleware\EnsureUserRole;
-use App\Http\Middleware\AddSecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->authenticateSessions();
 
         $middleware->alias([
+            'onboarding.progress' => EnsureOnboardingProgress::class,
             'pending.two.factor' => EnsurePendingTwoFactorChallenge::class,
             'role' => EnsureUserRole::class,
             'two.factor.verified' => EnsureTwoFactorIsVerified::class,
@@ -28,12 +30,17 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->appendToGroup('web', [
             AddSecurityHeaders::class,
+            EnsureOnboardingProgress::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => route('login'));
 
         $middleware->redirectUsersTo(function (Request $request) {
             $user = $request->user();
+
+            if ($user !== null && ! $user->hasCompletedOnboarding()) {
+                return route($user->onboardingRouteName(), absolute: false);
+            }
 
             if ($user !== null) {
                 return $user->intendedHomeUrl();
@@ -43,7 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
         });
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->render(function (\Throwable $throwable, Request $request) {
+        $exceptions->render(function (Throwable $throwable, Request $request) {
             Log::channel('errors')->error('Unhandled exception', [
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),

@@ -5,8 +5,10 @@ namespace Tests\Feature\Auth;
 use App\Enums\EkycStatus;
 use App\Enums\OnboardingStep;
 use App\Enums\UserRole;
+use App\Mail\EmailOtpVerificationMail;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
 
@@ -23,6 +25,8 @@ class RegistrationTest extends TestCase
 
     public function test_new_users_can_register(): void
     {
+        Mail::fake();
+
         $response = Volt::test('auth.register')
             ->set('first_name', 'Test')
             ->set('middle_name', 'Sample')
@@ -36,14 +40,14 @@ class RegistrationTest extends TestCase
 
         $response
             ->assertHasNoErrors()
-            ->assertRedirect(route('documents.index', absolute: false));
+            ->assertRedirect(route('onboarding.email.verify', absolute: false));
 
         $this->assertAuthenticated();
 
         $this->assertDatabaseHas('users', [
             'email' => 'test@example.com',
             'role' => UserRole::Signer->value,
-            'onboarding_step' => OnboardingStep::Registered->value,
+            'onboarding_step' => OnboardingStep::EmailVerification->value,
             'ekyc_status' => EkycStatus::NotSubmitted->value,
         ]);
 
@@ -51,6 +55,10 @@ class RegistrationTest extends TestCase
         $this->assertNotNull($user);
         $this->assertSame('Test Sample User Jr.', $user->name);
         $this->assertFalse((bool) $user->two_factor_enabled);
+        $this->assertFalse($user->mfa_enabled);
+        $this->assertNotNull($user->email_otp);
+
+        Mail::assertSent(EmailOtpVerificationMail::class);
     }
 
     public function test_terms_must_be_accepted_before_registration(): void

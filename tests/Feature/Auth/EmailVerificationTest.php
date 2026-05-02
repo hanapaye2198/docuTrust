@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Enums\OnboardingStep;
 use App\Models\User;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,11 +16,15 @@ class EmailVerificationTest extends TestCase
 
     public function test_email_verification_screen_can_be_rendered(): void
     {
-        $user = User::factory()->unverified()->create();
+        $user = User::factory()->signer()->create([
+            'email_verified_at' => null,
+            'onboarding_step' => OnboardingStep::EmailVerification,
+            'mfa_enabled' => false,
+        ]);
 
         $response = $this->actingAs($user)->get('/verify-email');
 
-        $response->assertStatus(200);
+        $response->assertRedirect(route('onboarding.email.verify'));
     }
 
     public function test_email_can_be_verified(): void

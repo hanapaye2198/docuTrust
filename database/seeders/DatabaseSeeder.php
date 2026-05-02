@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\OnboardingStep;
 use App\Enums\OrganizationRole;
 use App\Enums\UserRole;
 use App\Models\User;
@@ -19,6 +20,8 @@ class DatabaseSeeder extends Seeder
             'email_verified_at' => now(),
             'role' => UserRole::Admin,
             'organization_role' => OrganizationRole::Admin,
+            'onboarding_step' => OnboardingStep::Completed,
+            'mfa_enabled' => true,
             'two_factor_enabled' => false,
             'two_factor_onboarding_completed_at' => now(),
         ]);

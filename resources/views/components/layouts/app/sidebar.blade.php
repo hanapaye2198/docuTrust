@@ -170,6 +170,7 @@
 
         {{ $slot }}
 
+        @include('partials.idle-session')
         @stack('scripts')
         @fluxScripts
     </body>

@@ -1,4 +1,5 @@
 import Chart from 'chart.js/auto';
+import { initIdleSession } from './idle-session';
 import { initTemplatePreparePage } from './template-prepare';
 
 let docuTrustStatusChart = null;
@@ -178,3 +179,6 @@ document.addEventListener('livewire:navigated', initDocuTrustActivityChart);
 
 document.addEventListener('DOMContentLoaded', initTemplatePreparePage);
 document.addEventListener('livewire:navigated', initTemplatePreparePage);
+
+document.addEventListener('DOMContentLoaded', initIdleSession);
+document.addEventListener('livewire:navigated', initIdleSession);

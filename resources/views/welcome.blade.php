@@ -1,435 +1,1691 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DocuTrust | Premium Digital Signing Platform</title>
-    <script>
-        window.tailwind = window.tailwind || {};
-        window.tailwind.config = { darkMode: "class" };
-    </script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: "Inter", sans-serif; }
-        .ambient-gradient { background-size: 220% 220%; animation: ambientShift 18s ease-in-out infinite; }
-        .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
-        .reveal.visible { opacity: 1; transform: translateY(0); }
-        .float-soft { animation: floatSoft 4s ease-in-out infinite; }
-        .hero-glow { animation: heroGlow 6s ease-in-out infinite; }
-        @keyframes ambientShift { 0% { background-position: 0 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
-        @keyframes floatSoft { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-        @keyframes heroGlow { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: .9; transform: scale(1.07); } }
-    </style>
-    <script>
-        (function () {
-            const savedTheme = localStorage.getItem("theme");
-            const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-            if (savedTheme === "dark" || (!savedTheme && prefersDark)) document.documentElement.classList.add("dark");
-        })();
-    </script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocuTrust | Secure & Tamper-Proof Digital Signatures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --teal: #2EC4B6;
+  --teal-dark: #1a9e92;
+  --teal-light: #7ce8dc;
+  --green: #1B5E20;
+  --green-mid: #2d7a35;
+  --gold: #FFD166;
+  --bg: #060d10;
+  --surface: #0d1a1f;
+  --surface2: #112028;
+  --border: rgba(46,196,182,0.15);
+  --border2: rgba(46,196,182,0.08);
+  --text: #e8f4f2;
+  --text-muted: #7a9e9b;
+  --text-dim: #4a706d;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'DM Sans',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  overflow-x:hidden;
+  line-height:1.6;
+}
+
+/* ── NOISE TEXTURE ── */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;
+  z-index:0;
+  opacity:.5;
+}
+
+/* ── GRID BG ── */
+body::after{
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image:
+    linear-gradient(rgba(46,196,182,0.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(46,196,182,0.04) 1px,transparent 1px);
+  background-size:60px 60px;
+  pointer-events:none;
+  z-index:0;
+}
+
+/* ── GLOW ORBS ── */
+.orb{
+  position:fixed;
+  border-radius:50%;
+  pointer-events:none;
+  z-index:0;
+  filter:blur(100px);
+  opacity:.18;
+  animation:orbFloat 12s ease-in-out infinite;
+}
+.orb1{width:500px;height:500px;background:var(--teal);top:-100px;right:-100px;animation-delay:0s}
+.orb2{width:400px;height:400px;background:var(--green);bottom:-100px;left:-100px;animation-delay:-4s}
+.orb3{width:300px;height:300px;background:var(--gold);top:50%;left:50%;transform:translate(-50%,-50%);animation-delay:-8s;opacity:.06}
+
+@keyframes orbFloat{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-30px) scale(1.05)}}
+.orb2{animation-name:orbFloat2}
+@keyframes orbFloat2{0%,100%{transform:translateY(0)}50%{transform:translateY(25px)}}
+.orb3{animation-name:orbFloat3}
+@keyframes orbFloat3{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.2)}}
+
+/* ── HEADER ── */
+header{
+  position:sticky;
+  top:0;
+  z-index:100;
+  border-bottom:1px solid var(--border);
+  background:rgba(6,13,16,0.88);
+  backdrop-filter:blur(20px);
+}
+.header-inner{
+  max-width:1280px;
+  margin:0 auto;
+  padding:0 24px;
+  height:72px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.logo{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-decoration:none;
+  flex-shrink:0;
+}
+.logo-icon{
+  width:38px;height:38px;
+  border-radius:10px;
+  background:linear-gradient(135deg,var(--teal),var(--green));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 20px rgba(46,196,182,0.35);
+}
+.logo-icon svg{width:20px;height:20px;color:#fff}
+.logo-text{font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:var(--text)}
+
+nav{display:flex;align-items:center;gap:28px}
+nav a{
+  font-size:.875rem;
+  font-weight:500;
+  color:var(--text-muted);
+  text-decoration:none;
+  transition:color .2s;
+}
+nav a:hover{color:var(--teal)}
+
+.header-actions{display:flex;align-items:center;gap:10px}
+.btn-ghost{
+  font-size:.875rem;font-weight:500;
+  color:var(--text-muted);
+  text-decoration:none;
+  padding:8px 16px;
+  border-radius:8px;
+  transition:color .2s;
+}
+.btn-ghost:hover{color:var(--teal)}
+.btn-primary{
+  font-size:.875rem;font-weight:600;
+  background:linear-gradient(135deg,var(--teal),var(--green-mid));
+  color:#fff;
+  text-decoration:none;
+  padding:10px 20px;
+  border-radius:10px;
+  box-shadow:0 0 20px rgba(46,196,182,0.3);
+  transition:all .25s;
+  white-space:nowrap;
+}
+.btn-primary:hover{
+  box-shadow:0 0 32px rgba(46,196,182,0.55);
+  transform:translateY(-1px);
+}
+
+.nav-mobile-toggle{display:none;background:none;border:1px solid var(--border);color:var(--text-muted);padding:8px;border-radius:8px;cursor:pointer}
+
+/* ── SECTIONS ── */
+section{position:relative;z-index:1}
+.container{max-width:1280px;margin:0 auto;padding:0 24px}
+
+/* ── HERO ── */
+.hero{
+  min-height:85vh;
+  display:flex;
+  align-items:center;
+  padding:64px 0 48px;
+  overflow:hidden;
+}
+.hero-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:48px;
+  align-items:center;
+  width:100%;
+}
+.hero-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  background:rgba(46,196,182,0.1);
+  border:1px solid rgba(46,196,182,0.25);
+  color:var(--teal-light);
+  font-size:.7rem;
+  font-weight:600;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  padding:5px 12px;
+  border-radius:100px;
+  margin-bottom:18px;
+}
+.hero-badge .dot{
+  width:6px;height:6px;
+  border-radius:50%;
+  background:var(--teal);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+
+.hero h1{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(1.75rem,3.6vw,2.75rem);
+  font-weight:800;
+  line-height:1.18;
+  color:#fff;
+  margin-bottom:18px;
+  letter-spacing:-0.01em;
+}
+.hero h1 .accent{
+  background:linear-gradient(90deg,var(--teal),var(--teal-light));
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.hero h1 .accent2{
+  background:linear-gradient(90deg,var(--gold),#f4a83a);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.hero-sub{
+  font-size:.95rem;
+  color:var(--text-muted);
+  max-width:480px;
+  margin-bottom:28px;
+  line-height:1.7;
+}
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px}
+.btn-cta{
+  display:inline-flex;align-items:center;gap:8px;
+  background:linear-gradient(135deg,var(--teal),var(--green-mid));
+  color:#fff;
+  font-size:.9rem;font-weight:600;
+  padding:12px 24px;
+  border-radius:11px;
+  text-decoration:none;
+  box-shadow:0 0 32px rgba(46,196,182,0.4);
+  transition:all .25s;
+}
+.btn-cta:hover{transform:translateY(-2px);box-shadow:0 0 48px rgba(46,196,182,0.6)}
+.btn-secondary{
+  display:inline-flex;align-items:center;gap:8px;
+  background:transparent;
+  color:var(--text);
+  font-size:.9rem;font-weight:500;
+  padding:12px 24px;
+  border-radius:11px;
+  border:1px solid var(--border);
+  text-decoration:none;
+  transition:all .25s;
+}
+.btn-secondary:hover{border-color:var(--teal);color:var(--teal)}
+
+.hero-trust{
+  display:flex;
+  flex-wrap:wrap;
+  gap:20px;
+  align-items:center;
+}
+.trust-item{
+  display:flex;align-items:center;gap:7px;
+  font-size:.8rem;color:var(--text-muted);
+}
+.trust-item svg{width:14px;height:14px;color:var(--teal);flex-shrink:0}
+
+/* Hero visual */
+.hero-visual{position:relative}
+.doc-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:24px;
+  box-shadow:0 24px 80px rgba(0,0,0,0.6),0 0 0 1px rgba(46,196,182,0.08);
+  animation:cardFloat 5s ease-in-out infinite;
+}
+@keyframes cardFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.doc-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:20px;
+}
+.doc-title{
+  font-family:'Syne',sans-serif;
+  font-weight:700;
+  font-size:1rem;
+  color:#fff;
+}
+.doc-status{
+  font-size:.7rem;font-weight:700;
+  padding:4px 10px;
+  border-radius:100px;
+  background:rgba(46,196,182,0.15);
+  color:var(--teal-light);
+  border:1px solid rgba(46,196,182,0.3);
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.chain-vis{
+  background:rgba(0,0,0,0.3);
+  border:1px solid var(--border2);
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:16px;
+  font-size:.75rem;
+  color:var(--text-muted);
+}
+.chain-label{
+  font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px
+}
+.chain-hash{
+  font-family:monospace;
+  font-size:.72rem;
+  color:var(--teal);
+  word-break:break-all;
+  line-height:1.6;
+}
+.chain-blocks{
+  display:flex;gap:6px;margin-top:10px;
+}
+.chain-block{
+  flex:1;height:6px;border-radius:3px;
+  background:linear-gradient(90deg,var(--teal),var(--green));
+  animation:blockFill 3s ease-in-out infinite;
+}
+.chain-block:nth-child(2){animation-delay:.4s;opacity:.8}
+.chain-block:nth-child(3){animation-delay:.8s;opacity:.6}
+.chain-block:nth-child(4){animation-delay:1.2s;opacity:.3}
+@keyframes blockFill{0%,100%{opacity:.3}50%{opacity:1}}
+
+.signers-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.signer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:rgba(0,0,0,0.25);
+  border:1px solid var(--border2);
+  padding:10px 14px;
+  border-radius:10px;
+}
+.signer-name{font-size:.85rem;color:var(--text)}
+.signer-status{
+  font-size:.72rem;font-weight:600;
+  padding:3px 8px;border-radius:6px;
+}
+.status-signed{background:rgba(46,196,182,0.15);color:var(--teal-light)}
+.status-pending{background:rgba(255,209,102,0.1);color:var(--gold)}
+
+.progress-bar{
+  height:4px;
+  background:rgba(255,255,255,0.06);
+  border-radius:2px;
+  overflow:hidden;
+  margin-bottom:8px;
+}
+.progress-fill{
+  height:100%;
+  width:67%;
+  background:linear-gradient(90deg,var(--teal),var(--green-mid));
+  border-radius:2px;
+  animation:progressGlow 2s ease-in-out infinite;
+}
+@keyframes progressGlow{0%,100%{box-shadow:0 0 6px var(--teal)}50%{box-shadow:0 0 16px var(--teal)}}
+
+.doc-meta{font-size:.75rem;color:var(--text-dim);display:flex;align-items:center;gap:6px}
+.doc-meta svg{width:12px;height:12px;color:var(--teal)}
+
+/* Floating badge */
+.badge-float{
+  position:absolute;
+  top:-20px;
+  right:-20px;
+  background:rgba(27,94,32,0.9);
+  border:1px solid rgba(46,196,182,0.3);
+  backdrop-filter:blur(16px);
+  border-radius:14px;
+  padding:12px 16px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);
+  animation:badgeFloat 4.5s ease-in-out infinite;
+  z-index:2;
+}
+@keyframes badgeFloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
+.badge-float-text{font-size:.72rem;font-weight:600;color:var(--teal-light)}
+.badge-float-icon{width:28px;height:28px;border-radius:8px;background:rgba(46,196,182,0.2);display:flex;align-items:center;justify-content:center}
+.badge-float-icon svg{width:14px;height:14px;color:var(--teal)}
+
+.badge-float2{
+  position:absolute;
+  bottom:-20px;
+  left:-20px;
+  background:rgba(6,13,16,0.92);
+  border:1px solid var(--border);
+  backdrop-filter:blur(16px);
+  border-radius:14px;
+  padding:12px 16px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);
+  animation:badgeFloat2 5s ease-in-out infinite;
+  z-index:2;
+}
+@keyframes badgeFloat2{0%,100%{transform:translateY(0) rotate(1deg)}50%{transform:translateY(8px) rotate(-1deg)}}
+.badge-float2-label{font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px}
+.badge-float2-val{font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;color:var(--teal)}
+
+/* ── TRUST BAR ── */
+.trust-bar{
+  border-top:1px solid var(--border2);
+  border-bottom:1px solid var(--border2);
+  padding:20px 0;
+  background:rgba(13,26,31,0.7);
+}
+.trust-bar-inner{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+.trust-bar-label{
+  font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--text-dim);
+  margin-right:12px;
+  white-space:nowrap;
+}
+.trust-chip{
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border2);
+  padding:6px 14px;
+  border-radius:8px;
+  font-size:.8rem;
+  font-weight:600;
+  color:var(--text-muted);
+  white-space:nowrap;
+  transition:all .2s;
+}
+.trust-chip:hover{border-color:var(--teal);color:var(--teal)}
+.csc-chip{
+  background:rgba(46,196,182,0.08);
+  border-color:rgba(46,196,182,0.3);
+  color:var(--teal-light);
+}
+
+/* ── CSC SECTION ── */
+.csc-section{
+  padding:80px 0;
+  position:relative;
+}
+.csc-card{
+  background:linear-gradient(135deg,rgba(46,196,182,0.08),rgba(27,94,32,0.12));
+  border:1px solid rgba(46,196,182,0.2);
+  border-radius:24px;
+  padding:48px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:48px;
+  align-items:center;
+  position:relative;
+  overflow:hidden;
+}
+.csc-card::before{
+  content:'';
+  position:absolute;
+  top:-1px;left:0;right:0;
+  height:2px;
+  background:linear-gradient(90deg,transparent,var(--teal),transparent);
+}
+.csc-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(46,196,182,0.12);
+  border:1px solid rgba(46,196,182,0.3);
+  padding:6px 14px;
+  border-radius:100px;
+  font-size:.72rem;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;
+  color:var(--teal);
+  margin-bottom:20px;
+}
+.csc-badge svg{width:12px;height:12px}
+.csc-card h2{
+  font-family:'Syne',sans-serif;
+  font-size:1.65rem;font-weight:800;color:#fff;
+  line-height:1.2;margin-bottom:14px;
+  letter-spacing:-0.01em;
+}
+.csc-card p{color:var(--text-muted);line-height:1.75;margin-bottom:20px}
+.csc-link{
+  display:inline-flex;align-items:center;gap:6px;
+  color:var(--teal);font-size:.875rem;font-weight:600;
+  text-decoration:none;
+  border-bottom:1px solid rgba(46,196,182,0.3);
+  padding-bottom:2px;
+  transition:all .2s;
+}
+.csc-link:hover{color:var(--teal-light);border-color:var(--teal-light)}
+.csc-stats{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.csc-stat{
+  background:rgba(0,0,0,0.3);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+  text-align:center;
+}
+.csc-stat-num{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:1.6rem;
+  background:linear-gradient(90deg,var(--teal),var(--teal-light));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  display:block;margin-bottom:4px;
+}
+.csc-stat-label{font-size:.75rem;color:var(--text-dim)}
+
+/* ── FEATURES ── */
+.features-section{padding:80px 0}
+.section-label{
+  font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--teal);font-weight:700;margin-bottom:12px;
+}
+.section-title{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:clamp(1.55rem,3vw,2.1rem);
+  color:#fff;line-height:1.2;margin-bottom:14px;
+  letter-spacing:-0.01em;
+}
+.section-sub{color:var(--text-muted);font-size:.9rem;max-width:540px;line-height:1.7}
+.section-head{margin-bottom:48px}
+
+.features-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:20px;
+}
+.feature-card{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:18px;
+  padding:28px;
+  transition:all .3s;
+  position:relative;
+  overflow:hidden;
+}
+.feature-card::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(135deg,rgba(46,196,182,0.05),transparent);
+  opacity:0;
+  transition:opacity .3s;
+  pointer-events:none;
+}
+.feature-card:hover{
+  border-color:rgba(46,196,182,0.35);
+  transform:translateY(-4px);
+  box-shadow:0 20px 60px rgba(0,0,0,0.4),0 0 0 1px rgba(46,196,182,0.1);
+}
+.feature-card:hover::after{opacity:1}
+.feature-card.featured{
+  background:linear-gradient(135deg,rgba(46,196,182,0.1),rgba(27,94,32,0.1));
+  border-color:rgba(46,196,182,0.25);
+  grid-column:span 1;
+}
+.feature-icon{
+  width:44px;height:44px;
+  background:rgba(46,196,182,0.1);
+  border:1px solid rgba(46,196,182,0.2);
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:18px;
+}
+.feature-icon svg{width:20px;height:20px;color:var(--teal)}
+.feature-badge{
+  display:inline-block;
+  font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  background:rgba(255,209,102,0.15);color:var(--gold);
+  border:1px solid rgba(255,209,102,0.25);
+  padding:2px 8px;border-radius:4px;
+  margin-bottom:10px;
+}
+.feature-card h3{
+  font-family:'Syne',sans-serif;font-weight:700;
+  font-size:1rem;color:#fff;margin-bottom:8px;
+}
+.feature-card p{font-size:.875rem;color:var(--text-muted);line-height:1.65}
+
+/* ── BLOCKCHAIN KPI ── */
+.blockchain-section{padding:80px 0}
+.blockchain-inner{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:24px;
+  padding:48px;
+  position:relative;
+  overflow:hidden;
+}
+.blockchain-inner::before{
+  content:'';
+  position:absolute;inset:0;
+  background:radial-gradient(circle at 80% 50%,rgba(46,196,182,0.06),transparent 60%);
+  pointer-events:none;
+}
+.blockchain-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:60px;align-items:center}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.kpi-card{
+  background:rgba(0,0,0,0.3);
+  border:1px solid var(--border2);
+  border-radius:14px;
+  padding:20px;
+  text-align:center;
+  transition:all .3s;
+}
+.kpi-card:hover{border-color:rgba(46,196,182,0.3);transform:translateY(-2px)}
+.kpi-num{
+  font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;
+  background:linear-gradient(90deg,var(--teal),var(--teal-light));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  display:block;margin-bottom:4px;
+}
+.kpi-label{font-size:.775rem;color:var(--text-dim);line-height:1.4}
+.kpi-card.highlight{
+  background:linear-gradient(135deg,rgba(46,196,182,0.1),rgba(27,94,32,0.1));
+  border-color:rgba(46,196,182,0.25);
+}
+.kpi-card.highlight .kpi-num{
+  background:linear-gradient(90deg,var(--gold),#f4a83a);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+
+.blockchain-certs{display:flex;flex-direction:column;gap:12px;margin-top:24px}
+.cert-item{
+  display:flex;align-items:center;gap:12px;
+  background:rgba(0,0,0,0.25);
+  border:1px solid var(--border2);
+  border-radius:10px;
+  padding:12px 16px;
+}
+.cert-icon{
+  width:32px;height:32px;
+  background:rgba(46,196,182,0.12);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.cert-icon svg{width:16px;height:16px;color:var(--teal)}
+.cert-text{font-size:.8rem;color:var(--text-muted);font-weight:500}
+
+/* ── AI SECTION ── */
+.ai-section{padding:80px 0}
+.ai-inner{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:60px;
+  align-items:center;
+}
+.ai-feature-list{display:flex;flex-direction:column;gap:16px;margin-top:28px}
+.ai-feature{
+  display:flex;gap:14px;
+  padding:16px 20px;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:12px;
+  transition:all .25s;
+}
+.ai-feature:hover{border-color:rgba(46,196,182,0.25);transform:translateX(4px)}
+.ai-feature-icon{
+  width:36px;height:36px;
+  background:rgba(46,196,182,0.1);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.ai-feature-icon svg{width:16px;height:16px;color:var(--teal)}
+.ai-feature-title{font-size:.875rem;font-weight:600;color:#fff;margin-bottom:3px}
+.ai-feature-desc{font-size:.8rem;color:var(--text-muted)}
+
+.ai-visual{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:24px;
+  box-shadow:0 24px 80px rgba(0,0,0,0.5);
+}
+.ai-chat{display:flex;flex-direction:column;gap:12px}
+.ai-msg{
+  display:flex;gap:10px;
+}
+.ai-msg-avatar{
+  width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--teal),var(--green));
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;font-size:.6rem;font-weight:700;color:#fff;
+}
+.ai-msg-bubble{
+  background:rgba(0,0,0,0.3);
+  border:1px solid var(--border2);
+  border-radius:10px;
+  padding:10px 14px;
+  font-size:.8rem;
+  color:var(--text-muted);
+  line-height:1.5;
+  max-width:280px;
+}
+.ai-msg-bubble strong{color:var(--teal-light)}
+.ai-msg.user .ai-msg-bubble{
+  background:rgba(46,196,182,0.08);
+  border-color:rgba(46,196,182,0.2);
+  color:var(--text);
+  margin-left:auto;
+}
+.ai-msg.user{flex-direction:row-reverse}
+.ai-typing{
+  display:flex;gap:4px;
+  align-items:center;
+  padding:4px 0;
+}
+.ai-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--teal);
+  animation:aiType 1.2s ease-in-out infinite;
+}
+.ai-dot:nth-child(2){animation-delay:.2s}
+.ai-dot:nth-child(3){animation-delay:.4s}
+@keyframes aiType{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}
+
+/* ── INDUSTRIES ── */
+.industries-section{padding:80px 0}
+.industries-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+  margin-top:40px;
+}
+.industry-card{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:16px;
+  padding:24px;
+  transition:all .3s;
+  display:flex;align-items:flex-start;gap:14px;
+}
+.industry-card:hover{
+  border-color:rgba(46,196,182,0.3);
+  transform:translateY(-3px);
+  background:rgba(46,196,182,0.04);
+}
+.industry-icon{
+  width:40px;height:40px;
+  background:rgba(46,196,182,0.08);
+  border:1px solid rgba(46,196,182,0.15);
+  border-radius:10px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.industry-icon svg{width:18px;height:18px;color:var(--teal)}
+.industry-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;color:#fff;margin-bottom:4px}
+.industry-desc{font-size:.78rem;color:var(--text-dim)}
+
+/* ── ABOUT ── */
+.about-section{padding:80px 0}
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+.about-highlight{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(46,196,182,0.06);
+  border:1px solid rgba(46,196,182,0.15);
+  border-radius:10px;
+  padding:12px 16px;
+  margin-bottom:16px;
+}
+.about-highlight svg{width:16px;height:16px;color:var(--teal);flex-shrink:0}
+.about-highlight-text{font-size:.82rem;color:var(--text-muted)}
+.about-highlight-text strong{color:var(--teal-light)}
+.about-desc{color:var(--text-muted);line-height:1.75;margin-top:20px}
+.about-desc + .about-desc{margin-top:12px}
+.about-stats{
+  display:grid;grid-template-columns:1fr 1fr;gap:16px;
+  margin-top:28px;
+}
+.about-stat{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:12px;
+  padding:16px 20px;
+}
+.about-stat-num{
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;
+  color:var(--teal);display:block;margin-bottom:2px;
+}
+.about-stat-label{font-size:.75rem;color:var(--text-dim)}
+
+/* ── TESTIMONIALS ── */
+.testimonials-section{padding:80px 0}
+.testimonials-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:40px}
+.testimonial{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:18px;
+  padding:28px;
+  position:relative;
+}
+.testimonial::before{
+  content:'"';
+  position:absolute;top:16px;right:20px;
+  font-family:'Syne',sans-serif;font-size:4rem;font-weight:800;
+  color:rgba(46,196,182,0.1);line-height:1;
+}
+.testimonial-text{
+  font-size:.9rem;color:var(--text-muted);
+  line-height:1.7;margin-bottom:20px;
+}
+.testimonial-author{
+  display:flex;align-items:center;gap:10px;
+}
+.testimonial-avatar{
+  width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--teal),var(--green));
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Syne',sans-serif;font-weight:700;font-size:.8rem;color:#fff;
+}
+.testimonial-name{font-weight:600;font-size:.85rem;color:#fff}
+.testimonial-role{font-size:.75rem;color:var(--text-dim)}
+.stars{display:flex;gap:3px;margin-bottom:14px}
+.stars svg{width:13px;height:13px;color:var(--gold)}
+
+/* ── FAQ ── */
+.faq-section{padding:80px 0}
+.faq-list{display:flex;flex-direction:column;gap:10px;max-width:760px;margin:40px auto 0}
+.faq-item{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:14px;
+  overflow:hidden;
+  transition:border-color .2s;
+}
+.faq-item:hover{border-color:rgba(46,196,182,0.25)}
+.faq-item summary{
+  padding:18px 22px;
+  font-size:.9rem;font-weight:600;color:#fff;
+  cursor:pointer;list-style:none;
+  display:flex;justify-content:space-between;align-items:center;
+  transition:color .2s;
+}
+.faq-item summary:hover{color:var(--teal)}
+.faq-item summary::after{
+  content:'+';
+  font-size:1.2rem;font-weight:300;
+  color:var(--text-dim);
+  transition:transform .2s,color .2s;
+  flex-shrink:0;margin-left:12px;
+}
+.faq-item[open] summary::after{transform:rotate(45deg);color:var(--teal)}
+.faq-body{
+  padding:0 22px 18px;
+  font-size:.875rem;
+  color:var(--text-muted);
+  line-height:1.7;
+}
+
+/* ── CTA ── */
+.cta-section{padding:80px 0}
+.cta-inner{
+  background:linear-gradient(135deg,rgba(46,196,182,0.12),rgba(27,94,32,0.18));
+  border:1px solid rgba(46,196,182,0.2);
+  border-radius:28px;
+  padding:64px 48px;
+  text-align:center;
+  position:relative;
+  overflow:hidden;
+}
+.cta-inner::before{
+  content:'';
+  position:absolute;top:-1px;left:0;right:0;
+  height:2px;
+  background:linear-gradient(90deg,transparent,var(--teal),transparent);
+}
+.cta-inner::after{
+  content:'';
+  position:absolute;
+  width:400px;height:400px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(46,196,182,0.1),transparent 70%);
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+.cta-inner h2{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:clamp(1.6rem,3.5vw,2.4rem);color:#fff;
+  margin-bottom:14px;position:relative;z-index:1;
+  letter-spacing:-0.01em;
+}
+.cta-inner p{color:var(--text-muted);max-width:520px;margin:0 auto 32px;position:relative;z-index:1}
+.cta-actions{
+  display:flex;gap:12px;justify-content:center;flex-wrap:wrap;
+  position:relative;z-index:1;
+}
+
+/* ── FOOTER ── */
+footer{
+  border-top:1px solid var(--border2);
+  padding:60px 0 32px;
+  background:rgba(6,13,16,0.9);
+}
+.footer-grid{
+  display:grid;
+  grid-template-columns:1.5fr 1fr 1fr 1fr;
+  gap:40px;
+  margin-bottom:40px;
+}
+.footer-logo{display:flex;align-items:center;gap:10px;margin-bottom:16px;text-decoration:none}
+.footer-logo span{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:#fff}
+.footer-desc{font-size:.82rem;color:var(--text-dim);line-height:1.65;max-width:240px}
+.footer-csc{
+  display:inline-flex;align-items:center;gap:6px;
+  margin-top:12px;
+  background:rgba(46,196,182,0.08);
+  border:1px solid rgba(46,196,182,0.2);
+  padding:5px 10px;
+  border-radius:8px;
+  font-size:.7rem;font-weight:600;color:var(--teal);
+  text-decoration:none;
+}
+.footer-csc:hover{background:rgba(46,196,182,0.14)}
+.footer-col h4{
+  font-family:'Syne',sans-serif;font-weight:700;
+  font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-muted);margin-bottom:14px;
+}
+.footer-links{display:flex;flex-direction:column;gap:8px}
+.footer-links a{
+  font-size:.82rem;color:var(--text-dim);
+  text-decoration:none;transition:color .2s;
+}
+.footer-links a:hover{color:var(--teal)}
+.footer-bottom{
+  border-top:1px solid var(--border2);
+  padding-top:24px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:12px;
+}
+.footer-copy{font-size:.78rem;color:var(--text-dim)}
+.footer-powered{font-size:.78rem;color:var(--text-dim)}
+.footer-powered a{color:var(--teal);text-decoration:none}
+
+/* ── REVEAL ── */
+.reveal{
+  opacity:0;
+  transform:translateY(20px);
+  transition:opacity .7s ease,transform .7s ease;
+}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:1024px){
+  .features-grid{grid-template-columns:1fr 1fr}
+  .industries-grid{grid-template-columns:1fr 1fr}
+  .footer-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:768px){
+  nav{display:none}
+  .nav-mobile-toggle{display:flex;align-items:center}
+  .hero-grid{grid-template-columns:1fr;gap:40px}
+  .hero{min-height:auto;padding:60px 0 50px}
+  .badge-float,.badge-float2{display:none}
+  .csc-card{grid-template-columns:1fr;gap:32px;padding:32px 24px}
+  .blockchain-grid{grid-template-columns:1fr}
+  .ai-inner{grid-template-columns:1fr}
+  .about-grid{grid-template-columns:1fr}
+  .testimonials-grid{grid-template-columns:1fr}
+  .features-grid{grid-template-columns:1fr}
+  .industries-grid{grid-template-columns:1fr 1fr}
+  .footer-grid{grid-template-columns:1fr 1fr}
+  .cta-inner{padding:40px 24px}
+  .blockchain-inner{padding:28px 20px}
+}
+@media(max-width:480px){
+  .industries-grid{grid-template-columns:1fr}
+  .footer-grid{grid-template-columns:1fr}
+  .kpi-grid{grid-template-columns:1fr 1fr}
+  .hero h1{font-size:2rem}
+  .hero-actions{flex-direction:column}
+  .btn-cta,.btn-secondary{text-align:center;justify-content:center}
+}
+
+/* mobile nav */
+.mobile-nav{
+  display:none;
+  position:fixed;inset:0;z-index:200;
+  background:rgba(6,13,16,0.98);
+  backdrop-filter:blur(20px);
+  flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:24px;
+}
+.mobile-nav.open{display:flex}
+.mobile-nav a{
+  font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:700;
+  color:var(--text-muted);text-decoration:none;transition:color .2s;
+}
+.mobile-nav a:hover{color:var(--teal)}
+.mobile-nav-close{
+  position:absolute;top:24px;right:24px;
+  background:none;border:1px solid var(--border);
+  color:var(--text-muted);padding:10px;border-radius:10px;cursor:pointer;
+}
+</style>
 </head>
-<body class="bg-[#F8FAFC] text-[#1F2937] antialiased transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
-    @php
-        $loginUrl = Route::has('login') ? route('login') : url('/');
-        $registerUrl = Route::has('register') ? route('register') : $loginUrl;
-        $dashboardUrl = auth()->check()
-            ? route(auth()->user()->homeRouteName())
-            : (Route::has('dashboard') ? route('dashboard') : url('/'));
-    @endphp
+<body>
 
-    <div class="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div class="ambient-gradient absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(46,196,182,0.18),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(255,209,102,0.2),transparent_35%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(46,196,182,0.22),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(27,94,32,0.25),transparent_35%)]"></div>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+
+<!-- Mobile Nav -->
+<div class="mobile-nav" id="mobileNav">
+  <button class="mobile-nav-close" id="mobileNavClose" aria-label="Close menu">
+    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+  </button>
+  <a href="#features" onclick="closeMobileNav()">Features</a>
+  <a href="#blockchain" onclick="closeMobileNav()">Security</a>
+  <a href="#about" onclick="closeMobileNav()">About</a>
+  <a href="#industries" onclick="closeMobileNav()">Industries</a>
+  <a href="#faq" onclick="closeMobileNav()">FAQ</a>
+  <a href="#" class="btn-cta" style="font-size:.9rem">Get Started Free</a>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-inner">
+    <a href="#" class="logo">
+      <div class="logo-icon">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      </div>
+      <span class="logo-text">DocuTrust</span>
+    </a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#blockchain">Security</a>
+      <a href="#ai">AI Engine</a>
+      <a href="#about">About</a>
+      <a href="#industries">Industries</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="header-actions">
+      <a href="#" class="btn-ghost">Login</a>
+      <a href="#" class="btn-primary">Start Free Trial</a>
+      <button class="nav-mobile-toggle" id="mobileNavToggle" aria-label="Open menu">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
     </div>
+  </div>
+</header>
 
-    <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/80">
-        <div class="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-            <a href="{{ url('/') }}" class="flex items-center gap-3">
-                <span class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200 dark:bg-transparent dark:shadow-none dark:ring-slate-600/40">
-                    <img src="{{ asset('images/docutrust-logo.png') }}" alt="DocuTrust logo" class="h-full w-full object-contain" />
-                </span>
-                <span class="text-xl font-bold">DocuTrust</span>
-            </a>
-            <nav class="hidden items-center gap-8 text-sm font-medium md:flex">
-                <a href="#features" class="hover:text-[#2EC4B6]">Features</a>
-                <a href="#about" class="hover:text-[#2EC4B6]">About</a>
-                <a href="#industries" class="hover:text-[#2EC4B6]">Industries</a>
-                <a href="#insights" class="hover:text-[#2EC4B6]">Insights</a>
-                <a href="#faq" class="hover:text-[#2EC4B6]">FAQ</a>
-            </nav>
-            <div class="flex items-center gap-3">
-                <button id="theme-toggle" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:border-[#2EC4B6] hover:text-[#2EC4B6] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" aria-label="Toggle theme">
-                    <svg class="h-5 w-5 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M21 12.79A9 9 0 1111.21 3c.5 0 .8.54.53.95A7 7 0 0019.05 12c.42-.27.95.03.95.53v.26z"></path></svg>
-                    <svg class="hidden h-5 w-5 dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M7.05 7.05 5.636 5.636m12.728 0L16.95 7.05M7.05 16.95l-1.414 1.414M12 16a4 4 0 100-8 4 4 0 000 8z"></path></svg>
-                </button>
-                @auth
-                    <a href="{{ $dashboardUrl }}" class="rounded-xl bg-[#1B5E20] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#174f1b]">Dashboard</a>
-                @else
-                    <a href="{{ $loginUrl }}" class="hidden text-sm font-semibold sm:inline-flex">Login</a>
-                    <a href="{{ $registerUrl }}" class="rounded-xl bg-[#2EC4B6] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1B5E20]">Get Started</a>
-                @endauth
-            </div>
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="hero-badge reveal">
+          <span class="dot"></span>
+          CSC Member · Blockchain-Certified · BSP-Licensed
         </div>
-    </header>
-
-    <main>
-        <section class="relative overflow-hidden pb-20 pt-16 sm:pt-20 lg:pt-24">
-            <div class="mx-auto grid w-full max-w-7xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
-                <div class="reveal space-y-8" data-delay="0">
-                    <span class="reveal inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-4 py-1.5 text-sm font-semibold text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300" data-delay="80">
-                        Trusted by 10,000+ teams worldwide
-                    </span>
-                    <h1 class="reveal text-balance text-4xl font-extrabold leading-tight text-slate-900 sm:text-5xl lg:text-6xl dark:text-white" data-delay="140">
-                        Modern agreement workflows with enterprise-grade trust.
-                    </h1>
-                    <p class="reveal max-w-xl text-lg text-slate-600 dark:text-slate-300" data-delay="220">
-                        Send, sign, and manage contracts in minutes with a beautifully simple experience that feels fast in both light and dark mode.
-                    </p>
-                    <div class="reveal flex flex-col gap-3 sm:flex-row" data-delay="300">
-                        @auth
-                            <a href="{{ $dashboardUrl }}" class="inline-flex items-center justify-center rounded-xl bg-teal-500 px-6 py-3.5 text-base font-semibold text-white shadow-lg shadow-teal-500/35 transition duration-300 hover:-translate-y-1 hover:bg-teal-400 hover:shadow-xl">
-                                Go to dashboard
-                            </a>
-                        @else
-                            <a href="{{ $registerUrl }}" class="inline-flex items-center justify-center rounded-xl bg-teal-500 px-6 py-3.5 text-base font-semibold text-white shadow-lg shadow-teal-500/35 transition duration-300 hover:-translate-y-1 hover:bg-teal-400 hover:shadow-xl">
-                                Start free trial
-                            </a>
-                        @endauth
-                        <a href="#demo" class="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-3.5 text-base font-semibold text-slate-700 transition duration-300 hover:-translate-y-1 hover:border-teal-400 hover:text-teal-600 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-teal-500 dark:hover:text-teal-300">
-                            See product tour
-                        </a>
-                    </div>
-                    <div class="reveal flex flex-wrap items-center gap-6 text-sm text-slate-500 dark:text-slate-400" data-delay="380">
-                        <span>No credit card needed</span>
-                        <span>14-day trial</span>
-                        <span>24/7 support</span>
-                    </div>
-                </div>
-
-                <div class="reveal relative float-soft" data-delay="180">
-                    <div class="hero-glow absolute -left-8 -top-10 h-44 w-44 rounded-full bg-teal-400/30 blur-3xl dark:bg-teal-500/20"></div>
-                    <div class="hero-glow absolute -bottom-10 -right-8 h-44 w-44 rounded-full bg-indigo-400/30 blur-3xl dark:bg-indigo-500/20" style="animation-delay: 1.5s;"></div>
-                    <div class="relative rounded-3xl border border-white/60 bg-white/90 p-4 shadow-2xl shadow-slate-300/30 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-black/30">
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-950">
-                            <div class="mb-6 flex items-center justify-between">
-                                <div>
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">New request</p>
-                                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">Vendor Agreement.pdf</h3>
-                                </div>
-                                <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">Ready to sign</span>
-                            </div>
-                            <div class="space-y-4">
-                                <div class="rounded-xl border border-dashed border-slate-300 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                                    <p class="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">Signers</p>
-                                    <div class="space-y-2 text-sm">
-                                        <div class="flex items-center justify-between rounded-lg bg-slate-100 px-3 py-2 dark:bg-slate-800">
-                                            <span class="text-slate-700 dark:text-slate-200">Maya Turner</span>
-                                            <span class="font-semibold text-emerald-600 dark:text-emerald-300">Signed</span>
-                                        </div>
-                                        <div class="flex items-center justify-between rounded-lg bg-slate-100 px-3 py-2 dark:bg-slate-800">
-                                            <span class="text-slate-700 dark:text-slate-200">Aron Diaz</span>
-                                            <span class="font-semibold text-amber-600 dark:text-amber-300">Pending</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                                    <div class="h-full w-2/3 rounded-full bg-teal-500"></div>
-                                </div>
-                                <p class="text-sm text-slate-600 dark:text-slate-300">67% completed - live reminders sent automatically.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="border-y border-slate-200 bg-white/70 py-10 dark:border-slate-800 dark:bg-slate-900/40">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <p class="mb-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Trusted by teams, institutions, and organizations</p>
-                <div class="grid grid-cols-2 gap-4 text-center sm:grid-cols-5">
-                    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900">CivicCore</div>
-                    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900">UniTrust</div>
-                    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900">LegalGrid</div>
-                    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900">HomeAxis</div>
-                    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900">FinPulse</div>
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20" id="features">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div class="text-center">
-                    <p class="reveal text-xs font-semibold uppercase tracking-[0.2em] text-[#2EC4B6] dark:text-[#7ce8dc]">Features</p>
-                    <h2 class="reveal mt-3 text-3xl font-bold text-slate-900 sm:text-4xl dark:text-white">Everything You Need to Manage Documents with Confidence</h2>
-                    <p class="reveal mx-auto mt-4 max-w-2xl text-base text-slate-600 dark:text-slate-300">From legally binding signatures to audit-ready trails—one platform built for teams that cannot afford gaps in security or speed.</p>
-                </div>
-                <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    <article class="reveal group relative overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white via-teal-50/40 to-[#2EC4B6]/10 p-8 shadow-lg shadow-slate-200/50 ring-2 ring-[#2EC4B6]/35 transition duration-300 hover:-translate-y-[5px] hover:border-[#2EC4B6] hover:shadow-2xl hover:shadow-[#2EC4B6]/25 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-[#2EC4B6]/10 dark:shadow-black/40 dark:ring-[#2EC4B6]/45 dark:hover:shadow-[#2EC4B6]/20">
-                        <span class="absolute right-4 top-4 rounded-full bg-[#2EC4B6] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-md shadow-[#2EC4B6]/40">Most Used</span>
-                        <span class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2EC4B6]/15 text-[#1B5E20] dark:text-[#7ce8dc]">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                        </span>
-                        <h3 class="pr-16 font-semibold text-lg text-slate-900 dark:text-white">Secure Digital Signing</h3>
-                        <p class="mt-2 text-sm text-slate-400 dark:text-slate-400">Legally binding digital signatures with advanced encryption and verification.</p>
-                    </article>
-                    <article class="reveal group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/90 to-white p-6 shadow-md backdrop-blur-sm transition duration-300 hover:-translate-y-[5px] hover:border-[#2EC4B6] hover:shadow-xl hover:shadow-[#2EC4B6]/10 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900/95 dark:to-slate-900 dark:hover:shadow-[#2EC4B6]/15">
-                        <span class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2EC4B6]/15 text-[#1B5E20] dark:text-[#7ce8dc]">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                        </span>
-                        <h3 class="font-semibold text-lg text-slate-900 dark:text-white">Multi-Signer Workflow</h3>
-                        <p class="mt-2 text-sm text-slate-400 dark:text-slate-400">Define signing order, approvals, and roles with ease.</p>
-                    </article>
-                    <article class="reveal group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/90 to-white p-6 shadow-md backdrop-blur-sm transition duration-300 hover:-translate-y-[5px] hover:border-[#2EC4B6] hover:shadow-xl hover:shadow-[#2EC4B6]/10 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900/95 dark:to-slate-900 dark:hover:shadow-[#2EC4B6]/15">
-                        <span class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2EC4B6]/15 text-[#1B5E20] dark:text-[#7ce8dc]">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                        </span>
-                        <h3 class="font-semibold text-lg text-slate-900 dark:text-white">Real-Time Tracking</h3>
-                        <p class="mt-2 text-sm text-slate-400 dark:text-slate-400">Monitor document status from sent to signed in real time.</p>
-                    </article>
-                    <article class="reveal group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/90 to-white p-6 shadow-md backdrop-blur-sm transition duration-300 hover:-translate-y-[5px] hover:border-[#2EC4B6] hover:shadow-xl hover:shadow-[#2EC4B6]/10 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900/95 dark:to-slate-900 dark:hover:shadow-[#2EC4B6]/15">
-                        <span class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2EC4B6]/15 text-[#1B5E20] dark:text-[#7ce8dc]">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
-                        </span>
-                        <h3 class="font-semibold text-lg text-slate-900 dark:text-white">Blockchain Verification</h3>
-                        <p class="mt-2 text-sm text-slate-400 dark:text-slate-400">Ensure tamper-proof and verifiable document authenticity.</p>
-                    </article>
-                    <article class="reveal group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/90 to-white p-6 shadow-md backdrop-blur-sm transition duration-300 hover:-translate-y-[5px] hover:border-[#2EC4B6] hover:shadow-xl hover:shadow-[#2EC4B6]/10 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900/95 dark:to-slate-900 dark:hover:shadow-[#2EC4B6]/15">
-                        <span class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2EC4B6]/15 text-[#1B5E20] dark:text-[#7ce8dc]">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-                        </span>
-                        <h3 class="font-semibold text-lg text-slate-900 dark:text-white">Smart Document Management</h3>
-                        <p class="mt-2 text-sm text-slate-400 dark:text-slate-400">Organize, search, and access files instantly with intelligent tagging.</p>
-                    </article>
-                    <article class="reveal group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/90 to-white p-6 shadow-md backdrop-blur-sm transition duration-300 hover:-translate-y-[5px] hover:border-[#2EC4B6] hover:shadow-xl hover:shadow-[#2EC4B6]/10 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900/95 dark:to-slate-900 dark:hover:shadow-[#2EC4B6]/15">
-                        <span class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2EC4B6]/15 text-[#1B5E20] dark:text-[#7ce8dc]">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                        </span>
-                        <h3 class="font-semibold text-lg text-slate-900 dark:text-white">Audit Trail Logs</h3>
-                        <p class="mt-2 text-sm text-slate-400 dark:text-slate-400">Complete history of every action for transparency and compliance.</p>
-                    </article>
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20" id="about">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div class="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-                    <div class="reveal text-left">
-                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">About DocuTrust</p>
-                        <h2 class="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl dark:text-white">Powering Trust Through Innovation</h2>
-                        <div class="mt-6 max-w-xl text-slate-600 dark:text-slate-300">
-                            <p>
-                                DocuTrust is a next-generation digital signing platform built to transform how organizations manage agreements, approvals, and document workflows. Designed for speed, security, and scalability, it empowers teams to move faster while maintaining complete trust in every transaction.
-                            </p>
-                            <p class="mt-4">
-                                Backed by <span class="font-semibold text-slate-800 dark:text-slate-100">Surepay Technologies Inc.</span>, a <span class="font-semibold text-[#1B5E20] dark:text-[#7ce8dc]">BSP-licensed</span> payment service operator and a trusted fintech company in the Philippines, DocuTrust is built on a foundation of <span class="font-semibold text-[#1B5E20] dark:text-[#7ce8dc]">bank-grade security</span>, reliability, and innovation.
-                            </p>
-                            <p class="mt-4">
-                                <span class="font-semibold text-slate-800 dark:text-slate-100">Surepay Technologies Inc.</span> is recognized for delivering secure and scalable digital service solutions—enabling institutions to streamline transactions, improve operational accuracy, and deliver seamless customer experiences.
-                            </p>
-                            <p class="mt-4">
-                                Through major initiatives such as the LGU Integrated Financial Tools (LIFT) system, ISO 9001:2015 certified operations, and nationwide digital transformation programs, Surepay continues to lead in building secure and efficient digital ecosystems.
-                            </p>
-                            <p class="mt-4">
-                                With DocuTrust, organizations gain more than just digital signatures—they gain a complete, secure, and intelligent document workflow solution built for modern enterprise needs.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="reveal" data-delay="120">
-                        @if (file_exists(public_path('images/about-us.jpg')))
-                            <div class="aspect-[4/3] overflow-hidden rounded-2xl shadow-xl">
-                                <img src="{{ asset('images/about-us.jpg') }}" alt="About DocuTrust" class="h-full w-full object-cover" width="800" height="600" loading="lazy" />
-                            </div>
-                        @else
-                            <div class="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#2EC4B6]/12 via-slate-50 to-[#1B5E20]/10 shadow-xl dark:from-[#2EC4B6]/10 dark:via-slate-900 dark:to-[#1B5E20]/20">
-                                <div class="p-8 text-center">
-                                    <span class="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#2EC4B6]/20 text-[#1B5E20] dark:bg-[#2EC4B6]/15 dark:text-[#7ce8dc]">
-                                        <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                    </span>
-                                    <p class="mt-4 text-sm font-medium text-slate-500 dark:text-slate-400">Image placeholder</p>
-                                </div>
-                            </div>
-                        @endif
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20 bg-white/70 dark:bg-slate-900/40" id="demo">
-            <div class="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-                <h2 class="reveal text-3xl font-bold sm:text-4xl">See DocuTrust in Action</h2>
-                <p class="reveal mx-auto mt-4 max-w-2xl text-slate-600 dark:text-slate-300">Experience how simple and secure digital signing can be.</p>
-                <div class="reveal mx-auto mt-10 max-w-4xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
-                    <div class="aspect-video w-full overflow-hidden rounded-2xl bg-slate-900/5 ring-1 ring-slate-200/80 dark:bg-slate-800/30 dark:ring-slate-700/80">
-                        <iframe
-                            class="h-full w-full rounded-2xl"
-                            src="https://www.youtube.com/embed/aRFZeahiA4w"
-                            title="DocuTrust Demo Video"
-                            frameborder="0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowfullscreen></iframe>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20 bg-white/70 dark:bg-slate-900/40" id="industries">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <h2 class="reveal text-center text-3xl font-bold sm:text-4xl">Built for Every Industry</h2>
-                <div class="mt-10 grid grid-cols-2 gap-4 text-center sm:grid-cols-3 lg:grid-cols-6">
-                    @foreach (['Government','Education','Legal','Real Estate','HR & Recruitment','Finance'] as $industry)
-                        <div class="reveal rounded-xl border border-slate-200 bg-white px-4 py-3 font-semibold dark:border-slate-800 dark:bg-slate-900">{{ $industry }}</div>
-                    @endforeach
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div class="rounded-3xl bg-[#1B5E20] p-10 text-white">
-                    <h2 class="reveal text-center text-3xl font-bold sm:text-4xl">Improve Efficiency and Reduce Costs</h2>
-                    <div class="mt-10 grid gap-6 text-center sm:grid-cols-2 lg:grid-cols-4">
-                        @foreach (['80% Faster Document Processing','60% Less Paper Usage','40% Cost Reduction','100% Secure Transactions'] as $metric)
-                            <div class="reveal rounded-2xl border border-white/20 bg-white/10 p-5">{{ $metric }}</div>
-                        @endforeach
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20 bg-white/70 dark:bg-slate-900/40" id="insights">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <h2 class="reveal text-center text-3xl font-bold sm:text-4xl">Insights & Updates</h2>
-                <div class="mt-10 grid gap-6 md:grid-cols-3">
-                    @foreach ([['Digital transformation in document workflows','How modern teams sign faster with less friction.'],['Paperless operations at scale','Practical strategies for reducing cost and waste.'],['Security and compliance essentials','What to review before deploying e-signature platforms.']] as $post)
-                        <article class="reveal rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900">
-                            <h3 class="font-semibold">{{ $post[0] }}</h3>
-                            <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ $post[1] }}</p>
-                        </article>
-                    @endforeach
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <h2 class="reveal text-center text-3xl font-bold sm:text-4xl">What Our Users Say</h2>
-                <div class="mt-10 grid gap-6 md:grid-cols-3">
-                    @foreach ([['"DocuTrust reduced our turnaround time dramatically."','Operations Lead, Civic Agency'],['"The audit trail and verification workflow are exactly what our legal team needed."','Partner, Legal Advisory Group'],['"Secure, intuitive, and fast onboarding for every signer."','HR Director, Enterprise Group']] as $quote)
-                        <blockquote class="reveal rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <p class="font-medium">{{ $quote[0] }}</p>
-                            <footer class="mt-4 text-sm text-slate-500 dark:text-slate-400">{{ $quote[1] }}</footer>
-                        </blockquote>
-                    @endforeach
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20 bg-white/70 dark:bg-slate-900/40" id="faq">
-            <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-                <h2 class="reveal text-center text-3xl font-bold sm:text-4xl">Frequently Asked Questions</h2>
-                <div class="mt-10 space-y-4">
-                    @foreach ([['What is DocuTrust?','DocuTrust is a secure digital signing platform that helps teams sign, verify, and manage documents online.'],['Is DocuTrust legally binding?','Yes. DocuTrust supports legally recognized digital signing flows designed for business and institutional compliance.'],['How secure is DocuTrust?','DocuTrust applies strong encryption, access controls, and tamper-evident verification for every signed document.'],['Can I use it for my organization?','Yes. Teams of any size can deploy DocuTrust for approvals, contracts, onboarding, and internal workflows.']] as $faq)
-                        <details class="reveal rounded-xl border border-slate-200 bg-white p-5 group dark:border-slate-800 dark:bg-slate-900">
-                            <summary class="cursor-pointer list-none font-semibold">{{ $faq[0] }}</summary>
-                            <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ $faq[1] }}</p>
-                        </details>
-                    @endforeach
-                </div>
-            </div>
-        </section>
-
-        <section class="py-20">
-            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div class="reveal rounded-3xl bg-gradient-to-r from-[#2EC4B6] to-[#1B5E20] p-12 text-center text-white shadow-2xl">
-                    <h2 class="text-4xl font-bold">Start Signing Smarter Today</h2>
-                    <p class="mx-auto mt-4 max-w-2xl text-white/85">Move from manual paperwork to secure, trusted, and modern digital workflows.</p>
-                    <div class="mt-8">
-                        @auth
-                            <a href="{{ $dashboardUrl }}" class="inline-flex rounded-xl bg-white px-8 py-3.5 font-semibold text-[#1B5E20] transition hover:bg-[#FFD166]">Go to Dashboard</a>
-                        @else
-                            <a href="{{ $registerUrl }}" class="inline-flex rounded-xl bg-white px-8 py-3.5 font-semibold text-[#1B5E20] transition hover:bg-[#FFD166]">Create Free Account</a>
-                        @endauth
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <footer class="border-t border-slate-200 bg-white py-12 dark:border-slate-800 dark:bg-slate-950">
-        <div class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 md:grid-cols-4 lg:px-8">
-            <div>
-                <a href="{{ url('/') }}" class="inline-flex max-w-full items-center gap-2.5 sm:gap-3">
-                    <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200 dark:bg-transparent dark:shadow-none dark:ring-slate-600/40 sm:h-10 sm:w-10">
-                        <img src="{{ asset('images/docutrust-logo.png') }}" alt="DocuTrust logo" class="h-full w-full object-contain" width="40" height="40" loading="lazy" />
-                    </span>
-                    <span class="min-w-0 text-lg font-bold text-slate-900 dark:text-white">DocuTrust</span>
-                </a>
-                <p class="mt-2 max-w-xs text-sm text-slate-500 dark:text-slate-400">Secure digital signing for modern teams.</p>
-            </div>
-            <div>
-                <h3 class="font-semibold">Product</h3>
-                <ul class="mt-3 space-y-2 text-sm text-slate-500 dark:text-slate-400">
-                    <li><a href="#" class="hover:text-[#2EC4B6]">Features</a></li>
-                    <li><a href="#" class="hover:text-[#2EC4B6]">Security</a></li>
-                    <li><a href="#" class="hover:text-[#2EC4B6]">Integrations</a></li>
-                </ul>
-            </div>
-            <div>
-                <h3 class="font-semibold">Company</h3>
-                <ul class="mt-3 space-y-2 text-sm text-slate-500 dark:text-slate-400">
-                    <li><a href="#about" class="hover:text-[#2EC4B6]">About</a></li>
-                    <li><a href="#" class="hover:text-[#2EC4B6]">Blog</a></li>
-                    <li><a href="#" class="hover:text-[#2EC4B6]">Contact</a></li>
-                </ul>
-            </div>
-            <div>
-                <h3 class="font-semibold">Support</h3>
-                <ul class="mt-3 space-y-2 text-sm text-slate-500 dark:text-slate-400">
-                    <li><a href="#" class="hover:text-[#2EC4B6]">Help Center</a></li>
-                    <li><a href="#" class="hover:text-[#2EC4B6]">Privacy Policy</a></li>
-                    <li><a href="#" class="hover:text-[#2EC4B6]">Terms</a></li>
-                </ul>
-            </div>
+        <h1 class="reveal">
+          Secure &amp; Tamper-Proof <span class="accent">Digital Signatures.</span>
+          Smarter Documents, Powered by <span class="accent2">Agentic AI.</span>
+        </h1>
+        <p class="hero-sub reveal">
+          Ditch paper contracts and give your customers a seamless eSigning experience — with full document automation, AI-powered processing, and blockchain-verified trust.
+        </p>
+        <div class="hero-actions reveal">
+          <a href="#" class="btn-cta">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+            Start Free Trial
+          </a>
+          <a href="#features" class="btn-secondary">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
+            See Product Tour
+          </a>
         </div>
-        <div class="mt-10 text-center text-sm text-slate-500 dark:text-slate-400">
-            DocuTrust is powered by
-            <span class="font-semibold text-[#1B5E20] dark:text-[#2EC4B6]">
-                Surepay Technologies Inc.
-            </span>
+        <div class="hero-trust reveal">
+          <span class="trust-item">
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            No credit card needed
+          </span>
+          <span class="trust-item">
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            14-day free trial
+          </span>
+          <span class="trust-item">
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            24/7 live support
+          </span>
+          <span class="trust-item">
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            ISO 9001:2015 Certified
+          </span>
         </div>
-    </footer>
+      </div>
 
-    <script>
-        const themeToggleButton = document.getElementById("theme-toggle");
-        const rootElement = document.documentElement;
-        const setThemeState = (isDarkMode) => {
-            themeToggleButton?.setAttribute("aria-pressed", isDarkMode ? "true" : "false");
-            themeToggleButton?.setAttribute("title", isDarkMode ? "Switch to light mode" : "Switch to dark mode");
-        };
-        setThemeState(rootElement.classList.contains("dark"));
-        themeToggleButton?.addEventListener("click", function () {
-            const isDark = rootElement.classList.toggle("dark");
-            localStorage.setItem("theme", isDark ? "dark" : "light");
-            setThemeState(isDark);
-        });
+      <div class="hero-visual reveal">
+        <div class="badge-float">
+          <div class="badge-float-icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.1-1.1"/><path stroke-linecap="round" stroke-linejoin="round" d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+          </div>
+          <span class="badge-float-text">Blockchain Verified ✓</span>
+        </div>
+        <div class="badge-float2">
+          <div class="badge-float2-label">Docs Signed Today</div>
+          <div class="badge-float2-val">4,291</div>
+        </div>
+        <div class="doc-card">
+          <div class="doc-header">
+            <div>
+              <div style="font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">New Request</div>
+              <div class="doc-title">Vendor Agreement.pdf</div>
+            </div>
+            <span class="doc-status">Ready to Sign</span>
+          </div>
+          <div class="chain-vis">
+            <div class="chain-label">Blockchain Hash · Block #847,291</div>
+            <div class="chain-hash">0x4f8a2b1c9d3e7f6a2b8c4d1e9f3a7b2c<br>5d8e4f1a6b3c9d2e7f4a1b8c5d3e9f2a</div>
+            <div class="chain-blocks">
+              <div class="chain-block"></div>
+              <div class="chain-block"></div>
+              <div class="chain-block"></div>
+              <div class="chain-block"></div>
+            </div>
+          </div>
+          <div class="signers-list">
+            <div class="signer">
+              <span class="signer-name">Maya Turner</span>
+              <span class="signer-status status-signed">✓ Signed</span>
+            </div>
+            <div class="signer">
+              <span class="signer-name">Aron Diaz</span>
+              <span class="signer-status status-pending">⟳ Pending</span>
+            </div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill"></div></div>
+          <div class="doc-meta">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            67% complete · Live reminders sent automatically
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
-        const revealItems = document.querySelectorAll(".reveal");
-        const revealObserver = new IntersectionObserver((entries, observer) => {
-            entries.forEach((entry) => {
-                if (entry.isIntersecting) {
-                    const delay = entry.target.getAttribute("data-delay");
-                    if (delay) {
-                        entry.target.style.transitionDelay = `${delay}ms`;
-                    }
-                    entry.target.classList.add("visible");
-                    observer.unobserve(entry.target);
-                }
-            });
-        }, { threshold: 0.15 });
-        revealItems.forEach((item) => revealObserver.observe(item));
-    </script>
+<!-- TRUST BAR -->
+<div class="trust-bar">
+  <div class="container">
+    <div class="trust-bar-inner">
+      <span class="trust-bar-label">Trusted by</span>
+      <span class="trust-chip">CivicCore</span>
+      <span class="trust-chip">UniTrust</span>
+      <span class="trust-chip">LegalGrid</span>
+      <span class="trust-chip">HomeAxis</span>
+      <span class="trust-chip">FinPulse</span>
+      <span class="trust-chip csc-chip">☁ Cloud Signature Consortium Member</span>
+      <span class="trust-chip csc-chip">🔒 BSP-Licensed</span>
+    </div>
+  </div>
+</div>
+
+<!-- CSC MEMBERSHIP -->
+<section class="csc-section">
+  <div class="container">
+    <div class="csc-card reveal">
+      <div>
+        <div class="csc-badge">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+          Official Member
+        </div>
+        <h2>Cloud Signature Consortium Member</h2>
+        <p>DocuTrust is a proud member of the <strong style="color:var(--teal-light)">Cloud Signature Consortium (CSC)</strong> — the global standards body for cloud-based digital signatures trusted by enterprises, governments, and regulators worldwide.</p>
+        <p style="margin-top:12px;color:var(--text-muted);font-size:.875rem;line-height:1.7">CSC membership means our digital signature infrastructure is built on internationally recognized open standards — including the CSC API, PAdES, and XAdES — ensuring interoperability, legal compliance, and verifiable trust across borders.</p>
+        <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener" class="csc-link" style="margin-top:20px;display:inline-flex">
+          Visit cloudsignatureconsortium.org
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+        </a>
+      </div>
+      <div class="csc-stats">
+        <div class="csc-stat">
+          <span class="csc-stat-num">ISO</span>
+          <div class="csc-stat-label">9001:2015<br>Certified Operations</div>
+        </div>
+        <div class="csc-stat">
+          <span class="csc-stat-num">BSP</span>
+          <div class="csc-stat-label">Licensed Payment<br>Service Operator</div>
+        </div>
+        <div class="csc-stat">
+          <span class="csc-stat-num">CSC</span>
+          <div class="csc-stat-label">Cloud Signature<br>Consortium Member</div>
+        </div>
+        <div class="csc-stat">
+          <span class="csc-stat-num">AES</span>
+          <div class="csc-stat-label">Advanced Electronic<br>Signatures Compliant</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features-section" id="features">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-label reveal">Features</div>
+      <h2 class="section-title reveal">Everything You Need to Manage<br>Documents with Confidence</h2>
+      <p class="section-sub reveal">From legally binding signatures to audit-ready trails — one platform built for teams that cannot afford gaps in security or speed.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card featured reveal">
+        <div class="feature-badge">Most Used</div>
+        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg></div>
+        <h3>Secure Digital Signing</h3>
+        <p>Legally binding digital signatures with AES-256 encryption, PKI certificates, and blockchain-anchored tamper-proof verification.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.1-1.1m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg></div>
+        <h3>Blockchain Verification</h3>
+        <p>Every document is cryptographically anchored to the blockchain — immutable, verifiable, and impossible to alter post-signing.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+        <h3>Multi-Signer Workflow</h3>
+        <p>Define signing order, approval chains, and roles with ease. Support for sequential and parallel signing with automated reminders.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+        <h3>Real-Time Tracking</h3>
+        <p>Monitor document status from sent to signed in real time. Live dashboards, push notifications, and automated follow-ups.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg></div>
+        <h3>Audit Trail Logs</h3>
+        <p>Complete, court-admissible history of every action — who signed, when, from what IP — for full transparency and compliance.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg></div>
+        <h3>Smart Document Management</h3>
+        <p>Organize, search, and retrieve files instantly with AI-powered intelligent tagging, version control, and smart folders.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BLOCKCHAIN KPI -->
+<section class="blockchain-section" id="blockchain">
+  <div class="container">
+    <div class="blockchain-inner">
+      <div class="blockchain-grid">
+        <div>
+          <div class="section-label reveal">Security & Performance</div>
+          <h2 class="section-title reveal">Bank-Grade Security,<br>Blockchain-Certified Trust</h2>
+          <p class="section-sub reveal" style="margin-bottom:28px">DocuTrust applies the highest standards in digital security — backed by Surepay Technologies Inc., a BSP-licensed fintech with proven expertise in secure digital ecosystems.</p>
+          <div class="blockchain-certs reveal">
+            <div class="cert-item">
+              <div class="cert-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
+              <span class="cert-text">ISO 9001:2015 Certified Quality Management</span>
+            </div>
+            <div class="cert-item">
+              <div class="cert-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg></div>
+              <span class="cert-text">AES-256 Military-Grade Encryption at Rest & Transit</span>
+            </div>
+            <div class="cert-item">
+              <div class="cert-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.1-1.1m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg></div>
+              <span class="cert-text">CSC-Standard Cloud Signature API (Open Standard)</span>
+            </div>
+            <div class="cert-item">
+              <div class="cert-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"/></svg></div>
+              <span class="cert-text">BSP-Licensed Payment Service Operator (Surepay)</span>
+            </div>
+          </div>
+        </div>
+        <div class="kpi-grid reveal">
+          <div class="kpi-card">
+            <span class="kpi-num">256-bit</span>
+            <div class="kpi-label">AES Encryption<br>Standard</div>
+          </div>
+          <div class="kpi-card highlight">
+            <span class="kpi-num">100%</span>
+            <div class="kpi-label">Tamper-Proof<br>Blockchain Records</div>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-num">80%</span>
+            <div class="kpi-label">Faster Document<br>Processing</div>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-num">60%</span>
+            <div class="kpi-label">Reduction in<br>Paper Usage</div>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-num">40%</span>
+            <div class="kpi-label">Cost Reduction<br>per Transaction</div>
+          </div>
+          <div class="kpi-card highlight">
+            <span class="kpi-num">10K+</span>
+            <div class="kpi-label">Teams Worldwide<br>Trust DocuTrust</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AI SECTION -->
+<section class="ai-section" id="ai">
+  <div class="container">
+    <div class="ai-inner">
+      <div>
+        <div class="section-label reveal">Agentic AI Engine</div>
+        <h2 class="section-title reveal">Full Document Automation<br>Powered by AI</h2>
+        <p class="section-sub reveal">DocuTrust's Agentic AI goes beyond simple signing — it understands, extracts, validates, and routes documents intelligently, reducing manual work to near-zero.</p>
+        <div class="ai-feature-list reveal">
+          <div class="ai-feature">
+            <div class="ai-feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
+            <div>
+              <div class="ai-feature-title">AI Document Extraction</div>
+              <div class="ai-feature-desc">Automatically identifies key fields, clauses, dates, and signatories from any document format.</div>
+            </div>
+          </div>
+          <div class="ai-feature">
+            <div class="ai-feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+            <div>
+              <div class="ai-feature-title">Smart Workflow Routing</div>
+              <div class="ai-feature-desc">AI decides who signs next, triggers reminders, and escalates overdue documents automatically.</div>
+            </div>
+          </div>
+          <div class="ai-feature">
+            <div class="ai-feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+            <div>
+              <div class="ai-feature-title">Contract Intelligence</div>
+              <div class="ai-feature-desc">Detect risk clauses, missing fields, and compliance gaps before sending for signature.</div>
+            </div>
+          </div>
+          <div class="ai-feature">
+            <div class="ai-feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg></div>
+            <div>
+              <div class="ai-feature-title">Conversational Document Assistant</div>
+              <div class="ai-feature-desc">Ask questions about your documents in plain language — the AI answers instantly from the content.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal">
+        <div class="ai-visual">
+          <div style="font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:16px;display:flex;align-items:center;gap:6px">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite"></span>
+            DocuTrust AI Assistant — Live
+          </div>
+          <div class="ai-chat">
+            <div class="ai-msg user">
+              <div class="ai-msg-avatar" style="background:rgba(255,255,255,0.1);font-size:.65rem">You</div>
+              <div class="ai-msg-bubble">What's the contract expiry date in NDA_2025.pdf?</div>
+            </div>
+            <div class="ai-msg">
+              <div class="ai-msg-avatar">AI</div>
+              <div class="ai-msg-bubble">The NDA expires on <strong>December 31, 2025</strong>. There's also an auto-renewal clause on Page 4, Section 3.2 — would you like me to flag it for review?</div>
+            </div>
+            <div class="ai-msg user">
+              <div class="ai-msg-avatar" style="background:rgba(255,255,255,0.1);font-size:.65rem">You</div>
+              <div class="ai-msg-bubble">Yes, and send a reminder to all signers 30 days before.</div>
+            </div>
+            <div class="ai-msg">
+              <div class="ai-msg-avatar">AI</div>
+              <div class="ai-msg-bubble"><strong>Done.</strong> Reminder scheduled for Dec 1, 2025. I've also detected 2 unsigned fields — routing now to pending signers automatically.</div>
+            </div>
+            <div class="ai-msg">
+              <div class="ai-msg-avatar">AI</div>
+              <div class="ai-msg-bubble" style="display:flex;align-items:center;gap:8px;padding:10px 14px">
+                <div class="ai-typing">
+                  <div class="ai-dot"></div>
+                  <div class="ai-dot"></div>
+                  <div class="ai-dot"></div>
+                </div>
+                <span style="font-size:.75rem">Processing blockchain record...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INDUSTRIES -->
+<section class="industries-section" id="industries">
+  <div class="container">
+    <div class="section-label reveal" style="text-align:center">Industries</div>
+    <h2 class="section-title reveal" style="text-align:center">Built for Every Industry</h2>
+    <p class="section-sub reveal" style="text-align:center;margin:0 auto">DocuTrust adapts to the unique compliance and workflow requirements of every sector.</p>
+    <div class="industries-grid">
+      <div class="industry-card reveal">
+        <div class="industry-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg></div>
+        <div>
+          <div class="industry-name">Government & LGU</div>
+          <div class="industry-desc">Compliant digital signing for public sector agreements and LIFT-integrated workflows.</div>
+        </div>
+      </div>
+      <div class="industry-card reveal">
+        <div class="industry-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/></svg></div>
+        <div>
+          <div class="industry-name">Education</div>
+          <div class="industry-desc">Enrollment agreements, faculty contracts, and accreditation documents — all digital.</div>
+        </div>
+      </div>
+      <div class="industry-card reveal">
+        <div class="industry-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0"/></svg></div>
+        <div>
+          <div class="industry-name">Legal</div>
+          <div class="industry-desc">Court-admissible audit trails, attorney collaboration, and matter-specific signing workflows.</div>
+        </div>
+      </div>
+      <div class="industry-card reveal">
+        <div class="industry-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg></div>
+        <div>
+          <div class="industry-name">Real Estate</div>
+          <div class="industry-desc">Deed of sale, lease agreements, and title transfers — signed securely in minutes.</div>
+        </div>
+      </div>
+      <div class="industry-card reveal">
+        <div class="industry-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+        <div>
+          <div class="industry-name">HR & Recruitment</div>
+          <div class="industry-desc">Offer letters, NDAs, employment contracts — onboard faster with zero paper.</div>
+        </div>
+      </div>
+      <div class="industry-card reveal">
+        <div class="industry-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+        <div>
+          <div class="industry-name">Finance & Fintech</div>
+          <div class="industry-desc">Loan agreements, KYC documents, and financial instruments with full regulatory compliance.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section class="about-section" id="about">
+  <div class="container">
+    <div class="about-grid">
+      <div>
+        <div class="section-label reveal">About DocuTrust</div>
+        <h2 class="section-title reveal">Powering Trust Through Innovation</h2>
+        <div class="about-desc reveal">
+          DocuTrust is a next-generation digital signing platform built to transform how organizations manage agreements, approvals, and document workflows. Designed for speed, security, and scalability, it empowers teams to move faster while maintaining complete trust in every transaction.
+        </div>
+        <div class="about-desc reveal">
+          Backed by <strong style="color:#fff">Surepay Technologies Inc.</strong>, a <strong style="color:var(--teal-light)">BSP-licensed</strong> payment service operator and trusted Philippine fintech, DocuTrust is built on a foundation of bank-grade security and continuous innovation.
+        </div>
+        <div style="margin-top:24px" class="reveal">
+          <div class="about-highlight">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            <span class="about-highlight-text">Leading <strong>LIFT</strong> (LGU Integrated Financial Tools) system — nationwide digital transformation</span>
+          </div>
+          <div class="about-highlight">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            <span class="about-highlight-text"><strong>ISO 9001:2015</strong> certified operations — quality management at every layer</span>
+          </div>
+          <div class="about-highlight">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            <span class="about-highlight-text">Official <strong>Cloud Signature Consortium</strong> member — globally recognized signing standards</span>
+          </div>
+        </div>
+      </div>
+      <div class="reveal">
+        <div class="about-stats">
+          <div class="about-stat">
+            <span class="about-stat-num">10K+</span>
+            <div class="about-stat-label">Teams Worldwide</div>
+          </div>
+          <div class="about-stat">
+            <span class="about-stat-num">5M+</span>
+            <div class="about-stat-label">Documents Signed</div>
+          </div>
+          <div class="about-stat">
+            <span class="about-stat-num">99.9%</span>
+            <div class="about-stat-label">Platform Uptime</div>
+          </div>
+          <div class="about-stat">
+            <span class="about-stat-num">0</span>
+            <div class="about-stat-label">Security Breaches</div>
+          </div>
+        </div>
+        <div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px">
+          <div style="font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px">Compliance & Certifications</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <span style="background:rgba(46,196,182,0.08);border:1px solid rgba(46,196,182,0.2);padding:5px 12px;border-radius:8px;font-size:.75rem;color:var(--teal-light);font-weight:600">BSP Licensed</span>
+            <span style="background:rgba(46,196,182,0.08);border:1px solid rgba(46,196,182,0.2);padding:5px 12px;border-radius:8px;font-size:.75rem;color:var(--teal-light);font-weight:600">ISO 9001:2015</span>
+            <span style="background:rgba(46,196,182,0.08);border:1px solid rgba(46,196,182,0.2);padding:5px 12px;border-radius:8px;font-size:.75rem;color:var(--teal-light);font-weight:600">CSC Member</span>
+            <span style="background:rgba(46,196,182,0.08);border:1px solid rgba(46,196,182,0.2);padding:5px 12px;border-radius:8px;font-size:.75rem;color:var(--teal-light);font-weight:600">PAdES Compliant</span>
+            <span style="background:rgba(46,196,182,0.08);border:1px solid rgba(46,196,182,0.2);padding:5px 12px;border-radius:8px;font-size:.75rem;color:var(--teal-light);font-weight:600">XAdES Compliant</span>
+            <span style="background:rgba(46,196,182,0.08);border:1px solid rgba(46,196,182,0.2);padding:5px 12px;border-radius:8px;font-size:.75rem;color:var(--teal-light);font-weight:600">AES-256 Encrypted</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonials-section">
+  <div class="container">
+    <div class="section-label reveal" style="text-align:center">Testimonials</div>
+    <h2 class="section-title reveal" style="text-align:center">What Our Users Say</h2>
+    <div class="testimonials-grid">
+      <div class="testimonial reveal">
+        <div class="stars">
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+        </div>
+        <p class="testimonial-text">DocuTrust reduced our contract turnaround time dramatically. The blockchain verification gives our legal team the confidence they need — every signature is irrefutable.</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">OL</div>
+          <div>
+            <div class="testimonial-name">Operations Lead</div>
+            <div class="testimonial-role">Civic Agency</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial reveal">
+        <div class="stars">
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+        </div>
+        <p class="testimonial-text">The audit trail and verification workflow are exactly what our legal team needed. The CSC compliance and blockchain anchoring mean we can stand behind every signed document in court.</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">PA</div>
+          <div>
+            <div class="testimonial-name">Partner</div>
+            <div class="testimonial-role">Legal Advisory Group</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial reveal">
+        <div class="stars">
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+        </div>
+        <p class="testimonial-text">Secure, intuitive, and lightning-fast onboarding for every signer. The AI assistant saves our HR team hours every week — it handles reminders, routing, and extraction automatically.</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">HD</div>
+          <div>
+            <div class="testimonial-name">HR Director</div>
+            <div class="testimonial-role">Enterprise Group</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq-section" id="faq">
+  <div class="container">
+    <div class="section-label reveal" style="text-align:center">FAQ</div>
+    <h2 class="section-title reveal" style="text-align:center">Frequently Asked Questions</h2>
+    <div class="faq-list">
+      <details class="faq-item reveal">
+        <summary>What is DocuTrust?</summary>
+        <div class="faq-body">DocuTrust is a secure, blockchain-powered digital signing platform that helps organizations send, sign, and manage documents online — with full document automation, AI-powered processing, and CSC-compliant cloud signatures.</div>
+      </details>
+      <details class="faq-item reveal">
+        <summary>Are DocuTrust signatures legally binding?</summary>
+        <div class="faq-body">Yes. DocuTrust supports legally recognized electronic signatures aligned with international e-signature laws. Every signed document is blockchain-anchored, timestamped, and audit-logged — making it court-admissible and tamper-evident.</div>
+      </details>
+      <details class="faq-item reveal">
+        <summary>What is the Cloud Signature Consortium (CSC)?</summary>
+        <div class="faq-body">The Cloud Signature Consortium (CSC) is the global standards body for cloud-based digital signatures, trusted by enterprises, governments, and regulators worldwide. As a CSC member, DocuTrust implements open CSC API standards ensuring legal validity, interoperability, and cross-border compliance. Visit <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener" style="color:var(--teal)">cloudsignatureconsortium.org</a> to learn more.</div>
+      </details>
+      <details class="faq-item reveal">
+        <summary>How is DocuTrust secured with blockchain?</summary>
+        <div class="faq-body">Every document signed through DocuTrust receives a unique cryptographic hash that is anchored on the blockchain. This makes it mathematically impossible to alter the document post-signing — any tampering instantly invalidates the record, providing irrefutable proof of integrity.</div>
+      </details>
+      <details class="faq-item reveal">
+        <summary>What certifications does DocuTrust hold?</summary>
+        <div class="faq-body">DocuTrust is backed by Surepay Technologies Inc., which holds ISO 9001:2015 certification for quality management and operates as a BSP-licensed payment service operator in the Philippines. DocuTrust is also a member of the Cloud Signature Consortium and implements PAdES and XAdES compliant signature standards.</div>
+      </details>
+      <details class="faq-item reveal">
+        <summary>Can I use DocuTrust for my organization?</summary>
+        <div class="faq-body">Yes. Teams of any size across government, legal, education, finance, real estate, and HR can deploy DocuTrust for approvals, contracts, onboarding, and internal workflows — all with enterprise-grade security and full audit trails.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="container">
+    <div class="cta-inner reveal">
+      <h2>Start Signing Smarter Today</h2>
+      <p>Move from manual paperwork to secure, blockchain-verified, AI-powered digital workflows — trusted by 10,000+ teams worldwide.</p>
+      <div class="cta-actions">
+        <a href="#" class="btn-cta">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+          Create Free Account
+        </a>
+        <a href="#" class="btn-secondary" style="border-color:rgba(255,255,255,0.2);color:rgba(255,255,255,0.8)">
+          Talk to Sales
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <a href="#" class="footer-logo">
+          <div class="logo-icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          </div>
+          <span>DocuTrust</span>
+        </a>
+        <p class="footer-desc">Secure, tamper-proof digital signatures powered by Agentic AI and blockchain-certified trust.</p>
+        <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener" class="footer-csc">
+          <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          CSC Member
+        </a>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <div class="footer-links">
+          <a href="#features">Features</a>
+          <a href="#blockchain">Security</a>
+          <a href="#ai">AI Engine</a>
+          <a href="#">Integrations</a>
+          <a href="#">API Docs</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <div class="footer-links">
+          <a href="#about">About Us</a>
+          <a href="#">Blog</a>
+          <a href="#">Careers</a>
+          <a href="#">Contact</a>
+          <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener">CSC Membership</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <div class="footer-links">
+          <a href="#">Help Center</a>
+          <a href="#">Privacy Policy</a>
+          <a href="#">Terms of Service</a>
+          <a href="#">Trust & Compliance</a>
+          <a href="#">Status</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">© 2025 DocuTrust. All rights reserved.</div>
+      <div class="footer-powered">Powered by <a href="#">Surepay Technologies Inc.</a> · BSP-Licensed · ISO 9001:2015</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Mobile nav
+const mobileNavToggle = document.getElementById('mobileNavToggle');
+const mobileNavClose = document.getElementById('mobileNavClose');
+const mobileNav = document.getElementById('mobileNav');
+mobileNavToggle?.addEventListener('click', () => mobileNav.classList.add('open'));
+mobileNavClose?.addEventListener('click', () => mobileNav.classList.remove('open'));
+function closeMobileNav() { mobileNav.classList.remove('open'); }
+
+// Scroll reveal
+const revealEls = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry, i) => {
+    if (entry.isIntersecting) {
+      entry.target.style.transitionDelay = (i * 40) + 'ms';
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+revealEls.forEach(el => observer.observe(el));
+</script>
 </body>
 </html>

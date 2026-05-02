@@ -2,17 +2,18 @@
 
 namespace Database\Factories;
 
-use App\Enums\OrganizationRole;
 use App\Enums\EkycStatus;
 use App\Enums\OnboardingStep;
+use App\Enums\OrganizationRole;
 use App\Enums\UserRole;
 use App\Models\Organization;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
+ * @extends Factory<User>
  */
 class UserFactory extends Factory
 {
@@ -39,6 +40,7 @@ class UserFactory extends Factory
             'remember_token' => Str::random(10),
             'role' => UserRole::Admin,
             'organization_role' => OrganizationRole::Admin,
+            'mfa_enabled' => true,
             'two_factor_secret' => null,
             'two_factor_enabled' => false,
             'two_factor_onboarding_completed_at' => now(),
