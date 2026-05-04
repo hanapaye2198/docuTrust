@@ -64,18 +64,19 @@ jobs:
 
       - name: Package Release
         run: |
-          mkdir -p /tmp/docutrust-release
-          tar \
+          rm -rf /tmp/docutrust-release
+          mkdir -p /tmp/docutrust-release/stage
+          rsync -a ./ /tmp/docutrust-release/stage/ \
             --exclude=.git \
             --exclude=.github \
             --exclude=.cursor \
             --exclude=.env \
             --exclude=.phpunit.result.cache \
             --exclude=tests \
-            --exclude=storage/framework/cache/data/* \
-            --exclude=storage/framework/sessions/* \
-            --exclude=storage/framework/views/* \
-            -czf "/tmp/docutrust-release/${{ steps.release-meta.outputs.artifact_name }}.tar.gz" .
+            --exclude=storage/framework/cache/data \
+            --exclude=storage/framework/sessions \
+            --exclude=storage/framework/views
+          tar -czf "/tmp/docutrust-release/${{ steps.release-meta.outputs.artifact_name }}.tar.gz" -C /tmp/docutrust-release/stage .
 
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
