@@ -260,7 +260,7 @@ return [
     |
     */
 
-    'csp_safe' => env('LIVEWIRE_CSP_SAFE', ! app()->environment('local')),
+    'csp_safe' => filter_var(env('LIVEWIRE_CSP_SAFE', env('APP_ENV') !== 'local'), FILTER_VALIDATE_BOOL),
 
     /*
     |---------------------------------------------------------------------------
