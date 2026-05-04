@@ -106,7 +106,9 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
                 <div>
                     <div class="flex items-center gap-3">
-                        <div class="rounded-xl border border-white/20 bg-white/10 p-2.5 backdrop-blur-md">
+                        <div
+                            class="rounded-xl border border-white/20 bg-white/10 p-2.5 backdrop-blur-md [&_.docutrust-logo-tile]:bg-transparent [&_.docutrust-logo-tile]:shadow-none [&_.docutrust-logo-tile]:ring-0 [&_.docutrust-logo-tile]:p-0 [&_.docutrust-logo-tile_img]:!filter-none"
+                        >
                             <x-app-logo-icon class="size-8 fill-current text-white" />
                         </div>
                         <div>
@@ -253,7 +255,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                             </p>
                         </div>
 
-                        <flux:button type="submit" variant="primary" class="w-full bg-[#2EC4B6] text-black transition hover:bg-[#1B5E20]">
+                        <flux:button type="submit" variant="primary" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white dark:text-black dark:hover:text-black">
                             {{ __('Create account') }}
                         </flux:button>
                     </form>

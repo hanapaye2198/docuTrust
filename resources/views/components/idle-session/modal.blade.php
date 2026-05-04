@@ -29,7 +29,7 @@
                 <button
                     id="idle-timeout-stay"
                     type="button"
-                    class="inline-flex w-full items-center justify-center rounded-xl bg-[#2EC4B6] px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-[#1B5E20] hover:text-white sm:w-auto"
+                    class="inline-flex w-full items-center justify-center rounded-xl bg-[#2EC4B6] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1B5E20] hover:text-white sm:w-auto"
                 >
                     {{ __('Stay logged in') }}
                 </button>

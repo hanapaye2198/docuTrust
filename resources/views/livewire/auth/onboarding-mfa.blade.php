@@ -123,7 +123,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             </div>
         </div>
 
-        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="verify" class="w-full bg-[#2EC4B6] text-black transition hover:bg-[#1B5E20]">
+        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="verify" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white">
             <span wire:loading.remove wire:target="verify">{{ __('Verify and continue') }}</span>
             <span wire:loading wire:target="verify">{{ __('Verifying…') }}</span>
         </flux:button>

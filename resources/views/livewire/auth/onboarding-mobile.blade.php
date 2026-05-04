@@ -67,7 +67,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition dark:border-zinc-600"
         />
 
-        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="verifyMobile" class="w-full bg-[#2EC4B6] text-black transition hover:bg-[#1B5E20]">
+        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="verifyMobile" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white">
             <span wire:loading.remove wire:target="verifyMobile">{{ __('Verify Mobile Number') }}</span>
             <span wire:loading wire:target="verifyMobile">{{ __('Saving…') }}</span>
         </flux:button>

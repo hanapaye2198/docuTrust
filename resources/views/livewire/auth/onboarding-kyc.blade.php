@@ -94,7 +94,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             <flux:error name="id_document" />
         </div>
 
-        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="continue" class="w-full bg-[#2EC4B6] text-black transition hover:bg-[#1B5E20]">
+        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="continue" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white">
             <span wire:loading.remove wire:target="continue">{{ __('Continue') }}</span>
             <span wire:loading wire:target="continue">{{ __('Uploading…') }}</span>
         </flux:button>
