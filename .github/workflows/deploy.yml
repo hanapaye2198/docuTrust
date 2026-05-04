@@ -64,6 +64,7 @@ jobs:
 
       - name: Package Release
         run: |
+          mkdir -p /tmp/docutrust-release
           tar \
             --exclude=.git \
             --exclude=.github \
@@ -74,13 +75,13 @@ jobs:
             --exclude=storage/framework/cache/data/* \
             --exclude=storage/framework/sessions/* \
             --exclude=storage/framework/views/* \
-            -czf "${{ steps.release-meta.outputs.artifact_name }}.tar.gz" .
+            -czf "/tmp/docutrust-release/${{ steps.release-meta.outputs.artifact_name }}.tar.gz" .
 
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.release-meta.outputs.artifact_name }}
-          path: ${{ steps.release-meta.outputs.artifact_name }}.tar.gz
+          path: /tmp/docutrust-release/${{ steps.release-meta.outputs.artifact_name }}.tar.gz
           if-no-files-found: error
 
   deploy-production:
@@ -127,4 +128,3 @@ jobs:
           ssh "$DEPLOY_USER@$DEPLOY_HOST" \
             "export APP_BASE_PATH='${APP_BASE_PATH:-/var/www/docutrust}' RELEASE_SHA='$RELEASE_SHA' PHP_BIN='${PHP_BIN:-/usr/bin/php}' ARTIFACT_PATH='/tmp/docutrust-$RELEASE_SHA.tar.gz'; bash -s" \
             < scripts/deploy.sh
-
