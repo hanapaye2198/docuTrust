@@ -1,0 +1,130 @@
+name: deploy-production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    environment: Production
+
+    outputs:
+      artifact_name: ${{ steps.release-meta.outputs.artifact_name }}
+      release_sha: ${{ steps.release-meta.outputs.release_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          tools: composer:v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Configure Composer Credentials
+        run: composer config http-basic.composer.fluxui.dev "${{ secrets.FLUX_USERNAME }}" "${{ secrets.FLUX_LICENSE_KEY }}"
+
+      - name: Prepare Build Environment
+        run: cp .env.example .env
+
+      - name: Install Production PHP Dependencies
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Build Frontend Assets
+        run: npm run build
+
+      - name: Install Blockchain Service Dependencies
+        run: npm ci --prefix blockchain-service
+
+      - name: Remove Build-Only Dependencies
+        run: rm -rf node_modules
+
+      - name: Prepare Release Metadata
+        id: release-meta
+        run: |
+          echo "artifact_name=docutrust-release-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "release_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Package Release
+        run: |
+          tar \
+            --exclude=.git \
+            --exclude=.github \
+            --exclude=.cursor \
+            --exclude=.env \
+            --exclude=.phpunit.result.cache \
+            --exclude=tests \
+            --exclude=storage/framework/cache/data/* \
+            --exclude=storage/framework/sessions/* \
+            --exclude=storage/framework/views/* \
+            -czf "${{ steps.release-meta.outputs.artifact_name }}.tar.gz" .
+
+      - name: Upload Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.release-meta.outputs.artifact_name }}
+          path: ${{ steps.release-meta.outputs.artifact_name }}.tar.gz
+          if-no-files-found: error
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    environment: Production
+    needs: build-release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Release Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-release.outputs.artifact_name }}
+
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload Release Archive
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          ARTIFACT_FILE: ${{ needs.build-release.outputs.artifact_name }}.tar.gz
+          RELEASE_SHA: ${{ needs.build-release.outputs.release_sha }}
+        run: |
+          scp "$ARTIFACT_FILE" "$DEPLOY_USER@$DEPLOY_HOST:/tmp/docutrust-$RELEASE_SHA.tar.gz"
+
+      - name: Run Remote Deployment
+        env:
+          APP_BASE_PATH: ${{ secrets.APP_BASE_PATH }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          PHP_BIN: ${{ secrets.PHP_BIN }}
+          RELEASE_SHA: ${{ needs.build-release.outputs.release_sha }}
+        run: |
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+            "export APP_BASE_PATH='${APP_BASE_PATH:-/var/www/docutrust}' RELEASE_SHA='$RELEASE_SHA' PHP_BIN='${PHP_BIN:-/usr/bin/php}' ARTIFACT_PATH='/tmp/docutrust-$RELEASE_SHA.tar.gz'; bash -s" \
+            < scripts/deploy.sh
+

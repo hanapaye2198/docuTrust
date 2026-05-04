@@ -1,0 +1,17 @@
+[Unit]
+Description=DocuTrust Laravel Queue Worker
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/docutrust/current
+ExecStart=/usr/bin/php artisan queue:work --sleep=3 --tries=3 --timeout=90
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
+
