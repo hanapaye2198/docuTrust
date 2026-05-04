@@ -6,10 +6,12 @@ use App\Enums\DocumentStatus;
 use App\Http\Requests\StoreSignatureFieldsRequest;
 use App\Models\Document;
 use App\Models\SignatureField;
+use App\Services\SendDocumentForSignatureService;
 use App\Services\SignatureAuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use RuntimeException;
 
 class DocumentPrepareController extends Controller
 {
@@ -43,9 +45,10 @@ class DocumentPrepareController extends Controller
 
         return view('documents.prepare', [
             'document' => $document,
-            'pdfUrl' => route('documents.stream', $document, false),
+            'pdfUrl' => route('documents.stream', ['document' => $document, 'source' => 1], false),
             'firstSignerId' => $firstSignerId,
             'signers' => $signers,
+            'canSend' => $document->canSendForSigning(),
             'initialFields' => $document->signatureFields()
                 ->orderBy('id')
                 ->get()
@@ -96,5 +99,22 @@ class DocumentPrepareController extends Controller
         return redirect()
             ->route('documents.prepare', $document)
             ->with('status', __('Signature fields saved.'));
+    }
+
+    public function send(Document $document, SendDocumentForSignatureService $sender): RedirectResponse
+    {
+        $this->authorize('update', $document);
+
+        try {
+            $sender->send($document);
+        } catch (RuntimeException $exception) {
+            return redirect()
+                ->route('documents.prepare', $document)
+                ->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('documents.show', $document)
+            ->with('status', __('Document sent for signature.'));
     }
 }

@@ -52,6 +52,30 @@ class SignatureEngineTest extends TestCase
             ->assertSee('fabric-canvas');
     }
 
+    public function test_prepare_page_uses_source_pdf_stream_even_when_prepared_pdf_exists(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $sourcePath = 'documents/source-prepare.pdf';
+        $preparedPath = 'documents/generated/source-prepare-stamped.pdf';
+        Storage::disk('local')->put($sourcePath, Pdf::loadHTML('<h1>Source PDF</h1>')->output());
+        Storage::disk('local')->put($preparedPath, Pdf::loadHTML('<h1>Prepared PDF</h1>')->output());
+
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'file_path' => $sourcePath,
+            'prepared_pdf_path' => $preparedPath,
+        ]);
+        DocumentSigner::factory()->for($document)->create();
+
+        $this->actingAs($user)
+            ->get(route('documents.prepare', $document))
+            ->assertOk()
+            ->assertSee('template-prepare-config')
+            ->assertSee('source=1');
+    }
+
     public function test_owner_is_redirected_to_document_page_when_prepare_has_no_signers(): void
     {
         $user = User::factory()->create();

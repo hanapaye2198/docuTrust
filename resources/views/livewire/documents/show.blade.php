@@ -7,7 +7,7 @@ use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\SignerCertificate;
 use App\Models\Tag;
-use App\Services\DocumentPdfStampingService;
+use App\Services\SendDocumentForSignatureService;
 use App\Services\SignerCertificateRevocationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -104,52 +104,15 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         $this->authorize('update', $this->document);
 
-        $this->document->refresh()->load(['documentSigners', 'signatureFields']);
-
-        if ($this->document->status !== DocumentStatus::Draft) {
-            return;
-        }
-
-        if (! $this->document->hasDocumentSigners()) {
-            $this->addError('send', __('Add at least one signer before sending.'));
+        try {
+            app(SendDocumentForSignatureService::class)->send($this->document);
+        } catch (\RuntimeException $exception) {
+            $this->addError('send', $exception->getMessage());
 
             return;
         }
 
-        if (! $this->document->hasSignatureFields()) {
-            $this->addError('send', __('Add at least one signature field on the Prepare page before sending.'));
-
-            return;
-        }
-
-        $signersWithoutFields = $this->document->signersMissingFields()
-            ->pluck('name')
-            ->filter(fn ($name) => is_string($name) && $name !== '')
-            ->values();
-
-        if ($signersWithoutFields->isNotEmpty()) {
-            $this->addError('send', __('Every signer must have at least one signature field before sending. Missing: :signers', [
-                'signers' => $signersWithoutFields->implode(', '),
-            ]));
-
-            return;
-        }
-
-        $this->document->update([
-            'status' => DocumentStatus::Pending,
-            'sent_at' => now(),
-        ]);
-
-        $this->document->documentSigners()->get()->each(function (DocumentSigner $signer): void {
-            $signer->update([
-                'access_token' => (string) Str::uuid(),
-                'expires_at' => now()->addDays(7),
-            ]);
-        });
-
-        app(DocumentPdfStampingService::class)->generatePreparedPdf($this->document->fresh());
         $this->document->refresh()->load('documentSigners');
-        event(new DocumentSent($this->document));
         session()->flash('status', __('Document sent for signature.'));
     }
 

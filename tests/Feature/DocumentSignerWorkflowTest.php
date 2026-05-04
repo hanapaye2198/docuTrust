@@ -334,6 +334,41 @@ class DocumentSignerWorkflowTest extends TestCase
         $this->assertNotNull($signer->expires_at);
     }
 
+    public function test_owner_can_send_for_signature_from_prepare_page(): void
+    {
+        Storage::fake('local');
+        $user = User::factory()->create();
+        $path = 'documents/send-from-prepare-source.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Draft, 'file_path' => $path]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+        SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('documents.send', $document))
+            ->assertRedirect(route('documents.show', $document))
+            ->assertSessionHas('status', 'Document sent for signature.');
+
+        $document->refresh();
+        $signer->refresh();
+
+        $this->assertSame(DocumentStatus::Pending, $document->status);
+        $this->assertNotNull($document->prepared_pdf_path);
+        $this->assertTrue(Storage::disk('local')->exists($document->prepared_pdf_path));
+        $this->assertNotNull($signer->access_token);
+        $this->assertNotNull($signer->expires_at);
+    }
+
     public function test_document_cannot_be_sent_when_any_signer_has_no_signature_fields(): void
     {
         $user = User::factory()->create();

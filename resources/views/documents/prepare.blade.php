@@ -9,6 +9,15 @@
             </div>
         @endif
 
+        @if (session('error'))
+            <div
+                class="flex items-start gap-3 rounded-2xl border border-red-200/90 bg-gradient-to-r from-red-50 to-white px-4 py-3 text-sm text-red-900 shadow-sm dark:border-red-900/50 dark:from-red-950/40 dark:to-zinc-900 dark:text-red-100"
+            >
+                <span class="mt-0.5 inline-flex size-2 shrink-0 rounded-full bg-red-500"></span>
+                <span>{{ session('error') }}</span>
+            </div>
+        @endif
+
         <div class="rounded-2xl border border-zinc-200/80 bg-white/85 p-4 shadow-sm shadow-zinc-950/5 backdrop-blur-sm dark:border-zinc-700/70 dark:bg-zinc-900/70">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div class="min-w-0">
@@ -16,9 +25,22 @@
                     <h1 class="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">{{ __('Prepare document') }}</h1>
                     <p class="mt-1 truncate text-sm text-zinc-500 dark:text-zinc-400">{{ $document->title }}</p>
                 </div>
-                <div class="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    <span class="rounded-full bg-zinc-100 px-2.5 py-1 font-medium dark:bg-zinc-800">{{ __('Step 3 of 4') }}</span>
-                    <span>{{ __('Place fields, drag to position, then save.') }}</span>
+                <div class="flex flex-col items-start gap-3 lg:items-end">
+                    <div class="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        <span class="rounded-full bg-zinc-100 px-2.5 py-1 font-medium dark:bg-zinc-800">{{ __('Step 3 of 4') }}</span>
+                        <span>{{ __('Place fields, drag to position, then save.') }}</span>
+                    </div>
+                    <form method="POST" action="{{ route('documents.send', $document) }}" class="w-full lg:w-auto">
+                        @csrf
+                        <button
+                            type="submit"
+                            id="btn-send-to-signer"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                            @if (! $canSend) disabled @endif
+                        >
+                            {{ __('Send to signer') }}
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -167,6 +189,7 @@
                 'previewLoading' => __('Preview still loading. Please wait a second, then try again.'),
                 'noSigner' => __('No signer found. Add at least one signer first.'),
                 'loadFailed' => __('Unable to load document preview. Please refresh the page and try again.'),
+                'saveBeforeSend' => __('Save your latest field changes before sending to signer.'),
             ],
         ]) !!}
     </script>

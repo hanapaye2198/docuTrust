@@ -85,7 +85,9 @@ class SignDocumentController extends Controller
 
         $document = Document::query()->findOrFail($signer->document_id);
 
-        return PublicPdfStream::inlineResponse($document->activeSigningPdfPath());
+        // Use the original source PDF for the live signing view so the interactive
+        // overlay and the visible document share the same coordinate basis.
+        return PublicPdfStream::inlineResponse($document->sourcePdfPath() ?: $document->activeSigningPdfPath());
     }
 
     public function sign(string $token, DocumentPdfStampingService $documentPdfStampingService): RedirectResponse|Response

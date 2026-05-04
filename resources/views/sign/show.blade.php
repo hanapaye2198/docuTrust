@@ -18,6 +18,13 @@
         && count($fieldsJson) === 0
         && $signer->status === DocumentSignerStatus::Pending
         && $signer->document->status === DocumentStatus::Pending;
+
+    $assignedFieldCount = count($fieldsJson);
+    $signedFieldCount = count($signedByFieldId);
+    $remainingFieldCount = max(0, $assignedFieldCount - $signedFieldCount);
+    $signingProgressPercent = $assignedFieldCount > 0
+        ? (int) round(($signedFieldCount / $assignedFieldCount) * 100)
+        : 0;
 @endphp
 
 <x-layouts.guest-simple>
@@ -99,6 +106,24 @@
         </div>
 
         @if ($showFieldSigning)
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div class="ui-signsurface p-5">
+                    <p class="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">{{ __('Assigned fields') }}</p>
+                    <p class="mt-3 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{{ $assignedFieldCount }}</p>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Fields assigned to you on this document.') }}</p>
+                </div>
+                <div class="ui-signsurface p-5">
+                    <p class="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">{{ __('Completed') }}</p>
+                    <p class="mt-3 text-3xl font-semibold tracking-tight text-emerald-700 dark:text-emerald-300">{{ $signedFieldCount }}</p>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Completed fields are locked immediately after signing.') }}</p>
+                </div>
+                <div class="ui-signsurface p-5">
+                    <p class="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">{{ __('Remaining') }}</p>
+                    <p class="mt-3 text-3xl font-semibold tracking-tight text-amber-700 dark:text-amber-300">{{ $remainingFieldCount }}</p>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Complete every remaining field to finish your signing session.') }}</p>
+                </div>
+            </div>
+
             <div class="ui-panel overflow-auto rounded-3xl p-5 sm:p-7">
                 <div class="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -109,6 +134,18 @@
                             {{ __('Tap a highlighted field to sign. Signed fields cannot be changed.') }}
                         </p>
                     </div>
+                    <div class="mt-4 w-full max-w-xs sm:mt-0">
+                        <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
+                            <span>{{ __('Progress') }}</span>
+                            <span>{{ $signingProgressPercent }}%</span>
+                        </div>
+                        <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
+                            <div class="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-[width] duration-300" style="width: {{ $signingProgressPercent }}%"></div>
+                        </div>
+                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                            {{ $remainingFieldCount > 0 ? __('The next required field is highlighted on the page.') : __('All assigned fields have been completed.') }}
+                        </p>
+                    </div>
                 </div>
                 <div class="mb-3 flex items-center gap-2">
                     <button type="button" id="btn-prev-page" class="inline-flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800">{{ __('Prev') }}</button>
@@ -117,10 +154,10 @@
                 </div>
                 <div
                     id="pdf-shell"
-                    class="relative inline-block min-h-[200px] min-w-[200px] rounded-xl shadow-xl shadow-zinc-950/15 ring-1 ring-zinc-300/70 dark:shadow-black/50 dark:ring-zinc-600/80"
+                    class="relative inline-block min-h-[200px] min-w-[200px] overflow-hidden rounded-xl shadow-xl shadow-zinc-950/15 ring-1 ring-zinc-300/70 dark:shadow-black/50 dark:ring-zinc-600/80"
                 >
-                    <canvas id="pdf-canvas" class="block max-w-none rounded-[0.65rem] border border-zinc-200/90 bg-white dark:border-zinc-700"></canvas>
-                    <canvas id="fabric-canvas" class="absolute left-0 top-0 block rounded-lg"></canvas>
+                    <canvas id="pdf-canvas" class="block max-w-none rounded-[0.65rem] bg-white"></canvas>
+                    <canvas id="fabric-canvas" class="absolute left-0 top-0 z-10 block rounded-lg"></canvas>
                 </div>
             </div>
 
@@ -196,11 +233,7 @@
                 </form>
             </div>
         @endif
-    </div>
-</x-layouts.guest-simple>
-
-@if ($showFieldSigning)
-    @push('scripts')
+        @if ($showFieldSigning)
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js" crossorigin="anonymous"></script>
         <script>
@@ -230,11 +263,44 @@
                 let isRenderingPage = false;
                 const renderScale = 1.5;
 
+                if (!pdfCanvas || !fabricEl || !pdfShell || !modal || !signForm || typeof pdfjsLib === 'undefined' || typeof fabric === 'undefined') {
+                    console.error('Signing view failed to initialize required PDF/signing dependencies.');
+                    return;
+                }
+
                 pdfjsLib.GlobalWorkerOptions.workerSrc =
                     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
                 function isSigned(fieldId) {
                     return Object.prototype.hasOwnProperty.call(signedByFieldId, String(fieldId));
+                }
+
+                function orderedFields() {
+                    return [...fieldsJson].sort(function (a, b) {
+                        const pageA = Number(a.page_number) > 0 ? Number(a.page_number) : 1;
+                        const pageB = Number(b.page_number) > 0 ? Number(b.page_number) : 1;
+                        if (pageA !== pageB) {
+                            return pageA - pageB;
+                        }
+                        if (a.position_data.y !== b.position_data.y) {
+                            return a.position_data.y - b.position_data.y;
+                        }
+                        return a.position_data.x - b.position_data.x;
+                    });
+                }
+
+                function firstUnsignedField() {
+                    return orderedFields().find(function (field) {
+                        return !isSigned(field.id);
+                    }) || null;
+                }
+
+                function initialPageNumber() {
+                    const nextField = firstUnsignedField();
+                    if (!nextField) {
+                        return 1;
+                    }
+                    return Number(nextField.page_number) > 0 ? Number(nextField.page_number) : 1;
                 }
 
                 /** position_data uses 0–1 coordinates relative to each PDF page; multiply by current canvas size at render time. */
@@ -536,6 +602,8 @@
 
                 function renderPageFields(cw, ch) {
                     fabricCanvas.clear();
+                    const nextField = firstUnsignedField();
+                    const nextFieldId = nextField?.id ?? null;
                     fieldsForCurrentPage().forEach(function (field) {
                         const r = rectFromNormalized(field.position_data, cw, ch);
                         if (isSigned(field.id)) {
@@ -576,8 +644,17 @@
                             const group = buildFieldPreviewGroup(chrome, r);
                             group.fieldId = field.id;
                             group.selectable = false;
+                            group.evented = true;
                             group.hasControls = false;
                             group.hoverCursor = 'pointer';
+                            if (nextFieldId !== null && field.id === nextFieldId) {
+                                group.shadow = new fabric.Shadow({
+                                    color: 'rgba(20, 184, 166, 0.35)',
+                                    blur: 18,
+                                    offsetX: 0,
+                                    offsetY: 0,
+                                });
+                            }
                             group.on('mousedown', function (e) {
                                 e.e.preventDefault();
                                 if (isSigned(field.id) || isSubmitting) {
@@ -617,6 +694,37 @@
                     });
                 }
 
+                function syncFabricOverlayLayout(width, height) {
+                    if (!fabricCanvas) {
+                        return;
+                    }
+
+                    const wrapper = fabricCanvas.wrapperEl;
+                    const lowerCanvas = fabricCanvas.lowerCanvasEl;
+                    const upperCanvas = fabricCanvas.upperCanvasEl;
+
+                    if (wrapper) {
+                        wrapper.style.position = 'absolute';
+                        wrapper.style.left = '0';
+                        wrapper.style.top = '0';
+                        wrapper.style.width = width + 'px';
+                        wrapper.style.height = height + 'px';
+                        wrapper.style.zIndex = '10';
+                    }
+
+                    [lowerCanvas, upperCanvas].forEach(function (canvas) {
+                        if (!canvas) {
+                            return;
+                        }
+
+                        canvas.style.position = 'absolute';
+                        canvas.style.left = '0';
+                        canvas.style.top = '0';
+                        canvas.style.width = width + 'px';
+                        canvas.style.height = height + 'px';
+                    });
+                }
+
                 async function renderPage(pageNumber) {
                     if (!pdfDoc) {
                         return;
@@ -630,9 +738,12 @@
                     pdfCanvas.height = viewport.height;
                     fabricEl.width = viewport.width;
                     fabricEl.height = viewport.height;
+                    pdfCanvas.style.width = viewport.width + 'px';
+                    pdfCanvas.style.height = viewport.height + 'px';
                     fabricEl.style.width = viewport.width + 'px';
                     fabricEl.style.height = viewport.height + 'px';
                     pdfShell.style.width = viewport.width + 'px';
+                    pdfShell.style.height = viewport.height + 'px';
                     await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
                     if (!fabricCanvas) {
@@ -646,6 +757,7 @@
                         fabricCanvas.setHeight(viewport.height);
                     }
 
+                    syncFabricOverlayLayout(viewport.width, viewport.height);
                     renderPageFields(viewport.width, viewport.height);
                     isRenderingPage = false;
                     updatePageUi();
@@ -674,6 +786,7 @@
                         return;
                     }
                     isSubmitting = true;
+                    document.getElementById('modal-submit')?.setAttribute('disabled', 'disabled');
                     modalFieldId.value = String(fieldId);
                     modalSignatureImage.value = dataUrl;
                     signForm.submit();
@@ -723,6 +836,7 @@
                     const loadingTask = pdfjsLib.getDocument(pdfUrl);
                     pdfDoc = await loadingTask.promise;
                     totalPages = pdfDoc.numPages || 1;
+                    currentPage = Math.min(totalPages, Math.max(1, initialPageNumber()));
                     await renderPage(currentPage);
 
                     btnPrevPage?.addEventListener('click', async function () {
@@ -742,14 +856,17 @@
 
                     drawCanvas = new fabric.Canvas('draw-canvas', { isDrawingMode: true });
                     drawCanvas.isDrawingMode = true;
+                    drawCanvas.backgroundColor = '#ffffff';
                     drawCanvas.freeDrawingBrush.width = 2;
                     drawCanvas.freeDrawingBrush.color = '#0f172a';
                     drawCanvas.setWidth(400);
                     drawCanvas.setHeight(200);
+                    drawCanvas.renderAll();
 
                     document.getElementById('draw-clear')?.addEventListener('click', function () {
                         drawCanvas.clear();
                         drawCanvas.backgroundColor = '#ffffff';
+                        drawCanvas.renderAll();
                     });
 
                     signForm?.addEventListener('submit', function (e) {
@@ -803,5 +920,6 @@
                 });
             })();
         </script>
-    @endpush
-@endif
+        @endif
+    </div>
+</x-layouts.guest-simple>

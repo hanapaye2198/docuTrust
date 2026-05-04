@@ -43,6 +43,7 @@ Route::middleware(['auth', 'role:admin,signer'])->group(function () {
     Route::get('documents/{document}/certificate/download', [DocumentCertificateController::class, 'download'])->name('documents.certificate.download');
     Route::get('documents/{document}/prepare', [DocumentPrepareController::class, 'show'])->name('documents.prepare');
     Route::post('documents/{document}/signature-fields', [DocumentPrepareController::class, 'store'])->name('documents.signature-fields.store');
+    Route::post('documents/{document}/send', [DocumentPrepareController::class, 'send'])->name('documents.send');
 
     Volt::route('templates', 'templates.index')->name('templates.index');
     Volt::route('templates/create', 'templates.wizard')->name('templates.create');

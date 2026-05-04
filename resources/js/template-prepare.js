@@ -75,6 +75,7 @@ function createPrepareSession(cfgEl) {
     const btnPrevPage = document.getElementById('btn-prev-page');
     const btnNextPage = document.getElementById('btn-next-page');
     const btnSaveFields = document.getElementById('btn-save-fields');
+    const btnSendToSigner = document.getElementById('btn-send-to-signer');
     const editorStatus = document.getElementById('editor-status');
     const fieldSigner = document.getElementById('field-signer');
     const fieldPaletteButtons = Array.from(document.querySelectorAll('.field-palette-btn'));
@@ -109,6 +110,7 @@ function createPrepareSession(cfgEl) {
 
     const pageFields = new Map();
     const signerById = new Map(signers.map((signer) => [Number(signer.id), signer]));
+    const canSendFromServer = Boolean(btnSendToSigner) && !btnSendToSigner.disabled;
 
     function debugLog(message, payload) {
         console.log(debugPrefix, message, payload ?? '');
@@ -184,15 +186,28 @@ function createPrepareSession(cfgEl) {
         editorStatus.textContent = text;
     }
 
+    function updateSendButtonState() {
+        if (!btnSendToSigner || destroyed) {
+            return;
+        }
+
+        btnSendToSigner.disabled = !canSendFromServer || hasUnsavedChanges || isSaving || isRenderingPage;
+        btnSendToSigner.title = hasUnsavedChanges
+            ? (msgs.saveBeforeSend || 'Save your latest field changes before sending to signer.')
+            : '';
+    }
+
     function markDirty() {
         hasUnsavedChanges = true;
         updateEditorStatus();
+        updateSendButtonState();
     }
 
     function markSaved() {
         hasUnsavedChanges = false;
         isSaving = false;
         updateEditorStatus();
+        updateSendButtonState();
     }
 
     function setFieldInspectorState(target) {
@@ -503,6 +518,8 @@ function createPrepareSession(cfgEl) {
         if (btnSaveFields) {
             btnSaveFields.disabled = shouldDisableFieldButtons;
         }
+
+        updateSendButtonState();
     }
 
     function bindFabricCanvasEvents() {
@@ -873,6 +890,15 @@ function createPrepareSession(cfgEl) {
             const fields = collectFields();
             fieldsPayload.value = JSON.stringify(fields);
             saveFieldsForm.submit();
+        });
+
+        listen(btnSendToSigner, 'click', (event) => {
+            if (!hasUnsavedChanges) {
+                return;
+            }
+
+            event.preventDefault();
+            showPdfLoadError(msgs.saveBeforeSend || 'Save your latest field changes before sending to signer.');
         });
 
         listen(selectedFieldType, 'change', () => {
