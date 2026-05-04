@@ -209,6 +209,7 @@
                 const fieldsJson = @json($fieldsJson);
                 const signedByFieldId = @json($signedByFieldId);
                 const signerName = @json($signer->name);
+                const signerEmail = @json($signer->email);
                 const dateLocale = @json(str_replace('_', '-', app()->getLocale()));
                 const pdfCanvas = document.getElementById('pdf-canvas');
                 const fabricEl = document.getElementById('fabric-canvas');
@@ -248,15 +249,33 @@
 
                 function getFieldChrome(type) {
                     switch (type) {
+                        case 'signature_left':
+                            return {
+                                kind: 'signature',
+                                stroke: '#0f766e',
+                                fill: 'rgba(20, 184, 166, 0.12)',
+                                fillText: '#115e59',
+                                label: 'Signature',
+                            };
+                        case 'signature_right':
+                            return {
+                                kind: 'signature',
+                                stroke: '#0369a1',
+                                fill: 'rgba(14, 165, 233, 0.12)',
+                                fillText: '#075985',
+                                label: 'Signature',
+                            };
                         case 'text':
                             return {
+                                kind: 'input',
                                 stroke: '#ca8a04',
                                 fill: 'rgba(234, 179, 8, 0.15)',
                                 fillText: '#a16207',
-                                label: 'Text',
+                                label: 'Text field',
                             };
                         case 'name':
                             return {
+                                kind: 'input',
                                 stroke: '#15803d',
                                 fill: 'rgba(34, 197, 94, 0.15)',
                                 fillText: '#15803d',
@@ -264,19 +283,236 @@
                             };
                         case 'date':
                             return {
+                                kind: 'input',
                                 stroke: '#6d28d9',
                                 fill: 'rgba(139, 92, 246, 0.12)',
                                 fillText: '#5b21b6',
                                 label: 'Date',
                             };
+                        case 'email':
+                            return {
+                                kind: 'input',
+                                stroke: '#be123c',
+                                fill: 'rgba(244, 63, 94, 0.10)',
+                                fillText: '#9f1239',
+                                label: 'Email',
+                            };
+                        case 'initials':
+                            return {
+                                kind: 'input',
+                                stroke: '#a21caf',
+                                fill: 'rgba(217, 70, 239, 0.10)',
+                                fillText: '#86198f',
+                                label: 'Initials',
+                            };
+                        case 'checkbox':
+                            return {
+                                kind: 'toggle',
+                                control: 'square',
+                                stroke: '#0284c7',
+                                fill: 'rgba(56, 189, 248, 0.14)',
+                                fillText: '#0369a1',
+                                label: 'Checkbox',
+                            };
+                        case 'radio':
+                            return {
+                                kind: 'toggle',
+                                control: 'circle',
+                                stroke: '#4f46e5',
+                                fill: 'rgba(99, 102, 241, 0.12)',
+                                fillText: '#4338ca',
+                                label: 'Radio',
+                            };
                         default:
                             return {
+                                kind: 'signature',
                                 stroke: '#2563eb',
                                 fill: 'rgba(59, 130, 246, 0.12)',
                                 fillText: '#1d4ed8',
-                                label: 'Sign Here',
+                                label: 'Signature',
                             };
                     }
+                }
+
+                function clamp(value, min, max) {
+                    return Math.max(min, Math.min(max, value));
+                }
+
+                function truncateFieldText(value, width, fontSize) {
+                    const text = String(value || '').trim();
+                    const maxCharacters = Math.max(4, Math.floor(width / Math.max(5.5, fontSize * 0.58)));
+
+                    if (text.length <= maxCharacters) {
+                        return text;
+                    }
+
+                    return text.slice(0, Math.max(1, maxCharacters - 1)).trimEnd() + '…';
+                }
+
+                function buildFieldPreviewGroup(chrome, rect) {
+                    const nodes = [];
+                    const inset = Math.max(6, rect.height * 0.16);
+
+                    if (chrome.kind === 'toggle') {
+                        const controlSize = clamp(rect.height * 0.5, 14, 20);
+                        const controlTop = (rect.height - controlSize) / 2;
+                        const labelLeft = inset + controlSize + Math.max(7, rect.width * 0.05);
+                        const labelFontSize = clamp(rect.height * 0.3, 10, 14);
+                        const usableWidth = Math.max(18, rect.width - labelLeft - inset);
+
+                        nodes.push(new fabric.Rect({
+                            width: rect.width,
+                            height: rect.height,
+                            fill: chrome.fill,
+                            stroke: chrome.stroke,
+                            strokeWidth: 1.25,
+                            rx: 8,
+                            ry: 8,
+                        }));
+
+                        if (chrome.control === 'circle') {
+                            nodes.push(new fabric.Circle({
+                                radius: controlSize / 2,
+                                left: inset,
+                                top: controlTop,
+                                fill: '#ffffff',
+                                stroke: chrome.stroke,
+                                strokeWidth: 1.5,
+                                originX: 'left',
+                                originY: 'top',
+                            }));
+                        } else {
+                            nodes.push(new fabric.Rect({
+                                width: controlSize,
+                                height: controlSize,
+                                left: inset,
+                                top: controlTop,
+                                fill: '#ffffff',
+                                stroke: chrome.stroke,
+                                strokeWidth: 1.5,
+                                rx: 4,
+                                ry: 4,
+                                originX: 'left',
+                                originY: 'top',
+                            }));
+                        }
+
+                        nodes.push(new fabric.Text(truncateFieldText(chrome.label, usableWidth, labelFontSize), {
+                            fontSize: labelFontSize,
+                            fill: chrome.fillText,
+                            fontFamily: 'system-ui, sans-serif',
+                            fontWeight: 700,
+                            originX: 'left',
+                            originY: 'center',
+                            left: labelLeft,
+                            top: rect.height / 2,
+                        }));
+                    } else if (chrome.kind === 'input') {
+                        const accentWidth = clamp(rect.width * 0.055, 8, 14);
+                        const labelLeft = accentWidth + Math.max(10, rect.width * 0.05);
+                        const labelFontSize = clamp(rect.height * 0.28, 10, 15);
+                        const lineY = rect.height - Math.max(7, rect.height * 0.18);
+                        const usableWidth = Math.max(24, rect.width - labelLeft - inset);
+
+                        nodes.push(new fabric.Rect({
+                            width: rect.width,
+                            height: rect.height,
+                            fill: chrome.fill,
+                            stroke: chrome.stroke,
+                            strokeWidth: 1.5,
+                            rx: 8,
+                            ry: 8,
+                        }));
+                        nodes.push(new fabric.Rect({
+                            width: accentWidth,
+                            height: rect.height,
+                            fill: chrome.stroke,
+                            rx: 8,
+                            ry: 8,
+                            left: 0,
+                            top: 0,
+                            originX: 'left',
+                            originY: 'top',
+                        }));
+                        nodes.push(new fabric.Text(truncateFieldText(chrome.label, usableWidth, labelFontSize), {
+                            fontSize: labelFontSize,
+                            fill: chrome.fillText,
+                            fontFamily: 'system-ui, sans-serif',
+                            fontWeight: 700,
+                            originX: 'left',
+                            originY: 'top',
+                            left: labelLeft,
+                            top: inset,
+                        }));
+                        nodes.push(new fabric.Line([labelLeft, lineY, rect.width - inset, lineY], {
+                            stroke: chrome.stroke,
+                            strokeWidth: 1,
+                            selectable: false,
+                            evented: false,
+                            opacity: 0.4,
+                        }));
+                    } else {
+                        const accentWidth = clamp(rect.width * 0.07, 10, 18);
+                        const labelLeft = accentWidth + Math.max(10, rect.width * 0.05);
+                        const labelFontSize = clamp(rect.height * 0.28, 11, 16);
+                        const lineY = rect.height - Math.max(7, rect.height * 0.14);
+                        const usableWidth = Math.max(24, rect.width - labelLeft - inset);
+
+                        nodes.push(new fabric.Rect({
+                            width: rect.width,
+                            height: rect.height,
+                            fill: chrome.fill,
+                            stroke: chrome.stroke,
+                            strokeWidth: 1.5,
+                            rx: 8,
+                            ry: 8,
+                        }));
+                        nodes.push(new fabric.Rect({
+                            width: accentWidth,
+                            height: rect.height,
+                            fill: chrome.stroke,
+                            rx: 8,
+                            ry: 8,
+                            left: 0,
+                            top: 0,
+                            originX: 'left',
+                            originY: 'top',
+                        }));
+                        nodes.push(new fabric.Text(truncateFieldText(chrome.label, usableWidth, labelFontSize), {
+                            fontSize: labelFontSize,
+                            fill: chrome.fillText,
+                            fontFamily: 'system-ui, sans-serif',
+                            fontWeight: 700,
+                            originX: 'left',
+                            originY: 'top',
+                            left: labelLeft,
+                            top: inset,
+                        }));
+                        nodes.push(new fabric.Line([labelLeft, lineY, rect.width - inset, lineY], {
+                            stroke: chrome.stroke,
+                            strokeWidth: 1,
+                            selectable: false,
+                            evented: false,
+                            opacity: 0.65,
+                        }));
+                    }
+
+                    return new fabric.Group(nodes, {
+                        left: rect.left,
+                        top: rect.top,
+                        subTargetCheck: true,
+                    });
+                }
+
+                function signerInitialsValue() {
+                    return signerName
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map(function (part) {
+                            return part.charAt(0).toUpperCase();
+                        })
+                        .join('') || 'S';
                 }
 
                 function updatePageUi() {
@@ -337,29 +573,7 @@
                             );
                         } else {
                             const chrome = getFieldChrome(field.type);
-                            const rect = new fabric.Rect({
-                                width: r.width,
-                                height: r.height,
-                                fill: chrome.fill,
-                                stroke: chrome.stroke,
-                                strokeWidth: 2,
-                                rx: 4,
-                                ry: 4,
-                            });
-                            const text = new fabric.Text(chrome.label, {
-                                fontSize: Math.min(16, r.height * 0.35),
-                                fill: chrome.fillText,
-                                fontFamily: 'system-ui, sans-serif',
-                                originX: 'center',
-                                originY: 'center',
-                                left: r.width / 2,
-                                top: r.height / 2,
-                            });
-                            const group = new fabric.Group([rect, text], {
-                                left: r.left,
-                                top: r.top,
-                                subTargetCheck: true,
-                            });
+                            const group = buildFieldPreviewGroup(chrome, r);
                             group.fieldId = field.id;
                             group.selectable = false;
                             group.hasControls = false;
@@ -378,6 +592,22 @@
                                         new Date()
                                     );
                                     submitSignatureField(field.id, textToDataUrl(d));
+                                    return;
+                                }
+                                if (field.type === 'email') {
+                                    submitSignatureField(field.id, textToDataUrl(signerEmail));
+                                    return;
+                                }
+                                if (field.type === 'initials') {
+                                    submitSignatureField(field.id, textToDataUrl(signerInitialsValue()));
+                                    return;
+                                }
+                                if (field.type === 'checkbox') {
+                                    submitSignatureField(field.id, textToDataUrl('X'));
+                                    return;
+                                }
+                                if (field.type === 'radio') {
+                                    submitSignatureField(field.id, textToDataUrl('O'));
                                     return;
                                 }
                                 openModal(field.id);

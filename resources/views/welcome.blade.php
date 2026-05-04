@@ -1,4 +1,11 @@
 <!DOCTYPE html>
+@php
+  $authenticatedUser = auth()->user();
+  $primaryCtaUrl = $authenticatedUser ? route($authenticatedUser->homeRouteName()) : route('register');
+  $primaryCtaLabel = $authenticatedUser ? __('Open workspace') : __('Start Free Trial');
+  $secondaryHeaderUrl = $authenticatedUser ? route('settings.profile') : route('login');
+  $secondaryHeaderLabel = $authenticatedUser ? __('Settings') : __('Login');
+@endphp
 <html lang="en">
 <head>
 <script>
@@ -1388,8 +1395,8 @@ footer{
       <a href="#faq">FAQ</a>
     </nav>
     <div class="header-actions">
-      <a href="{{ route('login') }}" class="btn-ghost">Login</a>
-      <a href="{{ route('register') }}" class="btn-primary">Start Free Trial</a>
+      <a href="{{ $secondaryHeaderUrl }}" class="btn-ghost">{{ $secondaryHeaderLabel }}</a>
+      <a href="{{ $primaryCtaUrl }}" class="btn-primary">{{ $primaryCtaLabel }}</a>
       <button class="nav-mobile-toggle" id="mobileNavToggle" aria-label="Open menu">
         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
@@ -1414,9 +1421,9 @@ footer{
           Ditch paper contracts and give your customers a seamless eSigning experience — with full document automation, AI-powered processing, and blockchain-verified trust.
         </p>
         <div class="hero-actions reveal">
-          <a href="{{ route('register') }}" class="btn-cta">
+          <a href="{{ $primaryCtaUrl }}" class="btn-cta">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
-            Start Free Trial
+            {{ $primaryCtaLabel }}
           </a>
           <a href="#features" class="btn-secondary">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
@@ -1956,9 +1963,9 @@ footer{
       <h2>Start Signing Smarter Today</h2>
       <p>Move from manual paperwork to secure, blockchain-verified, AI-powered digital workflows — trusted by 10,000+ teams worldwide.</p>
       <div class="cta-actions">
-        <a href="{{ route('register') }}" class="btn-cta">
+        <a href="{{ $primaryCtaUrl }}" class="btn-cta">
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
-          Create Free Account
+          {{ $authenticatedUser ? __('Open workspace') : __('Create Free Account') }}
         </a>
         <a href="mailto:{{ config('mail.from.address') }}?subject=Sales%20inquiry" class="btn-secondary cta-talk-sales">
           Talk to Sales

@@ -10,6 +10,7 @@ use App\Models\DocumentSigner;
 use App\Models\SignatureAuditEvent;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class PublicDocumentVerificationTest extends TestCase
@@ -25,6 +26,16 @@ class PublicDocumentVerificationTest extends TestCase
 
     public function test_document_is_verified_by_hash(): void
     {
+        Http::fake([
+            'http://127.0.0.1:3001/verify' => Http::response([
+                'exists' => true,
+                'transactionMatches' => true,
+                'blockNumber' => 424242,
+                'proofTimestamp' => 1710000000,
+                'submittedBy' => '0xVerifier',
+            ]),
+        ]);
+
         $owner = User::factory()->create();
         $document = Document::factory()->for($owner)->create([
             'status' => DocumentStatus::Completed,
@@ -49,7 +60,7 @@ class PublicDocumentVerificationTest extends TestCase
         $documentHash = DocumentHash::query()->create([
             'document_id' => $document->id,
             'hash' => hash('sha256', 'public-verify-test'),
-            'transaction_id' => null,
+            'transaction_id' => '0xproof123',
             'created_at' => now(),
         ]);
 
@@ -58,11 +69,24 @@ class PublicDocumentVerificationTest extends TestCase
             ->assertSee('Valid')
             ->assertSee($documentHash->hash)
             ->assertSee('Jane Signer')
+            ->assertSee('Blockchain verification')
+            ->assertSee('Document hash is anchored on-chain and matches the recorded transaction.')
+            ->assertSee('0xproof123')
             ->assertSee('Signing timeline');
     }
 
     public function test_document_is_verified_by_document_id_and_invalid_lookup_is_handled(): void
     {
+        Http::fake([
+            'http://127.0.0.1:3001/verify' => Http::response([
+                'exists' => true,
+                'transactionMatches' => true,
+                'blockNumber' => 111,
+                'proofTimestamp' => 1710000000,
+                'submittedBy' => '0xVerifier',
+            ]),
+        ]);
+
         $owner = User::factory()->create();
         $document = Document::factory()->for($owner)->create([
             'status' => DocumentStatus::Completed,
@@ -70,7 +94,7 @@ class PublicDocumentVerificationTest extends TestCase
         DocumentHash::query()->create([
             'document_id' => $document->id,
             'hash' => hash('sha256', 'public-verify-id-test'),
-            'transaction_id' => null,
+            'transaction_id' => '0xproof999',
             'created_at' => now(),
         ]);
 
@@ -82,5 +106,26 @@ class PublicDocumentVerificationTest extends TestCase
         $this->get(route('verify.index').'?documentIdentifier=not-a-real-hash')
             ->assertOk()
             ->assertSee('Invalid or unverified document');
+    }
+
+    public function test_public_verify_page_shows_blockchain_not_available_when_no_transaction_is_recorded(): void
+    {
+        $owner = User::factory()->create();
+        $document = Document::factory()->for($owner)->create([
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $documentHash = DocumentHash::query()->create([
+            'document_id' => $document->id,
+            'hash' => hash('sha256', 'public-verify-no-chain'),
+            'transaction_id' => null,
+            'created_at' => now(),
+        ]);
+
+        $this->get(route('verify.index').'?documentIdentifier='.$documentHash->hash)
+            ->assertOk()
+            ->assertSee('Blockchain verification')
+            ->assertSee('Not available')
+            ->assertSee('No blockchain transaction is recorded for this document.');
     }
 }

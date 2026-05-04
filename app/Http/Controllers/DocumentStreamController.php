@@ -12,7 +12,7 @@ class DocumentStreamController extends Controller
     {
         $this->authorize('view', $document);
 
-        $path = $document->primaryPdfPath();
+        $path = $document->previewPdfPath();
 
         return PublicPdfStream::inlineResponse($path);
     }

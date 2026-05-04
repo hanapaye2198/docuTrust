@@ -21,4 +21,12 @@ return [
         ],
     ],
 
+    'pki' => [
+        'openssl_config_path' => env('DOCUTRUST_OPENSSL_CONFIG', 'C:\\php\\extras\\ssl\\openssl.cnf'),
+        'root_ca_name' => env('DOCUTRUST_ROOT_CA_NAME', 'DocuTrust Root CA'),
+        'root_ca_country' => env('DOCUTRUST_ROOT_CA_COUNTRY', 'PH'),
+        'root_ca_valid_days' => (int) env('DOCUTRUST_ROOT_CA_VALID_DAYS', 3650),
+        'signer_valid_days' => (int) env('DOCUTRUST_SIGNER_CERT_VALID_DAYS', 825),
+    ],
+
 ];

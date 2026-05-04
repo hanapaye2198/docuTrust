@@ -88,4 +88,91 @@ class DocumentHashPipelineTest extends TestCase
 
         $this->assertTrue($service->transactionExistsOnBlockchain('0xproof123'));
     }
+
+    public function test_stored_proof_can_be_verified_against_blockchain_hash_and_transaction(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:3001/verify' => Http::response([
+                'exists' => true,
+                'transactionMatches' => true,
+                'blockNumber' => 123456,
+                'proofTimestamp' => 1710000000,
+                'submittedBy' => '0xabcDEF123',
+            ]),
+        ]);
+
+        $document = Document::factory()->for(User::factory())->create([
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $documentHash = $document->documentHash()->create([
+            'hash' => hash('sha256', 'blockchain-proof'),
+            'transaction_id' => '0xproof123',
+            'created_at' => now(),
+        ]);
+
+        $result = app(DocumentHashService::class)->verifyStoredProof($documentHash);
+
+        $this->assertSame('verified', $result['status']);
+        $this->assertTrue($result['anchored']);
+        $this->assertSame('0xproof123', $result['transaction_id']);
+        $this->assertSame(123456, $result['block_number']);
+        $this->assertSame('0xabcDEF123', $result['submitted_by']);
+        $this->assertSame('2024-03-09 16:00:00', $result['anchored_at']);
+    }
+
+    public function test_stored_proof_fails_when_transaction_does_not_match_hash_record(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:3001/verify' => Http::response([
+                'exists' => true,
+                'transactionMatches' => false,
+                'blockNumber' => 999,
+                'proofTimestamp' => 1710000000,
+                'submittedBy' => '0xabcDEF123',
+            ]),
+        ]);
+
+        $document = Document::factory()->for(User::factory())->create([
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $documentHash = $document->documentHash()->create([
+            'hash' => hash('sha256', 'mismatched-proof'),
+            'transaction_id' => '0xproof999',
+            'created_at' => now(),
+        ]);
+
+        $result = app(DocumentHashService::class)->verifyStoredProof($documentHash);
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertTrue($result['anchored']);
+        $this->assertFalse($result['transaction_matches']);
+        $this->assertSame('Document hash exists on-chain, but the stored transaction does not match the blockchain record.', $result['message']);
+    }
+
+    public function test_stored_proof_returns_failed_when_blockchain_service_is_unavailable(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:3001/verify' => Http::response([
+                'message' => 'upstream unavailable',
+            ], 503),
+        ]);
+
+        $document = Document::factory()->for(User::factory())->create([
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $documentHash = $document->documentHash()->create([
+            'hash' => hash('sha256', 'service-unavailable-proof'),
+            'transaction_id' => '0xprooferror',
+            'created_at' => now(),
+        ]);
+
+        $result = app(DocumentHashService::class)->verifyStoredProof($documentHash);
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertFalse($result['anchored']);
+        $this->assertSame('Unable to verify blockchain proof right now.', $result['message']);
+    }
 }

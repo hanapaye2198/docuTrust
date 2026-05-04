@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Enums\SignatureFieldType;
+use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\SignerCertificate;
 use App\Models\Signature;
 use App\Models\SignatureAuditEvent;
 use App\Models\SignatureField;
@@ -22,6 +24,11 @@ class SignatureEngineTest extends TestCase
     use RefreshDatabase;
 
     private const TINY_PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    private function putValidPdf(string $path): void
+    {
+        Storage::disk('local')->put($path, Pdf::loadHTML('<h1>DocuTrust</h1>')->output());
+    }
 
     public function test_guest_cannot_visit_prepare_page(): void
     {
@@ -41,7 +48,23 @@ class SignatureEngineTest extends TestCase
             ->get(route('documents.prepare', $document))
             ->assertOk()
             ->assertSee(__('Prepare document'))
-            ->assertSee('__docutrustPrepareAssetLoader');
+            ->assertSee('template-prepare-config')
+            ->assertSee('fabric-canvas');
+    }
+
+    public function test_owner_is_redirected_to_document_page_when_prepare_has_no_signers(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Draft]);
+
+        $this->actingAs($user)
+            ->get(route('documents.prepare', $document))
+            ->assertRedirect(route('documents.show', $document));
+
+        $this->actingAs($user)
+            ->get(route('documents.prepare', $document), ['referer' => route('documents.show', $document)])
+            ->assertRedirect(route('documents.show', $document))
+            ->assertSessionHas('error', 'Add at least one signer before preparing fields.');
     }
 
     public function test_owner_can_save_signature_fields(): void
@@ -80,12 +103,62 @@ class SignatureEngineTest extends TestCase
         ]);
     }
 
+    public function test_owner_can_save_extended_field_types(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Draft]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $this->actingAs($user)->post(route('documents.signature-fields.store', $document), [
+            'fields' => [
+                [
+                    'signer_id' => $signer->id,
+                    'type' => SignatureFieldType::Email->value,
+                    'page_number' => 1,
+                    'position_data' => [
+                        'x' => 0.15,
+                        'y' => 0.25,
+                        'width' => 0.26,
+                        'height' => 0.06,
+                    ],
+                ],
+                [
+                    'signer_id' => $signer->id,
+                    'type' => SignatureFieldType::Checkbox->value,
+                    'page_number' => 1,
+                    'position_data' => [
+                        'x' => 0.45,
+                        'y' => 0.25,
+                        'width' => 0.09,
+                        'height' => 0.055,
+                    ],
+                ],
+            ],
+        ])->assertRedirect(route('documents.prepare', $document));
+
+        $this->assertDatabaseHas('signature_fields', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Email->value,
+            'page_number' => 1,
+        ]);
+
+        $this->assertDatabaseHas('signature_fields', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Checkbox->value,
+            'page_number' => 1,
+        ]);
+    }
+
     public function test_signer_can_submit_signature_for_field(): void
     {
         Storage::fake('local');
 
         $user = User::factory()->create();
-        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $path = 'documents/signer-submit-source.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending, 'file_path' => $path]);
         $signer = DocumentSigner::factory()->for($document)->create(['status' => DocumentSignerStatus::Pending]);
         $field = SignatureField::query()->create([
             'document_id' => $document->id,
@@ -114,11 +187,22 @@ class SignatureEngineTest extends TestCase
         $this->assertNotNull($signature);
         $this->assertSame(64, strlen((string) $signature->signature_hash));
         $this->assertNotNull($signature->signature_value);
+        $this->assertNotNull($signature->signature_path);
+        $this->assertTrue(Storage::disk('local')->exists($signature->signature_path));
         $this->assertSame(64, strlen((string) $signature->public_key_fingerprint));
+        $this->assertSame('RSA-SHA256', $signature->signature_algorithm);
+        $this->assertNotNull($signature->signer_certificate_id);
 
         $signer->refresh();
         $this->assertNotNull($signer->signing_public_key);
         $this->assertNotNull($signer->signing_private_key);
+
+        $signerCertificate = SignerCertificate::query()->find($signature->signer_certificate_id);
+        $this->assertNotNull($signerCertificate);
+        $this->assertSame($signer->id, $signerCertificate->document_signer_id);
+        $this->assertSame((string) $signer->signing_public_key, $signerCertificate->public_key_pem);
+        $this->assertSame('active', $signerCertificate->status);
+        $this->assertStringContainsString('BEGIN CERTIFICATE', $signerCertificate->certificate_pem);
 
         $isValid = app(PkiSignatureService::class)->verifySignature(
             (string) $signature->signature_hash,
@@ -190,11 +274,10 @@ class SignatureEngineTest extends TestCase
     public function test_signature_field_save_creates_audit_events(): void
     {
         Storage::fake('local');
-        Storage::fake('local');
 
         $user = User::factory()->create();
         $path = 'documents/completed-cert-source.pdf';
-        Storage::disk('local')->put($path, '%PDF-1.4 fake');
+        $this->putValidPdf($path);
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
         $document->update(['file_path' => $path]);
         $signer = DocumentSigner::factory()->for($document)->create(['status' => DocumentSignerStatus::Pending]);
@@ -223,6 +306,8 @@ class SignatureEngineTest extends TestCase
 
         $document->refresh();
         $this->assertSame(DocumentStatus::Completed, $document->status);
+        $this->assertNotNull($document->final_pdf_path);
+        $this->assertTrue(Storage::disk('local')->exists($document->final_pdf_path));
         $this->assertNotNull($document->certificate_path);
         $this->assertTrue(Storage::disk('local')->exists($document->certificate_path));
 

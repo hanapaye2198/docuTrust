@@ -4,6 +4,7 @@ use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\SignerCertificate;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -271,6 +272,41 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->get();
     }
 
+    #[Computed]
+    public function totalActiveCertificates(): int
+    {
+        return SignerCertificate::query()
+            ->where('status', 'active')
+            ->whereNull('revoked_at')
+            ->whereHas('documentSigner.document', fn ($query) => $query->where('organization_id', auth()->user()?->organization_id))
+            ->count();
+    }
+
+    #[Computed]
+    public function totalRevokedCertificates(): int
+    {
+        return SignerCertificate::query()
+            ->where(function ($query): void {
+                $query->where('status', 'revoked')->orWhereNotNull('revoked_at');
+            })
+            ->whereHas('documentSigner.document', fn ($query) => $query->where('organization_id', auth()->user()?->organization_id))
+            ->count();
+    }
+
+    #[Computed]
+    public function recentRevokedCertificates()
+    {
+        return SignerCertificate::query()
+            ->with(['documentSigner.document'])
+            ->where(function ($query): void {
+                $query->where('status', 'revoked')->orWhereNotNull('revoked_at');
+            })
+            ->whereHas('documentSigner.document', fn ($query) => $query->where('organization_id', auth()->user()?->organization_id))
+            ->latest('revoked_at')
+            ->limit(4)
+            ->get();
+    }
+
     /**
      * @return array{
      *   labels: list<string>,
@@ -508,6 +544,41 @@ new #[Layout('components.layouts.app')] class extends Component {
             <p class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('declined by signer') }}</p>
         </div>
 
+    </div>
+
+    <div class="grid gap-4 lg:grid-cols-3">
+        <div class="rounded-2xl border border-emerald-200/80 bg-emerald-50 p-5 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/20">
+            <div class="text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">{{ __('Active certificates') }}</div>
+            <p class="mt-3 text-3xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300">{{ $this->totalActiveCertificates }}</p>
+            <p class="mt-1 text-sm text-emerald-700/80 dark:text-emerald-400/90">{{ __('PKI signer certificates currently trusted') }}</p>
+        </div>
+
+        <div class="rounded-2xl border border-red-200/80 bg-red-50 p-5 shadow-sm dark:border-red-900/40 dark:bg-red-950/20">
+            <div class="text-xs font-semibold uppercase tracking-widest text-red-700 dark:text-red-400">{{ __('Revoked certificates') }}</div>
+            <p class="mt-3 text-3xl font-bold tracking-tight text-red-700 dark:text-red-300">{{ $this->totalRevokedCertificates }}</p>
+            <p class="mt-1 text-sm text-red-700/80 dark:text-red-400/90">{{ __('Certificates removed from trust due to risk or policy') }}</p>
+        </div>
+
+        <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{{ __('Recent revocations') }}</h3>
+                    <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('Latest certificate trust changes') }}</p>
+                </div>
+            </div>
+
+            <div class="mt-4 space-y-3">
+                @forelse ($this->recentRevokedCertificates as $certificate)
+                    <div class="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm dark:border-red-900/40 dark:bg-red-950/20">
+                        <div class="font-medium text-red-800 dark:text-red-200">{{ $certificate->documentSigner?->name ?? __('Unknown signer') }}</div>
+                        <div class="mt-1 text-red-700 dark:text-red-300">{{ $certificate->documentSigner?->document?->title ?? '-' }}</div>
+                        <div class="mt-1 text-red-700 dark:text-red-300">{{ $certificate->revocation_reason ?? __('No reason recorded') }}</div>
+                    </div>
+                @empty
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('No revoked certificates yet.') }}</p>
+                @endforelse
+            </div>
+        </div>
     </div>
 
     <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

@@ -48,6 +48,34 @@
 
             <flux:button variant="primary" type="submit">{{ __('Add signer') }}</flux:button>
         </form>
+
+        @if ($editingSignerId !== null)
+            <div class="mt-6 rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-4 dark:border-zinc-700/80 dark:bg-zinc-800/30">
+                <div>
+                    <h4 class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{{ __('Edit signer') }}</h4>
+                </div>
+
+                <form wire:submit="saveSignerEdits" class="mt-4 space-y-4">
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <flux:field>
+                            <flux:label>{{ __('Name') }}</flux:label>
+                            <flux:input wire:model="editingName" type="text" autocomplete="name" required />
+                            <flux:error name="editingName" />
+                        </flux:field>
+                        <flux:field>
+                            <flux:label>{{ __('Email') }}</flux:label>
+                            <flux:input wire:model="editingEmail" type="email" autocomplete="email" required />
+                            <flux:error name="editingEmail" />
+                        </flux:field>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <flux:button variant="primary" type="submit">{{ __('Save signer') }}</flux:button>
+                        <flux:button variant="ghost" type="button" wire:click="cancelEditingSigner">{{ __('Cancel') }}</flux:button>
+                    </div>
+                </form>
+            </div>
+        @endif
     @endif
 
     <div>
@@ -63,6 +91,7 @@
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Name') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Email') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Status') }}</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Order') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signed') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signing link') }}</th>
                             @if ($document->status === DocumentStatus::Draft)
@@ -76,6 +105,7 @@
                                 <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{{ $signer->name }}</td>
                                 <td class="px-4 py-3 text-zinc-600 dark:text-zinc-300">{{ $signer->email }}</td>
                                 <td class="px-4 py-3 capitalize text-zinc-600 dark:text-zinc-300">{{ $signer->status->value }}</td>
+                                <td class="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">{{ $signer->signing_order }}</td>
                                 <td class="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">
                                     {{ $signer->signed_at?->format('M j, Y g:i A') ?? '—' }}
                                 </td>
@@ -95,15 +125,26 @@
                                 </td>
                                 @if ($document->status === DocumentStatus::Draft)
                                     <td class="px-4 py-3 text-right">
-                                        <flux:button
-                                            size="sm"
-                                            variant="ghost"
-                                            type="button"
-                                            wire:click="removeSigner({{ $signer->id }})"
-                                            wire:confirm="{{ __('Remove this signer?') }}"
-                                        >
-                                            {{ __('Remove') }}
-                                        </flux:button>
+                                        <div class="flex justify-end gap-2">
+                                            <flux:button size="sm" variant="ghost" type="button" wire:click="moveSignerUp({{ $signer->id }})">
+                                                {{ __('Up') }}
+                                            </flux:button>
+                                            <flux:button size="sm" variant="ghost" type="button" wire:click="moveSignerDown({{ $signer->id }})">
+                                                {{ __('Down') }}
+                                            </flux:button>
+                                            <flux:button size="sm" variant="ghost" type="button" wire:click="startEditingSigner({{ $signer->id }})">
+                                                {{ __('Edit') }}
+                                            </flux:button>
+                                            <flux:button
+                                                size="sm"
+                                                variant="ghost"
+                                                type="button"
+                                                wire:click="removeSigner({{ $signer->id }})"
+                                                wire:confirm="{{ __('Remove this signer?') }}"
+                                            >
+                                                {{ __('Remove') }}
+                                            </flux:button>
+                                        </div>
                                     </td>
                                 @endif
                             </tr>

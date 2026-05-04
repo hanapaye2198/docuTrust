@@ -17,11 +17,13 @@ class Signature extends Model
     protected $fillable = [
         'document_id',
         'signer_id',
+        'signer_certificate_id',
         'signature_field_id',
         'signature_path',
         'signature_value',
         'signature_hash',
         'public_key_fingerprint',
+        'signature_algorithm',
         'position_data',
     ];
 
@@ -49,6 +51,14 @@ class Signature extends Model
     public function signer(): BelongsTo
     {
         return $this->belongsTo(DocumentSigner::class, 'signer_id');
+    }
+
+    /**
+     * @return BelongsTo<SignerCertificate, $this>
+     */
+    public function signerCertificate(): BelongsTo
+    {
+        return $this->belongsTo(SignerCertificate::class);
     }
 
     /**

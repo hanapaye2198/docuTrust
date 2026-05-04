@@ -13,7 +13,7 @@ use Illuminate\View\View;
 
 class DocumentPrepareController extends Controller
 {
-    public function show(Document $document): View
+    public function show(Document $document): View|RedirectResponse
     {
         $this->authorize('update', $document);
 
@@ -23,16 +23,29 @@ class DocumentPrepareController extends Controller
 
         $document->loadMissing(['documentSigners' => fn ($q) => $q->orderBy('signing_order')]);
 
-        $firstSignerId = $document->documentSigners
-            ->pluck('id')
-            ->filter(fn (mixed $id): bool => is_int($id) || ctype_digit((string) $id))
-            ->map(fn (mixed $id): int => (int) $id)
-            ->first();
+        if (! $document->hasDocumentSigners()) {
+            return redirect()
+                ->route('documents.show', $document)
+                ->with('error', __('Add at least one signer before preparing fields.'));
+        }
+
+        $signers = $document->documentSigners
+            ->map(function ($signer): array {
+                return [
+                    'id' => (int) $signer->id,
+                    'name' => (string) $signer->name,
+                    'email' => (string) $signer->email,
+                ];
+            })
+            ->values();
+
+        $firstSignerId = $signers->first()['id'] ?? null;
 
         return view('documents.prepare', [
             'document' => $document,
-            'pdfUrl' => route('documents.stream', $document),
+            'pdfUrl' => route('documents.stream', $document, false),
             'firstSignerId' => $firstSignerId,
+            'signers' => $signers,
             'initialFields' => $document->signatureFields()
                 ->orderBy('id')
                 ->get()
@@ -62,6 +75,10 @@ class DocumentPrepareController extends Controller
         $ip = (string) $request->ip();
 
         DB::transaction(function () use ($document, $fields, $ip): void {
+            $document->update([
+                'prepared_pdf_path' => null,
+                'final_pdf_path' => null,
+            ]);
             $document->signatureFields()->delete();
 
             foreach ($fields as $field) {

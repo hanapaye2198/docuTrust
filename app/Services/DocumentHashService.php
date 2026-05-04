@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Document;
 use App\Models\DocumentHash;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -79,6 +80,74 @@ class DocumentHashService
         return $this->blockchainProofService->verifyTransaction($transactionId);
     }
 
+    /**
+     * @return array{
+     *   status: 'verified'|'failed'|'not_available',
+     *   anchored: bool,
+     *   transaction_id: string|null,
+     *   transaction_matches: bool|null,
+     *   block_number: int|null,
+     *   anchored_at: string|null,
+     *   submitted_by: string|null,
+     *   message: string
+     * }
+     */
+    public function verifyStoredProof(DocumentHash $documentHash): array
+    {
+        if (! is_string($documentHash->transaction_id) || $documentHash->transaction_id === '') {
+            return [
+                'status' => 'not_available',
+                'anchored' => false,
+                'transaction_id' => null,
+                'transaction_matches' => null,
+                'block_number' => null,
+                'anchored_at' => null,
+                'submitted_by' => null,
+                'message' => 'No blockchain transaction is recorded for this document.',
+            ];
+        }
+
+        try {
+            $result = $this->blockchainProofService->verifyDocumentHash($documentHash->hash, $documentHash->transaction_id);
+
+            $anchoredAt = is_numeric($result['proof_timestamp'])
+                ? CarbonImmutable::createFromTimestampUTC((int) $result['proof_timestamp'])->toDateTimeString()
+                : null;
+
+            $isVerified = $result['exists'] && $result['transaction_matches'] !== false;
+
+            return [
+                'status' => $isVerified ? 'verified' : 'failed',
+                'anchored' => $result['exists'],
+                'transaction_id' => $documentHash->transaction_id,
+                'transaction_matches' => $result['transaction_matches'],
+                'block_number' => is_numeric($result['block_number']) ? (int) $result['block_number'] : null,
+                'anchored_at' => $anchoredAt,
+                'submitted_by' => is_string($result['submitted_by']) && $result['submitted_by'] !== '' ? $result['submitted_by'] : null,
+                'message' => $this->blockchainVerificationMessage($result),
+            ];
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->error('Blockchain proof verification failed', [
+                'document_hash_id' => $documentHash->id,
+                'document_id' => $documentHash->document_id,
+                'transaction_id' => $documentHash->transaction_id,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            return [
+                'status' => 'failed',
+                'anchored' => false,
+                'transaction_id' => $documentHash->transaction_id,
+                'transaction_matches' => null,
+                'block_number' => null,
+                'anchored_at' => null,
+                'submitted_by' => null,
+                'message' => 'Unable to verify blockchain proof right now.',
+            ];
+        }
+    }
+
     private function anchorHashOnBlockchain(string $hash): ?string
     {
         try {
@@ -92,5 +161,21 @@ class DocumentHashService
 
             return null;
         }
+    }
+
+    /**
+     * @param  array{exists: bool, transaction_matches: bool|null, block_number: int|null, proof_timestamp: int|null, submitted_by: string|null}  $result
+     */
+    private function blockchainVerificationMessage(array $result): string
+    {
+        if (! $result['exists']) {
+            return 'Document hash was not found on-chain.';
+        }
+
+        if ($result['transaction_matches'] === false) {
+            return 'Document hash exists on-chain, but the stored transaction does not match the blockchain record.';
+        }
+
+        return 'Document hash is anchored on-chain and matches the recorded transaction.';
     }
 }

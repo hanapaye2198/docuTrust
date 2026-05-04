@@ -72,6 +72,14 @@ class DocumentSigner extends Model
     }
 
     /**
+     * @return HasMany<SignerCertificate, $this>
+     */
+    public function signerCertificates(): HasMany
+    {
+        return $this->hasMany(SignerCertificate::class);
+    }
+
+    /**
      * @return HasMany<SignatureField, $this>
      */
     public function signatureFields(): HasMany

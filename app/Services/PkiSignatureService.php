@@ -11,17 +11,14 @@ class PkiSignatureService
      */
     public function generateKeyPair(): array
     {
-        $resource = openssl_pkey_new([
-            'private_key_bits' => 2048,
-            'private_key_type' => OPENSSL_KEYTYPE_RSA,
-        ]);
+        $resource = openssl_pkey_new($this->opensslKeyOptions());
 
         if ($resource === false) {
             throw new RuntimeException('Unable to generate signing key pair.');
         }
 
         $privateKey = '';
-        $privateKeyExported = openssl_pkey_export($resource, $privateKey);
+        $privateKeyExported = openssl_pkey_export($resource, $privateKey, null, $this->opensslKeyOptions());
         $details = openssl_pkey_get_details($resource);
 
         if (! $privateKeyExported || $details === false || ! isset($details['key'])) {
@@ -81,5 +78,23 @@ class PkiSignatureService
         }
 
         return $normalizedHash;
+    }
+
+    /**
+     * @return array<string, int|string>
+     */
+    private function opensslKeyOptions(): array
+    {
+        $options = [
+            'private_key_bits' => 2048,
+            'private_key_type' => OPENSSL_KEYTYPE_RSA,
+        ];
+
+        $configPath = (string) config('docutrust.pki.openssl_config_path', '');
+        if ($configPath !== '' && is_file($configPath)) {
+            $options['config'] = $configPath;
+        }
+
+        return $options;
     }
 }

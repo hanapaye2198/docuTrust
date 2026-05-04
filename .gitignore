@@ -8,8 +8,11 @@
 /vendor
 .DS_Store
 .env
+.env.local
 .env.backup
 .env.production
+blockchain/.env
+blockchain-service/.env
 .phpactor.json
 .phpunit.result.cache
 Homestead.json

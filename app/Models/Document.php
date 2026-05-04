@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +25,8 @@ class Document extends Model
         'user_id',
         'title',
         'file_path',
+        'prepared_pdf_path',
+        'final_pdf_path',
         'files',
         'certificate_path',
         'status',
@@ -132,6 +135,75 @@ class Document extends Model
         }
 
         return null;
+    }
+
+    public function sourcePdfPath(): ?string
+    {
+        return $this->primaryPdfPath();
+    }
+
+    public function activeSigningPdfPath(): ?string
+    {
+        return $this->prepared_pdf_path ?: $this->sourcePdfPath();
+    }
+
+    public function previewPdfPath(): ?string
+    {
+        return $this->final_pdf_path ?: $this->prepared_pdf_path ?: $this->sourcePdfPath();
+    }
+
+    public function hasDocumentSigners(): bool
+    {
+        if ($this->relationLoaded('documentSigners')) {
+            return $this->documentSigners->isNotEmpty();
+        }
+
+        return $this->documentSigners()->exists();
+    }
+
+    public function hasSignatureFields(): bool
+    {
+        if ($this->relationLoaded('signatureFields')) {
+            return $this->signatureFields->isNotEmpty();
+        }
+
+        return $this->signatureFields()->exists();
+    }
+
+    /**
+     * @return EloquentCollection<int, DocumentSigner>
+     */
+    public function signersMissingFields(): EloquentCollection
+    {
+        if ($this->relationLoaded('documentSigners') && $this->relationLoaded('signatureFields')) {
+            $fieldSignerIds = $this->signatureFields
+                ->pluck('signer_id')
+                ->filter(fn ($id) => $id !== null)
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->all();
+
+            return $this->documentSigners
+                ->filter(fn (DocumentSigner $signer) => ! in_array($signer->id, $fieldSignerIds, true))
+                ->values();
+        }
+
+        return $this->documentSigners()
+            ->whereDoesntHave('signatureFields')
+            ->get();
+    }
+
+    public function canPrepareForSigning(): bool
+    {
+        return $this->status === DocumentStatus::Draft && $this->hasDocumentSigners();
+    }
+
+    public function canSendForSigning(): bool
+    {
+        return $this->status === DocumentStatus::Draft
+            && $this->hasDocumentSigners()
+            && $this->hasSignatureFields()
+            && $this->signersMissingFields()->isEmpty();
     }
 
     public function allSignersHaveSigned(): bool

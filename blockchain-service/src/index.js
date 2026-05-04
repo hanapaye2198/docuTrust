@@ -6,6 +6,7 @@ const app = express();
 app.use(express.json());
 
 const PORT = Number.parseInt(process.env.PORT ?? "3001", 10);
+const POLYGON_NETWORK = process.env.POLYGON_NETWORK ?? "amoy";
 const POLYGON_RPC_URL = process.env.POLYGON_RPC_URL ?? "";
 const POLYGON_PRIVATE_KEY = process.env.POLYGON_PRIVATE_KEY ?? "";
 const DOCUMENT_NOTARY_ADDRESS = process.env.DOCUMENT_NOTARY_ADDRESS ?? "";
@@ -19,7 +20,7 @@ const wallet = new Wallet(POLYGON_PRIVATE_KEY, provider);
 const notaryContract = new Contract(DOCUMENT_NOTARY_ADDRESS, DOCUMENT_NOTARY_ABI, wallet);
 
 app.get("/health", (request, response) => {
-  response.json({ status: "ok", network: "polygon-mumbai" });
+  response.json({ status: "ok", network: `polygon-${POLYGON_NETWORK}` });
 });
 
 app.post("/anchor", async (request, response) => {
@@ -44,19 +45,58 @@ app.post("/anchor", async (request, response) => {
 
 app.post("/verify", async (request, response) => {
   try {
-    const { transactionHash } = request.body ?? {};
-    if (!isHexString(transactionHash, 32) && !isHexString(transactionHash)) {
-      return response.status(422).json({ exists: false, message: "Invalid transaction hash format." });
+    const { transactionHash, hash } = request.body ?? {};
+    const hasTransactionHash = typeof transactionHash === "string" && transactionHash.trim() !== "";
+    const hasHash = typeof hash === "string" && hash.trim() !== "";
+
+    if (!hasTransactionHash && !hasHash) {
+      return response.status(422).json({ exists: false, message: "A transaction hash or document hash is required." });
     }
 
-    const receipt = await provider.getTransactionReceipt(transactionHash);
-    if (!receipt || receipt.status !== 1n) {
-      return response.json({ exists: false });
+    let transactionMatches = null;
+    let blockNumber = null;
+
+    if (hasTransactionHash) {
+      if (!isHexString(transactionHash, 32) && !isHexString(transactionHash)) {
+        return response.status(422).json({ exists: false, message: "Invalid transaction hash format." });
+      }
+
+      const receipt = await provider.getTransactionReceipt(transactionHash);
+      if (!receipt || receipt.status !== 1n) {
+        return response.json({ exists: false, transactionMatches: false });
+      }
+
+      transactionMatches = receipt.to?.toLowerCase() === DOCUMENT_NOTARY_ADDRESS.toLowerCase();
+      blockNumber = receipt.blockNumber;
     }
+
+    if (!hasHash) {
+      return response.json({
+        exists: transactionMatches === true,
+        transactionMatches,
+        blockNumber
+      });
+    }
+
+    const documentHash = normalizeHash(hash);
+    const exists = await notaryContract.documentHashExists(documentHash);
+
+    if (!exists) {
+      return response.json({
+        exists: false,
+        transactionMatches,
+        blockNumber
+      });
+    }
+
+    const proof = await notaryContract.getDocumentProof(documentHash);
 
     response.json({
-      exists: receipt.to?.toLowerCase() === DOCUMENT_NOTARY_ADDRESS.toLowerCase(),
-      blockNumber: receipt.blockNumber
+      exists: true,
+      transactionMatches,
+      blockNumber,
+      proofTimestamp: Number(proof.timestamp),
+      submittedBy: proof.submittedBy
     });
   } catch (error) {
     response.status(422).json({

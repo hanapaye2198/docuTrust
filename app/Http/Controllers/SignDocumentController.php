@@ -12,8 +12,10 @@ use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
+use App\Services\DocumentPdfStampingService;
 use App\Services\DocumentHashService;
 use App\Services\PkiSignatureService;
+use App\Services\SignerCertificateService;
 use App\Services\SignatureAuditLogger;
 use App\Support\PublicPdfStream;
 use Illuminate\Http\RedirectResponse;
@@ -83,10 +85,10 @@ class SignDocumentController extends Controller
 
         $document = Document::query()->findOrFail($signer->document_id);
 
-        return PublicPdfStream::inlineResponse($document->primaryPdfPath());
+        return PublicPdfStream::inlineResponse($document->activeSigningPdfPath());
     }
 
-    public function sign(string $token): RedirectResponse|Response
+    public function sign(string $token, DocumentPdfStampingService $documentPdfStampingService): RedirectResponse|Response
     {
         try {
             $signer = $this->resolveSignerFromToken($token);
@@ -128,9 +130,10 @@ class SignDocumentController extends Controller
 
             if ($document->allSignersHaveSigned()) {
                 $document->update(['status' => DocumentStatus::Completed]);
+                $documentPdfStampingService->generateFinalPdf($document->fresh());
                 $completedDocument = $document->fresh();
                 SignatureAuditLogger::documentCompleted($completedDocument, (string) request()->ip());
-                GenerateCertificateJob::dispatch($completedDocument->id);
+                GenerateCertificateJob::dispatchSync($completedDocument->id);
                 event(new DocumentCompleted($completedDocument));
             }
 
@@ -159,7 +162,9 @@ class SignDocumentController extends Controller
         StoreDocumentSignatureRequest $request,
         string $token,
         DocumentHashService $documentHashService,
+        DocumentPdfStampingService $documentPdfStampingService,
         PkiSignatureService $pkiSignatureService,
+        SignerCertificateService $signerCertificateService,
     ): RedirectResponse|Response
     {
         try {
@@ -190,6 +195,7 @@ class SignDocumentController extends Controller
             }
 
             $this->ensureSignerKeyPair($signer, $pkiSignatureService);
+            $signerCertificate = $signerCertificateService->getOrIssueForSigner($signer->fresh());
 
             if (! is_string($signer->signing_private_key) || $signer->signing_private_key === '') {
                 throw new \RuntimeException('Signer private key unavailable.');
@@ -210,17 +216,19 @@ class SignDocumentController extends Controller
             Signature::query()->create([
                 'document_id' => $document->id,
                 'signer_id' => $signer->id,
+                'signer_certificate_id' => $signerCertificate->id,
                 'signature_field_id' => $field->id,
-                'signature_path' => null,
+                'signature_path' => $this->storeSubmittedSignatureImage($request->validated('signature_image')),
                 'signature_value' => $signatureValue,
                 'signature_hash' => $documentHash,
                 'public_key_fingerprint' => $pkiSignatureService->fingerprint($signer->signing_public_key),
+                'signature_algorithm' => 'RSA-SHA256',
                 'position_data' => null,
             ]);
 
             SignatureAuditLogger::fieldSigned($document, $signer, (string) $request->ip());
 
-            $this->completeSignerIfAllFieldsSigned($signer, $document);
+            $this->completeSignerIfAllFieldsSigned($signer, $document, $documentPdfStampingService);
 
             return redirect()->route('sign.show', $this->signerRouteToken($signer))
                 ->with('status', __('Signature saved.'));
@@ -369,7 +377,7 @@ class SignDocumentController extends Controller
         $signer->refresh();
     }
 
-    private function completeSignerIfAllFieldsSigned(DocumentSigner $signer, Document $document): void
+    private function completeSignerIfAllFieldsSigned(DocumentSigner $signer, Document $document, DocumentPdfStampingService $documentPdfStampingService): void
     {
         $fieldIds = $document->signatureFields()
             ->where('signer_id', $signer->id)
@@ -398,10 +406,33 @@ class SignDocumentController extends Controller
 
         if ($document->allSignersHaveSigned()) {
             $document->update(['status' => DocumentStatus::Completed]);
+            $documentPdfStampingService->generateFinalPdf($document->fresh());
             $completedDocument = $document->fresh();
             SignatureAuditLogger::documentCompleted($completedDocument, (string) request()->ip());
-            GenerateCertificateJob::dispatch($completedDocument->id);
+            GenerateCertificateJob::dispatchSync($completedDocument->id);
             event(new DocumentCompleted($completedDocument));
         }
+    }
+
+    private function storeSubmittedSignatureImage(?string $dataUrl): ?string
+    {
+        if (! is_string($dataUrl) || $dataUrl === '') {
+            return null;
+        }
+
+        if (! preg_match('/^data:image\/(?P<type>png|jpeg|jpg|webp);base64,(?P<data>.+)$/', $dataUrl, $matches)) {
+            return null;
+        }
+
+        $binary = base64_decode((string) $matches['data'], true);
+        if ($binary === false) {
+            return null;
+        }
+
+        $extension = $matches['type'] === 'jpeg' ? 'jpg' : (string) $matches['type'];
+        $path = 'signatures/'.\Illuminate\Support\Str::uuid()->toString().'.'.$extension;
+        Storage::disk($this->secureDiskName())->put($path, $binary);
+
+        return $path;
     }
 }

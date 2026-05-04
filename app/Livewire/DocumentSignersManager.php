@@ -21,6 +21,12 @@ class DocumentSignersManager extends Component
 
     public string $email = '';
 
+    public ?int $editingSignerId = null;
+
+    public string $editingName = '';
+
+    public string $editingEmail = '';
+
     /**
      * @var array<int, array{id: int, name: string, email: string}>
      */
@@ -48,8 +54,10 @@ class DocumentSignersManager extends Component
             'email' => ['required', 'email', 'max:255'],
         ]);
 
+        $normalizedEmail = strtolower($validated['email']);
+
         $exists = $document->documentSigners()
-            ->where('email', $validated['email'])
+            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
             ->exists();
 
         if ($exists) {
@@ -62,17 +70,76 @@ class DocumentSignersManager extends Component
 
         $document->documentSigners()->create([
             'name' => $validated['name'],
-            'email' => $validated['email'],
+            'email' => $normalizedEmail,
             'access_token' => (string) Str::uuid(),
             'status' => DocumentSignerStatus::Pending,
             'signing_order' => $nextOrder > 0 ? $nextOrder : 1,
             'expires_at' => null,
         ]);
 
-        $this->ensureContactForSigner($document->user_id, $validated['name'], $validated['email']);
+        $this->ensureContactForSigner($document->user_id, $validated['name'], $normalizedEmail);
 
         $this->reset('name', 'email');
         $this->contactSuggestions = [];
+        $this->dispatch('document-updated');
+    }
+
+    public function startEditingSigner(int $signerId): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Draft) {
+            return;
+        }
+
+        $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
+
+        $this->editingSignerId = $signer->id;
+        $this->editingName = $signer->name;
+        $this->editingEmail = $signer->email;
+    }
+
+    public function cancelEditingSigner(): void
+    {
+        $this->reset('editingSignerId', 'editingName', 'editingEmail');
+    }
+
+    public function saveSignerEdits(): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Draft || $this->editingSignerId === null) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'editingName' => ['required', 'string', 'max:255'],
+            'editingEmail' => ['required', 'email', 'max:255'],
+        ]);
+
+        $normalizedEmail = strtolower($validated['editingEmail']);
+
+        $exists = $document->documentSigners()
+            ->whereKeyNot($this->editingSignerId)
+            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
+            ->exists();
+
+        if ($exists) {
+            $this->addError('editingEmail', __('This email is already a signer for this document.'));
+
+            return;
+        }
+
+        $signer = $document->documentSigners()->whereKey($this->editingSignerId)->firstOrFail();
+        $signer->update([
+            'name' => $validated['editingName'],
+            'email' => $normalizedEmail,
+        ]);
+
+        $this->ensureContactForSigner($document->user_id, $validated['editingName'], $normalizedEmail);
+        $this->reset('editingSignerId', 'editingName', 'editingEmail');
         $this->dispatch('document-updated');
     }
 
@@ -181,8 +248,19 @@ class DocumentSignersManager extends Component
 
         $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
         $signer->delete();
+        $this->normalizeSigningOrder($document);
 
         $this->dispatch('document-updated');
+    }
+
+    public function moveSignerUp(int $signerId): void
+    {
+        $this->moveSigner($signerId, -1);
+    }
+
+    public function moveSignerDown(int $signerId): void
+    {
+        $this->moveSigner($signerId, 1);
     }
 
     public function render(): View
@@ -202,5 +280,53 @@ class DocumentSignersManager extends Component
     protected function resolveDocument(): Document
     {
         return Document::query()->findOrFail($this->documentId);
+    }
+
+    protected function moveSigner(int $signerId, int $direction): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Draft) {
+            return;
+        }
+
+        $signers = $document->documentSigners()
+            ->orderBy('signing_order')
+            ->orderBy('id')
+            ->get()
+            ->values();
+
+        $index = $signers->search(fn (DocumentSigner $signer): bool => $signer->id === $signerId);
+        if (! is_int($index)) {
+            return;
+        }
+
+        $swapIndex = $index + $direction;
+        if ($swapIndex < 0 || $swapIndex >= $signers->count()) {
+            return;
+        }
+
+        $current = $signers[$index];
+        $swap = $signers[$swapIndex];
+
+        $currentOrder = $current->signing_order;
+        $current->update(['signing_order' => $swap->signing_order]);
+        $swap->update(['signing_order' => $currentOrder]);
+
+        $this->normalizeSigningOrder($document);
+        $this->dispatch('document-updated');
+    }
+
+    protected function normalizeSigningOrder(Document $document): void
+    {
+        $document->documentSigners()
+            ->orderBy('signing_order')
+            ->orderBy('id')
+            ->get()
+            ->values()
+            ->each(function (DocumentSigner $signer, int $index): void {
+                $signer->update(['signing_order' => $index + 1]);
+            });
     }
 }

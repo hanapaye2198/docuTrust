@@ -1,371 +1,1008 @@
-const PDF_JS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-const PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-const FABRIC_JS = 'https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js';
+import { ensurePrepareAssets } from './document-prepare/assets';
+import { getFieldConfig } from './document-prepare/field-types';
+import {
+    createFieldGroup,
+    normalizedPositionFromObject,
+    restoreSelectionByClientId,
+    serializeCanvasFields,
+} from './document-prepare/fabric-fields';
+import {
+    canvasContainsClientPoint,
+    enforceObjectMinimumSize,
+    keepObjectInsideCanvas,
+    normalizedPositionFromClientPoint,
+    resolveRenderScale,
+    resolveVisiblePosition,
+    snapObjectToGuides,
+} from './document-prepare/geometry';
 
-let librariesPromise = null;
-let prepareRunCounter = 0;
+let activePrepareSession = null;
 
-function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const existing = document.querySelector(`script[src="${src}"]`);
-        if (existing) {
-            if (existing.dataset.loaded === '1') {
-                resolve();
-                return;
-            }
-            existing.addEventListener('load', () => resolve(), { once: true });
-            existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+export function initTemplatePreparePage() {
+    const cfgEl = document.getElementById('template-prepare-config');
+
+    if (!cfgEl) {
+        activePrepareSession?.destroy();
+        activePrepareSession = null;
+
+        return;
+    }
+
+    if (activePrepareSession?.owns(cfgEl)) {
+        return;
+    }
+
+    activePrepareSession?.destroy();
+
+    const session = createPrepareSession(cfgEl);
+    activePrepareSession = session;
+
+    session.init().catch((error) => {
+        if (activePrepareSession !== session || session.isDestroyed()) {
             return;
         }
-        const s = document.createElement('script');
-        s.src = src;
-        s.crossOrigin = 'anonymous';
-        s.onload = () => {
-            s.dataset.loaded = '1';
-            resolve();
-        };
-        s.onerror = () => reject(new Error(`Failed to load ${src}`));
-        document.head.appendChild(s);
+
+        console.error(error);
+        session.showLoadError();
     });
 }
 
-function ensurePdfLibraries() {
-    if (window.pdfjsLib && window.fabric) {
-        return Promise.resolve();
-    }
-    if (!librariesPromise) {
-        librariesPromise = loadScript(PDF_JS)
-            .then(() => {
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
-                return loadScript(FABRIC_JS);
-            })
-            .catch((e) => {
-                librariesPromise = null;
-                throw e;
-            });
-    }
-    return librariesPromise;
-}
-
-function showTemplatePrepareError(message) {
-    const el = document.getElementById('pdf-load-error');
-    if (el) {
-        el.textContent = message;
-        el.classList.remove('hidden');
-    }
-}
-
-export function initTemplatePreparePage() {
-    const runId = ++prepareRunCounter;
-    const cfgEl = document.getElementById('template-prepare-config');
-    if (!cfgEl) {
-        return;
-    }
-
+function createPrepareSession(cfgEl) {
     let config;
     try {
-        config = JSON.parse(cfgEl.textContent);
+        config = JSON.parse(cfgEl.textContent || '{}');
     } catch {
-        return;
+        config = {};
     }
 
-    if (typeof window.__docutrustTemplatePrepareCleanup === 'function') {
-        window.__docutrustTemplatePrepareCleanup();
-        window.__docutrustTemplatePrepareCleanup = null;
-    }
+    const msgs = config.messages || {};
+    const debugPrefix = '[prepare-fields]';
+    const abortController = new AbortController();
+    const { signal } = abortController;
 
+    const pdfUrl = config.pdfUrl;
+    const firstSignerId = config.firstSignerId;
+    const signers = Array.isArray(config.signers) ? config.signers : [];
+    const normalizedFirstSignerId = Number(firstSignerId) > 0 ? Number(firstSignerId) : null;
+    const initialFields = Array.isArray(config.initialFields) ? config.initialFields : [];
     const pdfCanvas = document.getElementById('pdf-canvas');
     const fabricEl = document.getElementById('fabric-canvas');
     const pdfShell = document.getElementById('pdf-shell');
-    const msgs = config.messages || {};
+    const pdfPanel = pdfShell?.closest('.ui-panel');
+    const pdfLoadError = document.getElementById('pdf-load-error');
 
-    if (!pdfCanvas || !fabricEl || !pdfShell) {
-        showTemplatePrepareError(msgs.missingDom || '');
-        return;
+    const pageIndicator = document.getElementById('page-indicator');
+    const btnPrevPage = document.getElementById('btn-prev-page');
+    const btnNextPage = document.getElementById('btn-next-page');
+    const btnSaveFields = document.getElementById('btn-save-fields');
+    const editorStatus = document.getElementById('editor-status');
+    const fieldSigner = document.getElementById('field-signer');
+    const fieldPaletteButtons = Array.from(document.querySelectorAll('.field-palette-btn'));
+    const fieldInspectorBody = document.getElementById('field-inspector-body');
+    const fieldInspectorEmpty = document.getElementById('field-inspector-empty');
+    const selectedFieldType = document.getElementById('selected-field-type');
+    const selectedFieldSigner = document.getElementById('selected-field-signer');
+    const btnDuplicateField = document.getElementById('btn-duplicate-field');
+    const btnDeleteField = document.getElementById('btn-delete-field');
+    const btnBringForward = document.getElementById('btn-bring-forward');
+    const btnSendBackward = document.getElementById('btn-send-backward');
+    const saveFieldsForm = document.getElementById('save-fields-form');
+    const fieldsPayload = document.getElementById('fields-payload');
+
+    let fabricCanvas = null;
+    let pdfDoc = null;
+    let loadingTask = null;
+    let activeRenderTask = null;
+    let currentPage = 1;
+    let totalPages = 1;
+    let isRenderingPage = true;
+    let hasUnsavedChanges = false;
+    let isSaving = false;
+    let dragFieldType = null;
+    let selectedFieldClientId = null;
+    let clientFieldCounter = 0;
+    let copiedField = null;
+    let currentSnapGuide = null;
+    let resizeTimer = null;
+    let renderSequence = 0;
+    let destroyed = false;
+
+    const pageFields = new Map();
+    const signerById = new Map(signers.map((signer) => [Number(signer.id), signer]));
+
+    function debugLog(message, payload) {
+        console.log(debugPrefix, message, payload ?? '');
     }
 
-    const abort = new AbortController();
-    let fabricCanvas = null;
-    let loadingTask = null;
-    let renderTask = null;
+    function owns(node) {
+        return cfgEl === node;
+    }
 
-    window.__docutrustTemplatePrepareCleanup = () => {
-        abort.abort();
-        try {
-            if (renderTask && typeof renderTask.cancel === 'function') {
-                renderTask.cancel();
-            }
-        } catch {
-            //
-        }
-        try {
-            if (loadingTask && typeof loadingTask.destroy === 'function') {
-                loadingTask.destroy();
-            }
-        } catch {
-            //
-        }
-        renderTask = null;
-        loadingTask = null;
-        try {
-            if (fabricCanvas && fabricCanvas.lowerCanvasEl?.isConnected) {
-                fabricCanvas.dispose();
-            }
-        } catch {
-            //
-        }
-        fabricCanvas = null;
-    };
+    function isDestroyed() {
+        return destroyed;
+    }
 
-    ensurePdfLibraries()
-        .then(() => {
-            if (typeof window.pdfjsLib === 'undefined' || typeof window.fabric === 'undefined') {
-                showTemplatePrepareError(msgs.libs || '');
+    function listen(target, eventName, handler, options = undefined) {
+        if (!target) {
+            return;
+        }
+
+        const listenerOptions =
+            typeof options === 'boolean'
+                ? { capture: options, signal }
+                : { ...(options || {}), signal };
+
+        target.addEventListener(eventName, handler, listenerOptions);
+    }
+
+    function selectedSignerId() {
+        const value = fieldSigner ? Number(fieldSigner.value) : normalizedFirstSignerId;
+        return Number.isFinite(value) && value > 0 ? value : normalizedFirstSignerId;
+    }
+
+    function hasAvailableSigner() {
+        return Number.isFinite(selectedSignerId()) && selectedSignerId() > 0;
+    }
+
+    function signerNameFor(id) {
+        return signerById.get(Number(id))?.name || 'Signer';
+    }
+
+    function activeFieldObject() {
+        if (!fabricCanvas) {
+            return null;
+        }
+
+        const active = fabricCanvas.getActiveObject();
+        return active && active.fieldType ? active : null;
+    }
+
+    function nextClientFieldId() {
+        clientFieldCounter += 1;
+        return `field-${clientFieldCounter}`;
+    }
+
+    function updateEditorStatus() {
+        if (!editorStatus || destroyed) {
+            return;
+        }
+
+        let text = msgs.saved || 'Saved';
+        let classes = 'rounded-full px-2.5 py-1 text-xs font-medium ';
+
+        if (isSaving) {
+            text = msgs.saving || 'Saving...';
+            classes += 'border border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-100';
+        } else if (hasUnsavedChanges) {
+            text = msgs.unsaved || 'Unsaved changes';
+            classes += 'border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100';
+        } else {
+            classes += 'border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100';
+        }
+
+        editorStatus.className = classes;
+        editorStatus.textContent = text;
+    }
+
+    function markDirty() {
+        hasUnsavedChanges = true;
+        updateEditorStatus();
+    }
+
+    function markSaved() {
+        hasUnsavedChanges = false;
+        isSaving = false;
+        updateEditorStatus();
+    }
+
+    function setFieldInspectorState(target) {
+        if (!fieldInspectorBody || !fieldInspectorEmpty || !selectedFieldType || !selectedFieldSigner || destroyed) {
+            return;
+        }
+
+        if (!target) {
+            fieldInspectorBody.classList.add('hidden');
+            fieldInspectorEmpty.textContent = msgs.none || 'None';
+            return;
+        }
+
+        fieldInspectorBody.classList.remove('hidden');
+        fieldInspectorEmpty.textContent = target.clientFieldId || msgs.selected || 'Selected';
+        selectedFieldType.value = target.fieldType;
+        selectedFieldSigner.value = String(target.signerId);
+    }
+
+    function clearSnapGuide() {
+        if (!currentSnapGuide || !fabricCanvas) {
+            return;
+        }
+
+        fabricCanvas.remove(currentSnapGuide);
+        currentSnapGuide = null;
+    }
+
+    function showPdfLoadError(message) {
+        if (!pdfLoadError || destroyed) {
+            return;
+        }
+
+        pdfLoadError.textContent = message;
+        pdfLoadError.classList.remove('hidden');
+    }
+
+    function hidePdfLoadError() {
+        if (!pdfLoadError || destroyed) {
+            return;
+        }
+
+        pdfLoadError.classList.add('hidden');
+    }
+
+    function showLoadError() {
+        showPdfLoadError(msgs.loadFailed || 'Unable to load document preview. Please refresh the page and try again.');
+    }
+
+    function setShellDropHighlight(active) {
+        if (!pdfShell || destroyed) {
+            return;
+        }
+
+        pdfShell.classList.toggle('ring-2', active);
+        pdfShell.classList.toggle('ring-teal-400', active);
+    }
+
+    function buildFieldGroup(type, signerId, position, clientFieldId) {
+        return createFieldGroup({
+            fabric: window.fabric,
+            fabricCanvas,
+            type,
+            signerId,
+            signerName: signerNameFor(signerId),
+            position,
+            pageNumber: currentPage,
+            clientFieldId: clientFieldId || nextClientFieldId(),
+        });
+    }
+
+    function saveCurrentPageFields() {
+        if (!fabricCanvas || destroyed) {
+            return;
+        }
+
+        pageFields.set(currentPage, serializeCanvasFields(fabricCanvas));
+    }
+
+    function loadCurrentPageFields() {
+        if (!fabricCanvas || destroyed) {
+            return;
+        }
+
+        fabricCanvas.clear();
+
+        const fields = pageFields.get(currentPage) || [];
+        fields.forEach((field) => {
+            const group = buildFieldGroup(field.type, field.signer_id, field.position_data, field.client_id);
+            fabricCanvas.add(group);
+        });
+
+        restoreSelectionByClientId(fabricCanvas, selectedFieldClientId);
+    }
+
+    function replaceActiveField(updates) {
+        const active = activeFieldObject();
+        if (!active) {
+            return;
+        }
+
+        const normalized = normalizedPositionFromObject(active, fabricCanvas);
+        if (!normalized) {
+            return;
+        }
+
+        const fieldType = updates?.type || active.fieldType;
+        const signerId = updates?.signerId || active.signerId;
+        const clientFieldId = active.clientFieldId;
+
+        fabricCanvas.remove(active);
+
+        const replacement = buildFieldGroup(fieldType, signerId, normalized, clientFieldId);
+        fabricCanvas.add(replacement);
+        fabricCanvas.setActiveObject(replacement);
+        selectedFieldClientId = replacement.clientFieldId;
+
+        saveCurrentPageFields();
+        markDirty();
+        setFieldInspectorState(replacement);
+        fabricCanvas.requestRenderAll();
+    }
+
+    function deleteActiveField() {
+        const active = activeFieldObject();
+        if (!active) {
+            return;
+        }
+
+        fabricCanvas.remove(active);
+        fabricCanvas.discardActiveObject();
+        selectedFieldClientId = null;
+
+        saveCurrentPageFields();
+        markDirty();
+        setFieldInspectorState(null);
+        fabricCanvas.requestRenderAll();
+    }
+
+    function duplicateField(target) {
+        if (!target || !fabricCanvas) {
+            return;
+        }
+
+        const normalized = normalizedPositionFromObject(target, fabricCanvas);
+        if (!normalized) {
+            return;
+        }
+
+        const copy = buildFieldGroup(
+            target.fieldType,
+            target.signerId,
+            {
+                x: Math.min(0.99 - normalized.width, normalized.x + 0.02),
+                y: Math.min(0.99 - normalized.height, normalized.y + 0.02),
+                width: normalized.width,
+                height: normalized.height,
+            },
+            nextClientFieldId(),
+        );
+
+        fabricCanvas.add(copy);
+        fabricCanvas.setActiveObject(copy);
+        selectedFieldClientId = copy.clientFieldId;
+
+        saveCurrentPageFields();
+        markDirty();
+        setFieldInspectorState(copy);
+        fabricCanvas.requestRenderAll();
+    }
+
+    function moveActiveFieldLayer(direction) {
+        const active = activeFieldObject();
+        if (!active || !fabricCanvas) {
+            return;
+        }
+
+        if (direction === 'forward') {
+            active.bringForward();
+        } else {
+            active.sendBackwards();
+        }
+
+        selectedFieldClientId = active.clientFieldId;
+        saveCurrentPageFields();
+        markDirty();
+        setFieldInspectorState(active);
+        fabricCanvas.requestRenderAll();
+    }
+
+    function addField(type, dropPoint) {
+        if (!hasAvailableSigner() || !fabricCanvas || isRenderingPage) {
+            debugLog('Add field blocked', {
+                firstSignerId,
+                normalizedFirstSignerId,
+                selectedSignerId: selectedSignerId(),
+                hasFabricCanvas: Boolean(fabricCanvas),
+                isRenderingPage,
+            });
+
+            if (!fabricCanvas || isRenderingPage) {
+                showPdfLoadError(msgs.previewLoading || 'Preview still loading. Please wait a second, then try again.');
+            } else if (!hasAvailableSigner()) {
+                showPdfLoadError(msgs.noSigner || 'No signer found. Add at least one signer first.');
+            }
+
+            return;
+        }
+
+        hidePdfLoadError();
+
+        const fieldConfig = getFieldConfig(type);
+        const width = fieldConfig.width;
+        const height = fieldConfig.height;
+        const visiblePosition = dropPoint
+            ? normalizedPositionFromClientPoint({
+                clientX: dropPoint.x,
+                clientY: dropPoint.y,
+                width,
+                height,
+                fabricEl,
+                pdfPanel,
+            })
+            : resolveVisiblePosition({ width, height, pdfPanel, fabricEl });
+
+        const signerId = selectedSignerId();
+        const field = buildFieldGroup(
+            type,
+            signerId,
+            {
+                x: visiblePosition.x,
+                y: visiblePosition.y,
+                width,
+                height,
+            },
+            nextClientFieldId(),
+        );
+
+        fabricCanvas.add(field);
+        fabricCanvas.setActiveObject(field);
+        selectedFieldClientId = field.clientFieldId;
+        fabricCanvas.requestRenderAll();
+
+        saveCurrentPageFields();
+        markDirty();
+
+        debugLog('Field added', {
+            type,
+            signerId,
+            page: currentPage,
+            position: visiblePosition,
+        });
+    }
+
+    function collectFields() {
+        const out = [];
+
+        saveCurrentPageFields();
+
+        pageFields.forEach((fields, pageNumber) => {
+            fields.forEach((field) => {
+                out.push({
+                    client_id: field.client_id,
+                    signer_id: field.signer_id,
+                    type: field.type,
+                    page_number: pageNumber,
+                    position_data: field.position_data,
+                });
+            });
+        });
+
+        return out;
+    }
+
+    function updatePageUi() {
+        if (destroyed) {
+            return;
+        }
+
+        if (pageIndicator) {
+            pageIndicator.textContent = `Page ${currentPage} / ${totalPages}`;
+        }
+
+        if (btnPrevPage) {
+            btnPrevPage.disabled = currentPage <= 1 || isRenderingPage;
+        }
+
+        if (btnNextPage) {
+            btnNextPage.disabled = currentPage >= totalPages || isRenderingPage;
+        }
+
+        const shouldDisableFieldButtons = !hasAvailableSigner() || isRenderingPage;
+
+        if (!hasAvailableSigner()) {
+            debugLog('Buttons disabled: missing first signer', { firstSignerId });
+        } else if (isRenderingPage) {
+            debugLog('Buttons disabled: page rendering');
+        }
+
+        fieldPaletteButtons.forEach((button) => {
+            button.disabled = shouldDisableFieldButtons;
+        });
+
+        if (fieldSigner) {
+            fieldSigner.disabled = shouldDisableFieldButtons;
+        }
+
+        if (btnSaveFields) {
+            btnSaveFields.disabled = shouldDisableFieldButtons;
+        }
+    }
+
+    function bindFabricCanvasEvents() {
+        if (!fabricCanvas) {
+            return;
+        }
+
+        fabricCanvas.on('selection:created', (event) => {
+            const target = event.selected?.[0] ?? null;
+            selectedFieldClientId = target?.clientFieldId ?? null;
+            setFieldInspectorState(target);
+        });
+
+        fabricCanvas.on('selection:updated', (event) => {
+            const target = event.selected?.[0] ?? null;
+            selectedFieldClientId = target?.clientFieldId ?? null;
+            setFieldInspectorState(target);
+        });
+
+        fabricCanvas.on('selection:cleared', () => {
+            selectedFieldClientId = null;
+            setFieldInspectorState(null);
+            clearSnapGuide();
+        });
+
+        fabricCanvas.on('object:moving', (event) => {
+            keepObjectInsideCanvas(event.target, fabricCanvas);
+        });
+
+        fabricCanvas.on('object:scaling', (event) => {
+            enforceObjectMinimumSize(event.target, fabricCanvas);
+            keepObjectInsideCanvas(event.target, fabricCanvas);
+        });
+
+        fabricCanvas.on('object:modified', () => {
+            currentSnapGuide = snapObjectToGuides({
+                target: activeFieldObject(),
+                fabric: window.fabric,
+                fabricCanvas,
+                currentSnapGuide,
+            });
+
+            clearSnapGuide();
+            saveCurrentPageFields();
+            markDirty();
+            setFieldInspectorState(activeFieldObject());
+        });
+
+        fabricCanvas.on('object:removed', () => {
+            saveCurrentPageFields();
+            markDirty();
+        });
+
+        fabricCanvas.on('object:added', saveCurrentPageFields);
+    }
+
+    function syncFabricOverlayLayout(width, height) {
+        if (!fabricCanvas) {
+            return;
+        }
+
+        const wrapper = fabricCanvas.wrapperEl;
+        const lowerCanvas = fabricCanvas.lowerCanvasEl;
+        const upperCanvas = fabricCanvas.upperCanvasEl;
+
+        if (wrapper) {
+            wrapper.style.position = 'absolute';
+            wrapper.style.left = '0';
+            wrapper.style.top = '0';
+            wrapper.style.width = `${width}px`;
+            wrapper.style.height = `${height}px`;
+            wrapper.style.zIndex = '20';
+        }
+
+        [lowerCanvas, upperCanvas].forEach((canvas) => {
+            if (!canvas) {
                 return;
             }
 
-            const { pdfjsLib, fabric } = window;
+            canvas.style.position = 'absolute';
+            canvas.style.left = '0';
+            canvas.style.top = '0';
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+        });
+    }
 
-            async function init() {
-                loadingTask = pdfjsLib.getDocument({ url: config.pdfUrl, withCredentials: true });
-                const pdf = await loadingTask.promise;
-                if (runId !== prepareRunCounter || abort.signal.aborted) {
-                    return;
-                }
-                const page = await pdf.getPage(1);
-                const scale = 1.5;
-                const rotation = page.rotate === 180 ? 0 : page.rotate;
-                const viewport = page.getViewport({ scale, rotation });
-                const ctx = pdfCanvas.getContext('2d');
-                if (!ctx) {
-                    throw new Error(msgs.missingDom || 'Canvas context unavailable.');
-                }
-                pdfCanvas.width = viewport.width;
-                pdfCanvas.height = viewport.height;
-                fabricEl.width = viewport.width;
-                fabricEl.height = viewport.height;
-                fabricEl.style.width = `${viewport.width}px`;
-                fabricEl.style.height = `${viewport.height}px`;
-                pdfShell.style.width = `${viewport.width}px`;
-                ctx.clearRect(0, 0, viewport.width, viewport.height);
+    async function renderPage(pageNumber) {
+        if (!pdfDoc || destroyed) {
+            return;
+        }
 
-                renderTask = page.render({ canvasContext: ctx, viewport });
-                await renderTask.promise;
-                if (runId !== prepareRunCounter || abort.signal.aborted) {
-                    return;
-                }
+        const requestId = ++renderSequence;
+        let renderTask = null;
 
-                fabricCanvas = new fabric.Canvas('fabric-canvas', {
+        isRenderingPage = true;
+        updatePageUi();
+
+        try {
+            debugLog('Rendering page', { pageNumber });
+
+            const page = await pdfDoc.getPage(pageNumber);
+            if (destroyed || requestId !== renderSequence) {
+                return;
+            }
+
+            const viewport = page.getViewport({
+                scale: resolveRenderScale(page, pdfPanel ? pdfPanel.clientWidth : 0),
+            });
+
+            const ctx = pdfCanvas?.getContext('2d');
+            if (!ctx || !pdfCanvas || !fabricEl || !pdfShell) {
+                throw new Error('Missing required DOM nodes');
+            }
+
+            pdfCanvas.width = viewport.width;
+            pdfCanvas.height = viewport.height;
+            fabricEl.width = viewport.width;
+            fabricEl.height = viewport.height;
+            fabricEl.style.width = `${viewport.width}px`;
+            fabricEl.style.height = `${viewport.height}px`;
+            pdfShell.style.width = `${viewport.width}px`;
+            pdfShell.style.height = `${viewport.height}px`;
+
+            activeRenderTask?.cancel?.();
+            renderTask = page.render({ canvasContext: ctx, viewport });
+            activeRenderTask = renderTask;
+            await renderTask.promise;
+
+            if (destroyed || requestId !== renderSequence) {
+                return;
+            }
+
+            activeRenderTask = null;
+
+            if (!fabricCanvas) {
+                fabricCanvas = new window.fabric.Canvas('fabric-canvas', {
                     width: viewport.width,
                     height: viewport.height,
                     selection: true,
+                    preserveObjectStacking: true,
                 });
-
-                const firstSignerRoleName = config.firstSignerRoleName;
-                const initialFields = config.initialFields || [];
-
-                function selectedRoleName() {
-                    const sel = document.getElementById('field-role');
-                    return sel ? sel.value : firstSignerRoleName;
-                }
-
-                function makeFieldGroup(type, roleName, position) {
-                    const w = fabricCanvas.getWidth();
-                    const h = fabricCanvas.getHeight();
-                    const left = position.x * w;
-                    const top = position.y * h;
-                    const width = position.width * w;
-                    const height = position.height * h;
-
-                    let fill = 'rgba(59, 130, 246, 0.12)';
-                    let stroke = '#2563eb';
-                    let label = 'Sign Here';
-                    let fillText = '#1d4ed8';
-                    if (type === 'text') {
-                        fill = 'rgba(234, 179, 8, 0.15)';
-                        stroke = '#ca8a04';
-                        label = 'Text';
-                        fillText = '#a16207';
-                    } else if (type === 'name') {
-                        fill = 'rgba(34, 197, 94, 0.15)';
-                        stroke = '#15803d';
-                        label = 'Name';
-                        fillText = '#15803d';
-                    } else if (type === 'date') {
-                        fill = 'rgba(139, 92, 246, 0.12)';
-                        stroke = '#6d28d9';
-                        label = 'Date';
-                        fillText = '#5b21b6';
-                    }
-
-                    const rect = new fabric.Rect({
-                        width,
-                        height,
-                        fill,
-                        stroke,
-                        strokeWidth: 2,
-                        rx: 4,
-                        ry: 4,
-                    });
-                    const text = new fabric.Text(label, {
-                        fontSize: Math.min(16, height * 0.35),
-                        fill: fillText,
-                        fontFamily: 'system-ui, sans-serif',
-                        originX: 'center',
-                        originY: 'center',
-                        left: width / 2,
-                        top: height / 2,
-                    });
-                    const sub = new fabric.Text(roleName, {
-                        fontSize: Math.min(11, height * 0.22),
-                        fill: '#64748b',
-                        fontFamily: 'system-ui, sans-serif',
-                        originX: 'center',
-                        originY: 'center',
-                        left: width / 2,
-                        top: height - Math.min(12, height * 0.2),
-                    });
-                    const group = new fabric.Group([rect, text, sub], {
-                        left,
-                        top,
-                        subTargetCheck: true,
-                    });
-                    group.fieldType = type;
-                    group.roleName = roleName;
-                    group.hasControls = false;
-                    group.lockRotation = true;
-                    group.set('lockScalingX', true);
-                    group.set('lockScalingY', true);
-                    return group;
-                }
-
-                function collectFields() {
-                    const out = [];
-                    const w = fabricCanvas.getWidth();
-                    const h = fabricCanvas.getHeight();
-                    fabricCanvas.getObjects().forEach((obj) => {
-                        if (!obj.fieldType) {
-                            return;
-                        }
-                        const br = obj.getBoundingRect(true);
-                        out.push({
-                            role_name: obj.roleName,
-                            type: obj.fieldType,
-                            position_data: {
-                                x: br.left / w,
-                                y: br.top / h,
-                                width: br.width / w,
-                                height: br.height / h,
-                            },
-                        });
-                    });
-                    return out;
-                }
-
-                initialFields.forEach((f) => {
-                    const g = makeFieldGroup(f.type, f.role_name, f.position_data);
-                    fabricCanvas.add(g);
-                });
-
-                document.getElementById('btn-add-signature')?.addEventListener(
-                    'click',
-                    () => {
-                        const rn = selectedRoleName();
-                        if (!rn || !fabricCanvas) {
-                            return;
-                        }
-                        const g = makeFieldGroup('signature', rn, {
-                            x: 0.08,
-                            y: 0.08,
-                            width: 0.28,
-                            height: 0.06,
-                        });
-                        fabricCanvas.add(g);
-                        fabricCanvas.setActiveObject(g);
-                    },
-                    { signal: abort.signal },
-                );
-
-                document.getElementById('btn-add-text')?.addEventListener(
-                    'click',
-                    () => {
-                        const rn = selectedRoleName();
-                        if (!rn || !fabricCanvas) {
-                            return;
-                        }
-                        const g = makeFieldGroup('text', rn, {
-                            x: 0.08,
-                            y: 0.18,
-                            width: 0.28,
-                            height: 0.06,
-                        });
-                        fabricCanvas.add(g);
-                        fabricCanvas.setActiveObject(g);
-                    },
-                    { signal: abort.signal },
-                );
-
-                document.getElementById('btn-add-name')?.addEventListener(
-                    'click',
-                    () => {
-                        const rn = selectedRoleName();
-                        if (!rn || !fabricCanvas) {
-                            return;
-                        }
-                        const g = makeFieldGroup('name', rn, {
-                            x: 0.08,
-                            y: 0.28,
-                            width: 0.28,
-                            height: 0.06,
-                        });
-                        fabricCanvas.add(g);
-                        fabricCanvas.setActiveObject(g);
-                    },
-                    { signal: abort.signal },
-                );
-
-                document.getElementById('btn-add-date')?.addEventListener(
-                    'click',
-                    () => {
-                        const rn = selectedRoleName();
-                        if (!rn || !fabricCanvas) {
-                            return;
-                        }
-                        const g = makeFieldGroup('date', rn, {
-                            x: 0.08,
-                            y: 0.38,
-                            width: 0.28,
-                            height: 0.06,
-                        });
-                        fabricCanvas.add(g);
-                        fabricCanvas.setActiveObject(g);
-                    },
-                    { signal: abort.signal },
-                );
-
-                document.getElementById('btn-save-fields')?.addEventListener(
-                    'click',
-                    () => {
-                        if (!fabricCanvas) {
-                            return;
-                        }
-                        const fields = collectFields();
-                        const payload = document.getElementById('fields-payload');
-                        const form = document.getElementById('save-fields-form');
-                        if (payload && form) {
-                            payload.value = JSON.stringify(fields);
-                            form.submit();
-                        }
-                    },
-                    { signal: abort.signal },
-                );
+                bindFabricCanvasEvents();
+                debugLog('Fabric canvas initialized');
+            } else {
+                fabricCanvas.setWidth(viewport.width);
+                fabricCanvas.setHeight(viewport.height);
             }
 
-            return init();
-        })
-        .catch((e) => {
-            console.error(e);
-            const base = msgs.loadPdf || '';
-            showTemplatePrepareError(base + (e && e.message ? ` ${e.message}` : ''));
+            syncFabricOverlayLayout(viewport.width, viewport.height);
+            loadCurrentPageFields();
+            fabricCanvas.requestRenderAll();
+        } catch (error) {
+            if (error?.name === 'RenderingCancelledException') {
+                return;
+            }
+
+            throw error;
+        } finally {
+            if (activeRenderTask === renderTask) {
+                activeRenderTask = null;
+            }
+
+            if (!destroyed && requestId === renderSequence) {
+                isRenderingPage = false;
+                updatePageUi();
+                debugLog('Rendering complete', { pageNumber, isRenderingPage });
+            }
+        }
+    }
+
+    function destroy() {
+        if (destroyed) {
+            return;
+        }
+
+        renderSequence += 1;
+        isRenderingPage = false;
+
+        if (resizeTimer) {
+            window.clearTimeout(resizeTimer);
+            resizeTimer = null;
+        }
+
+        activeRenderTask?.cancel?.();
+        loadingTask?.destroy?.();
+        dragFieldType = null;
+        clearSnapGuide();
+        setShellDropHighlight(false);
+
+        if (fabricCanvas) {
+            fabricCanvas.dispose();
+            fabricCanvas = null;
+        }
+
+        abortController.abort();
+        destroyed = true;
+
+        if (activePrepareSession === api) {
+            activePrepareSession = null;
+        }
+    }
+
+    async function init() {
+        if (!pdfCanvas || !fabricEl || !pdfShell) {
+            debugLog('Missing required DOM nodes');
+            return;
+        }
+
+        if (!pdfUrl) {
+            throw new Error('Missing PDF preview URL');
+        }
+
+        markSaved();
+        updatePageUi();
+
+        await ensurePrepareAssets(debugLog);
+        if (destroyed) {
+            return;
+        }
+
+        if (typeof window.pdfjsLib === 'undefined' || typeof window.fabric === 'undefined') {
+            debugLog('Asset load failed', {
+                hasPdfJs: typeof window.pdfjsLib !== 'undefined',
+                hasFabric: typeof window.fabric !== 'undefined',
+            });
+
+            throw new Error('PDF.js or Fabric.js failed to load');
+        }
+
+        loadingTask = window.pdfjsLib.getDocument({
+            url: pdfUrl,
+            withCredentials: true,
         });
+
+        pdfDoc = await loadingTask.promise;
+        if (destroyed) {
+            return;
+        }
+
+        totalPages = pdfDoc.numPages || 1;
+
+        initialFields.forEach((field) => {
+            const pageNumber = Number(field.page_number) > 0 ? Number(field.page_number) : 1;
+            if (!pageFields.has(pageNumber)) {
+                pageFields.set(pageNumber, []);
+            }
+
+            pageFields.get(pageNumber).push({
+                client_id: field.id ? `persisted-${field.id}` : nextClientFieldId(),
+                signer_id: field.signer_id,
+                type: field.type,
+                position_data: field.position_data,
+            });
+        });
+
+        await renderPage(currentPage);
+        if (destroyed) {
+            return;
+        }
+
+        hidePdfLoadError();
+
+        listen(btnPrevPage, 'click', async () => {
+            if (currentPage <= 1 || isRenderingPage) {
+                return;
+            }
+
+            saveCurrentPageFields();
+            currentPage -= 1;
+            await renderPage(currentPage);
+        });
+
+        listen(btnNextPage, 'click', async () => {
+            if (currentPage >= totalPages || isRenderingPage) {
+                return;
+            }
+
+            saveCurrentPageFields();
+            currentPage += 1;
+            await renderPage(currentPage);
+        });
+
+        listen(window, 'resize', () => {
+            if (resizeTimer) {
+                window.clearTimeout(resizeTimer);
+            }
+
+            resizeTimer = window.setTimeout(async () => {
+                if (!pdfDoc || isRenderingPage || destroyed) {
+                    return;
+                }
+
+                saveCurrentPageFields();
+                await renderPage(currentPage);
+            }, 150);
+        });
+
+        fieldPaletteButtons.forEach((button) => {
+            button.setAttribute('draggable', 'true');
+
+            listen(button, 'dragstart', (event) => {
+                dragFieldType = button.dataset.fieldType || 'signature';
+                if (event.dataTransfer) {
+                    event.dataTransfer.effectAllowed = 'copy';
+                    event.dataTransfer.setData('text/plain', dragFieldType);
+                }
+                setShellDropHighlight(true);
+                debugLog('Field drag started', { type: dragFieldType });
+            });
+
+            listen(button, 'dragend', () => {
+                debugLog('Field drag ended', { type: dragFieldType });
+                dragFieldType = null;
+                setShellDropHighlight(false);
+            });
+
+            listen(button, 'click', () => {
+                const type = button.dataset.fieldType || 'signature';
+                debugLog('Field add requested from palette click', { type });
+                addField(type);
+            });
+        });
+
+        listen(pdfShell, 'dragover', (event) => {
+            if (!dragFieldType || !hasAvailableSigner() || isRenderingPage) {
+                return;
+            }
+
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+            setShellDropHighlight(true);
+        });
+
+        listen(pdfShell, 'dragleave', () => {
+            if (!dragFieldType) {
+                return;
+            }
+
+            setShellDropHighlight(false);
+        });
+
+        listen(pdfShell, 'drop', (event) => {
+            if (!dragFieldType || !hasAvailableSigner() || isRenderingPage) {
+                return;
+            }
+
+            event.preventDefault();
+            setShellDropHighlight(false);
+
+            if (!canvasContainsClientPoint(event.clientX, event.clientY, fabricEl)) {
+                dragFieldType = null;
+                return;
+            }
+
+            addField(dragFieldType, { x: event.clientX, y: event.clientY });
+            dragFieldType = null;
+        });
+
+        listen(btnSaveFields, 'click', () => {
+            if (!fabricCanvas || isRenderingPage || !fieldsPayload || !saveFieldsForm) {
+                return;
+            }
+
+            isSaving = true;
+            updateEditorStatus();
+
+            const fields = collectFields();
+            fieldsPayload.value = JSON.stringify(fields);
+            saveFieldsForm.submit();
+        });
+
+        listen(selectedFieldType, 'change', () => {
+            replaceActiveField({ type: selectedFieldType.value });
+        });
+
+        listen(selectedFieldSigner, 'change', () => {
+            replaceActiveField({ signerId: Number(selectedFieldSigner.value) });
+        });
+
+        listen(btnDeleteField, 'click', () => {
+            deleteActiveField();
+        });
+
+        listen(btnDuplicateField, 'click', () => {
+            duplicateField(activeFieldObject());
+        });
+
+        listen(btnBringForward, 'click', () => {
+            moveActiveFieldLayer('forward');
+        });
+
+        listen(btnSendBackward, 'click', () => {
+            moveActiveFieldLayer('backward');
+        });
+
+        listen(window, 'keydown', (event) => {
+            if (!fabricCanvas || isRenderingPage) {
+                return;
+            }
+
+            const ctrlOrMeta = event.ctrlKey || event.metaKey;
+
+            if (ctrlOrMeta && event.key.toLowerCase() === 'v' && copiedField?.position) {
+                event.preventDefault();
+
+                const copy = buildFieldGroup(
+                    copiedField.fieldType,
+                    copiedField.signerId,
+                    {
+                        x: Math.min(0.99 - copiedField.position.width, copiedField.position.x + 0.02),
+                        y: Math.min(0.99 - copiedField.position.height, copiedField.position.y + 0.02),
+                        width: copiedField.position.width,
+                        height: copiedField.position.height,
+                    },
+                    nextClientFieldId(),
+                );
+
+                fabricCanvas.add(copy);
+                fabricCanvas.setActiveObject(copy);
+                selectedFieldClientId = copy.clientFieldId;
+                saveCurrentPageFields();
+                markDirty();
+                setFieldInspectorState(copy);
+                fabricCanvas.requestRenderAll();
+                return;
+            }
+
+            const active = fabricCanvas.getActiveObject();
+
+            if (event.key === 'Escape') {
+                clearSnapGuide();
+                setShellDropHighlight(false);
+                fabricCanvas.discardActiveObject();
+                selectedFieldClientId = null;
+                setFieldInspectorState(null);
+                fabricCanvas.requestRenderAll();
+                return;
+            }
+
+            if (!active || !active.fieldType) {
+                return;
+            }
+
+            if (ctrlOrMeta && event.key.toLowerCase() === 'c') {
+                event.preventDefault();
+                copiedField = {
+                    fieldType: active.fieldType,
+                    signerId: active.signerId,
+                    position: normalizedPositionFromObject(active, fabricCanvas),
+                };
+                return;
+            }
+
+            if (event.key === 'Delete' || event.key === 'Backspace') {
+                event.preventDefault();
+                deleteActiveField();
+                return;
+            }
+
+            const step = event.shiftKey ? 10 : 2;
+
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+                event.preventDefault();
+
+                if (event.key === 'ArrowUp') {
+                    active.top -= step;
+                } else if (event.key === 'ArrowDown') {
+                    active.top += step;
+                } else if (event.key === 'ArrowLeft') {
+                    active.left -= step;
+                } else if (event.key === 'ArrowRight') {
+                    active.left += step;
+                }
+
+                keepObjectInsideCanvas(active, fabricCanvas);
+                active.setCoords();
+                fabricCanvas.requestRenderAll();
+                saveCurrentPageFields();
+                markDirty();
+            }
+        });
+
+        listen(window, 'beforeunload', (event) => {
+            if (!hasUnsavedChanges) {
+                return;
+            }
+
+            event.preventDefault();
+            event.returnValue = '';
+        });
+    }
+
+    const api = {
+        destroy,
+        init,
+        isDestroyed,
+        owns,
+        showLoadError,
+    };
+
+    return api;
 }
