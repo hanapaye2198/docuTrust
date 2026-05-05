@@ -371,6 +371,10 @@ class SignDocumentController extends Controller
 
     private function canSignerModifyFields(Document $document, DocumentSigner $signer): ?string
     {
+        if ($signer->status === DocumentSignerStatus::Signed) {
+            return __('You have already signed this document.');
+        }
+
         if (in_array($document->status, [DocumentStatus::Declined, DocumentStatus::Cancelled], true)) {
             return __('This document can no longer be signed.');
         }
@@ -379,11 +383,7 @@ class SignDocumentController extends Controller
             return __('This document is not available for signing.');
         }
 
-        if ($signer->status === DocumentSignerStatus::Pending) {
-            return $this->canSignerSign($document, $signer);
-        }
-
-        return null;
+        return $this->canSignerSign($document, $signer);
     }
 
     private function usesSequentialSigning(Document $document): bool

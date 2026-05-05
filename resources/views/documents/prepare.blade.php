@@ -162,7 +162,7 @@
 
             <div class="ui-panel flex min-w-0 flex-col overflow-auto rounded-2xl border border-zinc-200/80 bg-[linear-gradient(180deg,rgba(250,250,250,0.98),rgba(244,244,245,0.98))] p-4 shadow-sm shadow-zinc-950/5 dark:border-zinc-700/70 dark:bg-zinc-900/50 sm:max-h-[calc(100vh-2rem)] sm:p-6">
                 <div id="pdf-load-error" class="mb-3 hidden rounded-xl border border-red-200/90 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100"></div>
-                <div id="pdf-shell" class="relative mx-auto inline-block min-h-[200px] min-w-[200px] max-w-full overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200/80 shadow-[0_18px_50px_rgba(15,23,42,0.08)] dark:bg-zinc-950 dark:ring-zinc-700/80">
+                <div id="pdf-shell" class="relative mx-auto inline-block min-h-[200px] min-w-[200px] shrink-0 rounded-2xl bg-white ring-1 ring-zinc-200/80 shadow-[0_18px_50px_rgba(15,23,42,0.08)] dark:bg-zinc-950 dark:ring-zinc-700/80">
                     <canvas id="pdf-canvas" class="relative z-0 block max-w-none rounded-xl bg-white shadow-sm"></canvas>
                     <canvas id="fabric-canvas" class="absolute left-0 top-0 z-20 block"></canvas>
                 </div>

@@ -14,6 +14,8 @@ use Livewire\Component;
 
 class DocumentSignersManager extends Component
 {
+    private ?Document $resolvedDocumentCache = null;
+
     #[Locked]
     public int $documentId;
 
@@ -78,6 +80,7 @@ class DocumentSignersManager extends Component
         ]);
 
         $this->ensureContactForSigner($document->user_id, $validated['name'], $normalizedEmail);
+        $this->forgetResolvedDocument();
 
         $this->reset('name', 'email');
         $this->contactSuggestions = [];
@@ -139,6 +142,7 @@ class DocumentSignersManager extends Component
         ]);
 
         $this->ensureContactForSigner($document->user_id, $validated['editingName'], $normalizedEmail);
+        $this->forgetResolvedDocument();
         $this->reset('editingSignerId', 'editingName', 'editingEmail');
         $this->dispatch('document-updated');
     }
@@ -249,6 +253,7 @@ class DocumentSignersManager extends Component
         $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
         $signer->delete();
         $this->normalizeSigningOrder($document);
+        $this->forgetResolvedDocument();
 
         $this->dispatch('document-updated');
     }
@@ -279,7 +284,13 @@ class DocumentSignersManager extends Component
      */
     protected function resolveDocument(): Document
     {
-        return Document::query()->findOrFail($this->documentId);
+        return $this->resolvedDocumentCache
+            ??= Document::query()->findOrFail($this->documentId);
+    }
+
+    protected function forgetResolvedDocument(): void
+    {
+        $this->resolvedDocumentCache = null;
     }
 
     protected function moveSigner(int $signerId, int $direction): void
@@ -315,6 +326,7 @@ class DocumentSignersManager extends Component
         $swap->update(['signing_order' => $currentOrder]);
 
         $this->normalizeSigningOrder($document);
+        $this->forgetResolvedDocument();
         $this->dispatch('document-updated');
     }
 

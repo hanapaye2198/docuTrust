@@ -7,7 +7,7 @@ export function ensurePrepareAssets(debugLog) {
             return function loadAssets() {
                 debugLog('Loading local PDF/Fabric assets');
                 return Promise.all([
-                    import('pdfjs-dist/build/pdf'),
+                    import('pdfjs-dist/build/pdf.js'),
                     import('fabric'),
                 ]).then(([pdfjsModule, fabricModule]) => {
                     window.pdfjsLib = pdfjsModule;

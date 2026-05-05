@@ -104,7 +104,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         return [
             'documents' => $documentsQuery
-                ->with(['tags', 'documentSigners', 'signatures'])
+                ->with(['tags'])
                 ->withCount('documentSigners')
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')

@@ -30,21 +30,33 @@ new #[Layout('components.layouts.app')] class extends Component {
     public function mount(Document $document): void
     {
         $this->authorize('view', $document);
-        $this->document = $document->load(['documentSigners', 'signatureFields', 'signatures.signerCertificate', 'signatures.signer', 'user.contacts', 'tags']);
+        $this->document = $document->load([
+            'documentSigners',
+            'signatureFields',
+            'signatures.signerCertificate',
+            'signatures.signer',
+            'tags',
+        ]);
         $this->tagIds = $this->document->tags->pluck('id')->all();
     }
 
     #[On('document-updated')]
     public function refreshDocument(): void
     {
-        $this->document->refresh()->load(['documentSigners', 'signatureFields', 'signatures.signerCertificate', 'signatures.signer', 'user.contacts', 'tags']);
+        $this->document->refresh()->load([
+            'documentSigners',
+            'signatureFields',
+            'signatures.signerCertificate',
+            'signatures.signer',
+            'tags',
+        ]);
         $this->tagIds = $this->document->tags->pluck('id')->all();
     }
 
     public function with(): array
     {
         return [
-            'availableTags' => Auth::user()->tags()->orderBy('name')->get(),
+            'availableTags' => Auth::user()->tags()->select(['id', 'name'])->orderBy('name')->get(),
             'workflow' => $this->workflowState(),
         ];
     }

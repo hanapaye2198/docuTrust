@@ -648,6 +648,8 @@ function createPrepareSession(cfgEl) {
 
             pdfCanvas.width = viewport.width;
             pdfCanvas.height = viewport.height;
+            pdfCanvas.style.width = `${viewport.width}px`;
+            pdfCanvas.style.height = `${viewport.height}px`;
             fabricEl.width = viewport.width;
             fabricEl.height = viewport.height;
             fabricEl.style.width = `${viewport.width}px`;

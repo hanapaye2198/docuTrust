@@ -56,4 +56,18 @@ fi
 
 rm -f "$ARTIFACT_PATH"
 
-find "$RELEASES_PATH" -mindepth 1 -maxdepth 1 -type d | sort | head -n -"${KEEP_RELEASES}" 2>/dev/null | xargs -r rm -rf
+CURRENT_TARGET="$(readlink -f "$CURRENT_PATH" 2>/dev/null || true)"
+
+mapfile -t OLD_RELEASES < <(
+  find "$RELEASES_PATH" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+    | sort -nr \
+    | awk -v keep="$KEEP_RELEASES" 'NR > keep { $1=""; sub(/^ /, ""); print }'
+)
+
+for old_release in "${OLD_RELEASES[@]}"; do
+  if [ -n "$CURRENT_TARGET" ] && [ "$old_release" = "$CURRENT_TARGET" ]; then
+    continue
+  fi
+
+  rm -rf "$old_release"
+done
