@@ -1,5 +1,5 @@
 <x-layouts.app>
-    <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:gap-7 sm:px-6 lg:px-8">
+    <div class="flex w-full max-w-none flex-col gap-6 px-4 py-5 sm:gap-7 sm:px-6 lg:px-8 2xl:px-10">
         @if (session('status'))
             <div
                 class="flex items-start gap-3 rounded-2xl border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-white px-4 py-3 text-sm text-emerald-900 shadow-sm dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-zinc-900 dark:text-emerald-100"
@@ -52,8 +52,8 @@
             </div>
         @endif
 
-        <div class="grid items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <aside class="rounded-2xl border border-zinc-200/80 bg-white/85 p-4 shadow-sm shadow-zinc-950/5 backdrop-blur-sm dark:border-zinc-700/70 dark:bg-zinc-900/70 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-3">
+        <div class="grid items-start gap-6 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
+            <aside class="rounded-2xl border border-zinc-200/80 bg-white/85 p-4 shadow-sm shadow-zinc-950/5 backdrop-blur-sm dark:border-zinc-700/70 dark:bg-zinc-900/70 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto xl:pr-3">
                 <div class="space-y-6">
                     <section class="rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-4 text-sm dark:border-zinc-700 dark:bg-zinc-950/50">
                         <div class="flex items-center justify-between gap-3">
@@ -160,9 +160,9 @@
                 </div>
             </aside>
 
-            <div class="ui-panel flex min-w-0 justify-center overflow-auto rounded-2xl border border-zinc-200/80 bg-[linear-gradient(180deg,rgba(250,250,250,0.98),rgba(244,244,245,0.98))] p-4 shadow-sm shadow-zinc-950/5 dark:border-zinc-700/70 dark:bg-zinc-900/50 sm:max-h-[calc(100vh-2rem)] sm:p-6">
+            <div class="ui-panel flex min-w-0 flex-col overflow-auto rounded-2xl border border-zinc-200/80 bg-[linear-gradient(180deg,rgba(250,250,250,0.98),rgba(244,244,245,0.98))] p-4 shadow-sm shadow-zinc-950/5 dark:border-zinc-700/70 dark:bg-zinc-900/50 sm:max-h-[calc(100vh-2rem)] sm:p-6">
                 <div id="pdf-load-error" class="mb-3 hidden rounded-xl border border-red-200/90 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100"></div>
-                <div id="pdf-shell" class="relative mx-auto inline-block min-h-[200px] min-w-[200px] overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200/80 shadow-[0_18px_50px_rgba(15,23,42,0.08)] dark:bg-zinc-950 dark:ring-zinc-700/80">
+                <div id="pdf-shell" class="relative mx-auto inline-block min-h-[200px] min-w-[200px] max-w-full overflow-hidden rounded-2xl bg-white ring-1 ring-zinc-200/80 shadow-[0_18px_50px_rgba(15,23,42,0.08)] dark:bg-zinc-950 dark:ring-zinc-700/80">
                     <canvas id="pdf-canvas" class="relative z-0 block max-w-none rounded-xl bg-white shadow-sm"></canvas>
                     <canvas id="fabric-canvas" class="absolute left-0 top-0 z-20 block"></canvas>
                 </div>

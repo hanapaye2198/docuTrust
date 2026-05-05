@@ -107,6 +107,7 @@ function createPrepareSession(cfgEl) {
     let resizeTimer = null;
     let renderSequence = 0;
     let destroyed = false;
+    let isSubmittingSave = false;
 
     const pageFields = new Map();
     const signerById = new Map(signers.map((signer) => [Number(signer.id), signer]));
@@ -201,7 +202,7 @@ function createPrepareSession(cfgEl) {
             return;
         }
 
-        btnSendToSigner.disabled = !canSendFromServer || hasUnsavedChanges || isSaving || isRenderingPage;
+        btnSendToSigner.disabled = !canSendFromServer || hasUnsavedChanges || isSaving || isSubmittingSave || isRenderingPage;
         btnSendToSigner.title = hasUnsavedChanges
             ? (msgs.saveBeforeSend || 'Save your latest field changes before sending to signer.')
             : '';
@@ -895,7 +896,10 @@ function createPrepareSession(cfgEl) {
             }
 
             isSaving = true;
+            isSubmittingSave = true;
+            hasUnsavedChanges = false;
             updateEditorStatus();
+            updateSendButtonState();
 
             const fields = collectFields();
             fieldsPayload.value = JSON.stringify(fields);
@@ -1027,7 +1031,7 @@ function createPrepareSession(cfgEl) {
         });
 
         listen(window, 'beforeunload', (event) => {
-            if (!hasUnsavedChanges) {
+            if (isSubmittingSave || !hasUnsavedChanges) {
                 return;
             }
 

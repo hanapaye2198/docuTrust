@@ -273,8 +273,12 @@
                 const pageIndicator = document.getElementById('page-indicator');
                 const btnPrevPage = document.getElementById('btn-prev-page');
                 const btnNextPage = document.getElementById('btn-next-page');
+                const drawCanvasEl = document.getElementById('draw-canvas');
                 let fabricCanvas = null;
-                let drawCanvas = null;
+                let drawContext = null;
+                let drawPointerId = null;
+                let isDrawing = false;
+                let hasDrawnStroke = false;
                 let isSubmitting = false;
                 let pdfDoc = null;
                 let currentPage = 1;
@@ -943,15 +947,101 @@
                     modalFieldId.value = String(fieldId);
                     modalSignatureImage.value = '';
                     modal.showModal();
-                    if (drawCanvas) {
-                        drawCanvas.clear();
-                        drawCanvas.backgroundColor = '#ffffff';
-                        drawCanvas.isDrawingMode = true;
+                    if (drawCanvasEl && drawContext) {
+                        clearSignatureCanvas();
                     }
                 }
 
                 function closeModal() {
                     modal.close();
+                }
+
+                function clearSignatureCanvas() {
+                    if (!drawCanvasEl || !drawContext) {
+                        return;
+                    }
+
+                    drawContext.save();
+                    drawContext.setTransform(1, 0, 0, 1, 0, 0);
+                    drawContext.clearRect(0, 0, drawCanvasEl.width, drawCanvasEl.height);
+                    drawContext.restore();
+                    hasDrawnStroke = false;
+                }
+
+                function configureSignatureCanvas() {
+                    if (!drawCanvasEl) {
+                        return;
+                    }
+
+                    const rect = drawCanvasEl.getBoundingClientRect();
+                    const cssWidth = Math.max(320, Math.round(rect.width || 400));
+                    const cssHeight = Math.max(160, Math.round(cssWidth / 2));
+                    const pixelRatio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+                    drawCanvasEl.width = Math.round(cssWidth * pixelRatio);
+                    drawCanvasEl.height = Math.round(cssHeight * pixelRatio);
+                    drawCanvasEl.style.height = cssHeight + 'px';
+
+                    drawContext = drawCanvasEl.getContext('2d');
+                    drawContext.setTransform(1, 0, 0, 1, 0, 0);
+                    drawContext.scale(pixelRatio, pixelRatio);
+                    drawContext.lineCap = 'round';
+                    drawContext.lineJoin = 'round';
+                    drawContext.lineWidth = 2;
+                    drawContext.strokeStyle = '#0f172a';
+
+                    clearSignatureCanvas();
+                }
+
+                function signaturePoint(event) {
+                    const rect = drawCanvasEl.getBoundingClientRect();
+
+                    return {
+                        x: event.clientX - rect.left,
+                        y: event.clientY - rect.top,
+                    };
+                }
+
+                function beginSignatureStroke(event) {
+                    if (!drawCanvasEl || !drawContext) {
+                        return;
+                    }
+
+                    const point = signaturePoint(event);
+                    isDrawing = true;
+                    drawPointerId = event.pointerId;
+                    hasDrawnStroke = true;
+                    drawCanvasEl.setPointerCapture?.(event.pointerId);
+                    drawContext.beginPath();
+                    drawContext.moveTo(point.x, point.y);
+                    event.preventDefault();
+                }
+
+                function extendSignatureStroke(event) {
+                    if (!isDrawing || drawPointerId !== event.pointerId || !drawContext) {
+                        return;
+                    }
+
+                    const point = signaturePoint(event);
+                    drawContext.lineTo(point.x, point.y);
+                    drawContext.stroke();
+                    event.preventDefault();
+                }
+
+                function endSignatureStroke(event) {
+                    if (!isDrawing || drawPointerId !== event.pointerId || !drawCanvasEl) {
+                        return;
+                    }
+
+                    isDrawing = false;
+                    drawPointerId = null;
+                    drawContext?.closePath();
+                    drawCanvasEl.releasePointerCapture?.(event.pointerId);
+                    event.preventDefault();
+                }
+
+                function signatureDataUrl() {
+                    return drawCanvasEl ? drawCanvasEl.toDataURL('image/png') : '';
                 }
 
                 function showTab(name) {
@@ -1001,19 +1091,15 @@
                         await renderPage(currentPage);
                     });
 
-                    drawCanvas = new fabric.Canvas('draw-canvas', { isDrawingMode: true });
-                    drawCanvas.isDrawingMode = true;
-                    drawCanvas.backgroundColor = '#ffffff';
-                    drawCanvas.freeDrawingBrush.width = 2;
-                    drawCanvas.freeDrawingBrush.color = '#0f172a';
-                    drawCanvas.setWidth(400);
-                    drawCanvas.setHeight(200);
-                    drawCanvas.renderAll();
+                    configureSignatureCanvas();
+                    drawCanvasEl?.addEventListener('pointerdown', beginSignatureStroke);
+                    drawCanvasEl?.addEventListener('pointermove', extendSignatureStroke);
+                    drawCanvasEl?.addEventListener('pointerup', endSignatureStroke);
+                    drawCanvasEl?.addEventListener('pointercancel', endSignatureStroke);
+                    window.addEventListener('resize', configureSignatureCanvas);
 
                     document.getElementById('draw-clear')?.addEventListener('click', function () {
-                        drawCanvas.clear();
-                        drawCanvas.backgroundColor = '#ffffff';
-                        drawCanvas.renderAll();
+                        clearSignatureCanvas();
                     });
 
                     signForm?.addEventListener('submit', function (e) {
@@ -1022,7 +1108,12 @@
                         const uploadHidden = document.getElementById('panel-upload').classList.contains('hidden');
 
                         if (!drawHidden) {
-                            modalSignatureImage.value = drawCanvas.toDataURL({ format: 'png' });
+                            if (!hasDrawnStroke) {
+                                e.preventDefault();
+                                alert(@json(__('Please draw your signature.')));
+                                return;
+                            }
+                            modalSignatureImage.value = signatureDataUrl();
                             return;
                         }
                         if (!typeHidden) {
