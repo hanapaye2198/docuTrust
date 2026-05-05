@@ -2,10 +2,15 @@
     use App\Enums\DocumentSignerStatus;
     use App\Enums\DocumentStatus;
 
-    $showFieldSigning =
+    $showFieldViewer = count($fieldsJson) > 0;
+
+    $showFieldEditing =
         count($fieldsJson) > 0
-        && $signer->status === DocumentSignerStatus::Pending
         && $signer->document->status === DocumentStatus::Pending;
+
+    $showFieldSigning =
+        $showFieldEditing
+        && $signer->status === DocumentSignerStatus::Pending;
 
     $showLegacySign =
         ! $documentHasSignatureFields
@@ -25,6 +30,11 @@
     $signingProgressPercent = $assignedFieldCount > 0
         ? (int) round(($signedFieldCount / $assignedFieldCount) * 100)
         : 0;
+
+    $showCompletedFieldsNotice =
+        count($fieldsJson) > 0
+        && $signedFieldCount > 0
+        && ! $showFieldEditing;
 @endphp
 
 <x-layouts.guest-simple>
@@ -105,7 +115,7 @@
             </div>
         </div>
 
-        @if ($showFieldSigning)
+        @if ($showFieldViewer)
             <div class="grid gap-4 sm:grid-cols-3">
                 <div class="ui-signsurface p-5">
                     <p class="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">{{ __('Assigned fields') }}</p>
@@ -115,7 +125,7 @@
                 <div class="ui-signsurface p-5">
                     <p class="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">{{ __('Completed') }}</p>
                     <p class="mt-3 text-3xl font-semibold tracking-tight text-emerald-700 dark:text-emerald-300">{{ $signedFieldCount }}</p>
-                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Completed fields are locked immediately after signing.') }}</p>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Completed fields stay visible and can be updated until the document is completed.') }}</p>
                 </div>
                 <div class="ui-signsurface p-5">
                     <p class="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">{{ __('Remaining') }}</p>
@@ -124,6 +134,12 @@
                 </div>
             </div>
 
+            @if ($showCompletedFieldsNotice)
+                <p class="rounded-xl border border-emerald-200/90 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
+                    {{ __('Your signed fields are shown below in read-only mode.') }}
+                </p>
+            @endif
+
             <div class="ui-panel overflow-auto rounded-3xl p-5 sm:p-7">
                 <div class="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -131,7 +147,9 @@
                             {{ __('Document') }}
                         </h2>
                         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                            {{ __('Tap a highlighted field to sign. Signed fields cannot be changed.') }}
+                            {{ $showFieldEditing
+                                ? __('Tap a highlighted field to sign. Signed fields can be updated until the document is completed.')
+                                : __('Signed fields remain visible here for review. This document is read-only.') }}
                         </p>
                     </div>
                     <div class="mt-4 w-full max-w-xs sm:mt-0">
@@ -233,7 +251,7 @@
                 </form>
             </div>
         @endif
-        @if ($showFieldSigning)
+        @if ($showFieldViewer)
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js" crossorigin="anonymous"></script>
         <script>
@@ -241,6 +259,7 @@
                 const pdfUrl = @json($pdfUrl);
                 const fieldsJson = @json($fieldsJson);
                 const signedByFieldId = @json($signedByFieldId);
+                const canEditFields = @json($showFieldEditing);
                 const signerName = @json($signer->name);
                 const signerEmail = @json($signer->email);
                 const dateLocale = @json(str_replace('_', '-', app()->getLocale()));
@@ -318,6 +337,7 @@
                         case 'signature_left':
                             return {
                                 kind: 'signature',
+                                signatureAlignment: 'left',
                                 stroke: '#0f766e',
                                 fill: 'rgba(20, 184, 166, 0.12)',
                                 fillText: '#115e59',
@@ -326,6 +346,7 @@
                         case 'signature_right':
                             return {
                                 kind: 'signature',
+                                signatureAlignment: 'right',
                                 stroke: '#0369a1',
                                 fill: 'rgba(14, 165, 233, 0.12)',
                                 fillText: '#075985',
@@ -392,6 +413,7 @@
                         default:
                             return {
                                 kind: 'signature',
+                                signatureAlignment: 'center',
                                 stroke: '#2563eb',
                                 fill: 'rgba(59, 130, 246, 0.12)',
                                 fillText: '#1d4ed8',
@@ -518,11 +540,16 @@
                             opacity: 0.4,
                         }));
                     } else {
+                        const alignment = chrome.signatureAlignment || 'center';
                         const accentWidth = clamp(rect.width * 0.07, 10, 18);
-                        const labelLeft = accentWidth + Math.max(10, rect.width * 0.05);
                         const labelFontSize = clamp(rect.height * 0.28, 11, 16);
                         const lineY = rect.height - Math.max(7, rect.height * 0.14);
-                        const usableWidth = Math.max(24, rect.width - labelLeft - inset);
+                        const textInset = Math.max(10, rect.width * 0.05);
+                        const leftLabelLeft = accentWidth + textInset;
+                        const rightLabelRight = rect.width - accentWidth - textInset;
+                        const centerLabelWidth = Math.max(24, rect.width - Math.max(inset * 2, rect.width * 0.32));
+                        const leftUsableWidth = Math.max(24, rect.width - leftLabelLeft - inset);
+                        const rightUsableWidth = Math.max(24, rightLabelRight - inset);
 
                         nodes.push(new fabric.Rect({
                             width: rect.width,
@@ -533,34 +560,101 @@
                             rx: 8,
                             ry: 8,
                         }));
-                        nodes.push(new fabric.Rect({
-                            width: accentWidth,
-                            height: rect.height,
-                            fill: chrome.stroke,
-                            rx: 8,
-                            ry: 8,
-                            left: 0,
-                            top: 0,
-                            originX: 'left',
-                            originY: 'top',
-                        }));
-                        nodes.push(new fabric.Text(truncateFieldText(chrome.label, usableWidth, labelFontSize), {
-                            fontSize: labelFontSize,
-                            fill: chrome.fillText,
-                            fontFamily: 'system-ui, sans-serif',
-                            fontWeight: 700,
-                            originX: 'left',
-                            originY: 'top',
-                            left: labelLeft,
-                            top: inset,
-                        }));
-                        nodes.push(new fabric.Line([labelLeft, lineY, rect.width - inset, lineY], {
-                            stroke: chrome.stroke,
-                            strokeWidth: 1,
-                            selectable: false,
-                            evented: false,
-                            opacity: 0.65,
-                        }));
+                        if (alignment === 'right') {
+                            nodes.push(new fabric.Rect({
+                                width: accentWidth,
+                                height: rect.height,
+                                fill: chrome.stroke,
+                                rx: 8,
+                                ry: 8,
+                                left: rect.width - accentWidth,
+                                top: 0,
+                                originX: 'left',
+                                originY: 'top',
+                            }));
+                            nodes.push(new fabric.Text(truncateFieldText(chrome.label, rightUsableWidth, labelFontSize), {
+                                fontSize: labelFontSize,
+                                fill: chrome.fillText,
+                                fontFamily: 'system-ui, sans-serif',
+                                fontWeight: 700,
+                                originX: 'right',
+                                originY: 'top',
+                                left: rightLabelRight,
+                                top: inset,
+                                textAlign: 'right',
+                            }));
+                            nodes.push(new fabric.Line([inset, lineY, rightLabelRight, lineY], {
+                                stroke: chrome.stroke,
+                                strokeWidth: 1,
+                                selectable: false,
+                                evented: false,
+                                opacity: 0.65,
+                            }));
+                        } else if (alignment === 'center') {
+                            const topBandWidth = Math.max(rect.width * 0.42, 44);
+                            const topBandHeight = clamp(rect.height * 0.16, 5, 9);
+                            const guideWidth = Math.max(rect.width * 0.58, 40);
+                            const guideLeft = (rect.width - guideWidth) / 2;
+
+                            nodes.push(new fabric.Rect({
+                                width: topBandWidth,
+                                height: topBandHeight,
+                                fill: chrome.stroke,
+                                rx: 999,
+                                ry: 999,
+                                left: (rect.width - topBandWidth) / 2,
+                                top: inset * 0.6,
+                                originX: 'left',
+                                originY: 'top',
+                            }));
+                            nodes.push(new fabric.Text(truncateFieldText(chrome.label, centerLabelWidth, labelFontSize), {
+                                fontSize: labelFontSize,
+                                fill: chrome.fillText,
+                                fontFamily: 'system-ui, sans-serif',
+                                fontWeight: 700,
+                                originX: 'center',
+                                originY: 'top',
+                                left: rect.width / 2,
+                                top: inset + 3,
+                                textAlign: 'center',
+                            }));
+                            nodes.push(new fabric.Line([guideLeft, lineY, guideLeft + guideWidth, lineY], {
+                                stroke: chrome.stroke,
+                                strokeWidth: 1,
+                                selectable: false,
+                                evented: false,
+                                opacity: 0.65,
+                            }));
+                        } else {
+                            nodes.push(new fabric.Rect({
+                                width: accentWidth,
+                                height: rect.height,
+                                fill: chrome.stroke,
+                                rx: 8,
+                                ry: 8,
+                                left: 0,
+                                top: 0,
+                                originX: 'left',
+                                originY: 'top',
+                            }));
+                            nodes.push(new fabric.Text(truncateFieldText(chrome.label, leftUsableWidth, labelFontSize), {
+                                fontSize: labelFontSize,
+                                fill: chrome.fillText,
+                                fontFamily: 'system-ui, sans-serif',
+                                fontWeight: 700,
+                                originX: 'left',
+                                originY: 'top',
+                                left: leftLabelLeft,
+                                top: inset,
+                            }));
+                            nodes.push(new fabric.Line([leftLabelLeft, lineY, rect.width - inset, lineY], {
+                                stroke: chrome.stroke,
+                                strokeWidth: 1,
+                                selectable: false,
+                                evented: false,
+                                opacity: 0.65,
+                            }));
+                        }
                     }
 
                     return new fabric.Group(nodes, {
@@ -600,6 +694,62 @@
                     });
                 }
 
+                function activateField(field) {
+                    if (!canEditFields || isSubmitting) {
+                        return;
+                    }
+                    if (field.type === 'name') {
+                        submitSignatureField(field.id, textToDataUrl(signerName));
+                        return;
+                    }
+                    if (field.type === 'date') {
+                        const d = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium' }).format(
+                            new Date()
+                        );
+                        submitSignatureField(field.id, textToDataUrl(d));
+                        return;
+                    }
+                    if (field.type === 'email') {
+                        submitSignatureField(field.id, textToDataUrl(signerEmail));
+                        return;
+                    }
+                    if (field.type === 'initials') {
+                        submitSignatureField(field.id, textToDataUrl(signerInitialsValue()));
+                        return;
+                    }
+                    if (field.type === 'checkbox') {
+                        submitSignatureField(field.id, textToDataUrl('X'));
+                        return;
+                    }
+                    if (field.type === 'radio') {
+                        submitSignatureField(field.id, textToDataUrl('O'));
+                        return;
+                    }
+                    openModal(field.id);
+                }
+
+                function signatureImagePlacement(rect, imageWidth, imageHeight, fieldType) {
+                    const margin = Math.max(3, Math.min(8, rect.height * 0.12));
+                    const renderWidth = Math.max(12, rect.width - (margin * 2));
+                    const renderHeight = Math.max(12, rect.height - (margin * 2));
+                    const scale = Math.min(renderWidth / imageWidth, renderHeight / imageHeight);
+                    const placedWidth = imageWidth * scale;
+                    const placedHeight = imageHeight * scale;
+                    let left = rect.left + margin;
+
+                    if (fieldType === 'signature_right') {
+                        left = rect.left + rect.width - placedWidth - margin;
+                    } else if (fieldType === 'signature') {
+                        left = rect.left + ((rect.width - placedWidth) / 2);
+                    }
+
+                    return {
+                        left,
+                        top: rect.top + ((rect.height - placedHeight) / 2),
+                        scale,
+                    };
+                }
+
                 function renderPageFields(cw, ch) {
                     fabricCanvas.clear();
                     const nextField = firstUnsignedField();
@@ -611,18 +761,24 @@
                             fabric.Image.fromURL(
                                 url,
                                 function (img) {
-                                    const scaleImg = Math.min(r.width / img.width, r.height / img.height);
+                                    const placement = signatureImagePlacement(r, img.width, img.height, field.type);
                                     img.set({
-                                        left: r.left,
-                                        top: r.top,
-                                        scaleX: scaleImg,
-                                        scaleY: scaleImg,
+                                        left: placement.left,
+                                        top: placement.top,
+                                        scaleX: placement.scale,
+                                        scaleY: placement.scale,
                                         selectable: false,
-                                        evented: false,
+                                        evented: canEditFields,
                                         hasControls: false,
-                                        hoverCursor: 'default',
+                                        hoverCursor: canEditFields ? 'pointer' : 'default',
                                         opacity: 0.98,
                                     });
+                                    if (canEditFields) {
+                                        img.on('mousedown', function (e) {
+                                            e.e.preventDefault();
+                                            activateField(field);
+                                        });
+                                    }
                                     const badge = new fabric.Text(@json(__('Signed')), {
                                         left: r.left + 4,
                                         top: r.top + r.height - 16,
@@ -633,8 +789,26 @@
                                         evented: false,
                                         hoverCursor: 'default',
                                     });
+                                    const hitbox = new fabric.Rect({
+                                        left: r.left,
+                                        top: r.top,
+                                        width: r.width,
+                                        height: r.height,
+                                        fill: 'rgba(0,0,0,0.001)',
+                                        selectable: false,
+                                        evented: canEditFields,
+                                        hasControls: false,
+                                        hoverCursor: canEditFields ? 'pointer' : 'default',
+                                    });
+                                    if (canEditFields) {
+                                        hitbox.on('mousedown', function (e) {
+                                            e.e.preventDefault();
+                                            activateField(field);
+                                        });
+                                    }
                                     fabricCanvas.add(img);
                                     fabricCanvas.add(badge);
+                                    fabricCanvas.add(hitbox);
                                     fabricCanvas.requestRenderAll();
                                 },
                                 { crossOrigin: 'anonymous' }
@@ -644,10 +818,10 @@
                             const group = buildFieldPreviewGroup(chrome, r);
                             group.fieldId = field.id;
                             group.selectable = false;
-                            group.evented = true;
+                            group.evented = canEditFields;
                             group.hasControls = false;
-                            group.hoverCursor = 'pointer';
-                            if (nextFieldId !== null && field.id === nextFieldId) {
+                            group.hoverCursor = canEditFields ? 'pointer' : 'default';
+                            if (canEditFields && nextFieldId !== null && field.id === nextFieldId) {
                                 group.shadow = new fabric.Shadow({
                                     color: 'rgba(20, 184, 166, 0.35)',
                                     blur: 18,
@@ -657,37 +831,7 @@
                             }
                             group.on('mousedown', function (e) {
                                 e.e.preventDefault();
-                                if (isSigned(field.id) || isSubmitting) {
-                                    return;
-                                }
-                                if (field.type === 'name') {
-                                    submitSignatureField(field.id, textToDataUrl(signerName));
-                                    return;
-                                }
-                                if (field.type === 'date') {
-                                    const d = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium' }).format(
-                                        new Date()
-                                    );
-                                    submitSignatureField(field.id, textToDataUrl(d));
-                                    return;
-                                }
-                                if (field.type === 'email') {
-                                    submitSignatureField(field.id, textToDataUrl(signerEmail));
-                                    return;
-                                }
-                                if (field.type === 'initials') {
-                                    submitSignatureField(field.id, textToDataUrl(signerInitialsValue()));
-                                    return;
-                                }
-                                if (field.type === 'checkbox') {
-                                    submitSignatureField(field.id, textToDataUrl('X'));
-                                    return;
-                                }
-                                if (field.type === 'radio') {
-                                    submitSignatureField(field.id, textToDataUrl('O'));
-                                    return;
-                                }
-                                openModal(field.id);
+                                activateField(field);
                             });
                             fabricCanvas.add(group);
                         }
@@ -782,7 +926,7 @@
                 }
 
                 function submitSignatureField(fieldId, dataUrl) {
-                    if (isSubmitting) {
+                    if (!canEditFields || isSubmitting) {
                         return;
                     }
                     isSubmitting = true;
@@ -793,6 +937,9 @@
                 }
 
                 function openModal(fieldId) {
+                    if (!canEditFields) {
+                        return;
+                    }
                     modalFieldId.value = String(fieldId);
                     modalSignatureImage.value = '';
                     modal.showModal();

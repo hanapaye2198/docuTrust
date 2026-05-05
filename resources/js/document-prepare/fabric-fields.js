@@ -34,13 +34,19 @@ function createBaseFrame(fabric, width, height) {
 function createSignatureVisuals(fabric, config, width, height, signerName) {
     const innerInset = Math.max(5, height * 0.14);
     const accentWidth = clamp(width * 0.07, 10, 18);
-    const labelLeft = accentWidth + Math.max(10, width * 0.05);
     const labelFontSize = clamp(height * 0.28, 11, 16);
     const signerFontSize = clamp(height * 0.18, 8, 11);
-    const usableWidth = Math.max(24, width - labelLeft - innerInset);
     const bottomGuideY = height - Math.max(7, height * 0.14);
+    const alignment = config.signatureAlignment || 'center';
+    const textInset = Math.max(10, width * 0.05);
+    const leftLabelLeft = accentWidth + textInset;
+    const rightLabelRight = width - accentWidth - textInset;
+    const centerLabelLeft = Math.max(innerInset, width * 0.16);
+    const centerLabelWidth = Math.max(24, width - (centerLabelLeft * 2));
+    const leftUsableWidth = Math.max(24, width - leftLabelLeft - innerInset);
+    const rightUsableWidth = Math.max(24, rightLabelRight - innerInset);
 
-    return [
+    const nodes = [
         new fabric.Rect({
             width,
             height,
@@ -50,6 +56,120 @@ function createSignatureVisuals(fabric, config, width, height, signerName) {
             rx: 8,
             ry: 8,
         }),
+    ];
+
+    if (alignment === 'right') {
+        nodes.push(
+            new fabric.Rect({
+                width: accentWidth,
+                height,
+                fill: config.accent,
+                rx: 8,
+                ry: 8,
+                left: width - accentWidth,
+                top: 0,
+                originX: 'left',
+                originY: 'top',
+            }),
+        );
+        nodes.push(
+            new fabric.Text(truncateText(config.canvasLabel || config.label, rightUsableWidth, labelFontSize), {
+                fontSize: labelFontSize,
+                fill: config.text,
+                fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+                fontWeight: 700,
+                originX: 'right',
+                originY: 'top',
+                left: rightLabelRight,
+                top: innerInset,
+                textAlign: 'right',
+            }),
+        );
+        nodes.push(
+            new fabric.Text(truncateText(signerName, rightUsableWidth, signerFontSize), {
+                fontSize: signerFontSize,
+                fill: '#64748b',
+                fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+                fontWeight: 500,
+                originX: 'right',
+                originY: 'top',
+                left: rightLabelRight,
+                top: Math.min(bottomGuideY - signerFontSize - 3, innerInset + labelFontSize + 3),
+                textAlign: 'right',
+            }),
+        );
+        nodes.push(
+            new fabric.Line([innerInset, bottomGuideY, rightLabelRight, bottomGuideY], {
+                stroke: config.stroke,
+                strokeWidth: 1,
+                selectable: false,
+                evented: false,
+                opacity: 0.65,
+            }),
+        );
+
+        return nodes;
+    }
+
+    if (alignment === 'center') {
+        const topBandHeight = clamp(height * 0.16, 5, 9);
+        const guideWidth = Math.max(width * 0.58, 40);
+        const guideLeft = (width - guideWidth) / 2;
+
+        nodes.push(
+            new fabric.Rect({
+                width: Math.max(width * 0.42, 44),
+                height: topBandHeight,
+                fill: config.accent,
+                rx: 999,
+                ry: 999,
+                left: (width - Math.max(width * 0.42, 44)) / 2,
+                top: innerInset * 0.6,
+                originX: 'left',
+                originY: 'top',
+            }),
+        );
+        nodes.push(
+            new fabric.Text(truncateText(config.canvasLabel || config.label, centerLabelWidth, labelFontSize), {
+                fontSize: labelFontSize,
+                fill: config.text,
+                fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+                fontWeight: 700,
+                originX: 'center',
+                originY: 'top',
+                left: width / 2,
+                top: innerInset + 3,
+                textAlign: 'center',
+            }),
+        );
+        nodes.push(
+            new fabric.Text(truncateText(signerName, centerLabelWidth, signerFontSize), {
+                fontSize: signerFontSize,
+                fill: '#64748b',
+                fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+                fontWeight: 500,
+                originX: 'center',
+                originY: 'top',
+                left: width / 2,
+                top: Math.min(bottomGuideY - signerFontSize - 3, innerInset + labelFontSize + 5),
+                textAlign: 'center',
+            }),
+        );
+        nodes.push(
+            new fabric.Line([guideLeft, bottomGuideY, guideLeft + guideWidth, bottomGuideY], {
+                stroke: config.stroke,
+                strokeWidth: 1,
+                selectable: false,
+                evented: false,
+                opacity: 0.65,
+            }),
+        );
+
+        return nodes;
+    }
+
+    return [
+        ...nodes,
         new fabric.Rect({
             width: accentWidth,
             height,
@@ -61,27 +181,27 @@ function createSignatureVisuals(fabric, config, width, height, signerName) {
             originX: 'left',
             originY: 'top',
         }),
-        new fabric.Text(truncateText(config.canvasLabel || config.label, usableWidth, labelFontSize), {
+        new fabric.Text(truncateText(config.canvasLabel || config.label, leftUsableWidth, labelFontSize), {
             fontSize: labelFontSize,
             fill: config.text,
             fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
             fontWeight: 700,
             originX: 'left',
             originY: 'top',
-            left: labelLeft,
+            left: leftLabelLeft,
             top: innerInset,
         }),
-        new fabric.Text(truncateText(signerName, usableWidth, signerFontSize), {
+        new fabric.Text(truncateText(signerName, leftUsableWidth, signerFontSize), {
             fontSize: signerFontSize,
             fill: '#64748b',
             fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
             fontWeight: 500,
             originX: 'left',
             originY: 'top',
-            left: labelLeft,
+            left: leftLabelLeft,
             top: Math.min(bottomGuideY - signerFontSize - 3, innerInset + labelFontSize + 3),
         }),
-        new fabric.Line([labelLeft, bottomGuideY, width - innerInset, bottomGuideY], {
+        new fabric.Line([leftLabelLeft, bottomGuideY, width - innerInset, bottomGuideY], {
             stroke: config.stroke,
             strokeWidth: 1,
             selectable: false,

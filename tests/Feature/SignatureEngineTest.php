@@ -175,6 +175,146 @@ class SignatureEngineTest extends TestCase
         ]);
     }
 
+    public function test_prepare_rejects_field_geometry_that_exceeds_page_bounds(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/prepare-invalid-geometry.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $this->actingAs($user)
+            ->from(route('documents.prepare', $document))
+            ->post(route('documents.signature-fields.store', $document), [
+                'fields' => [
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::Signature->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => 0.9,
+                            'y' => 0.2,
+                            'width' => 0.2,
+                            'height' => 0.08,
+                        ],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('documents.prepare', $document))
+            ->assertSessionHasErrors('fields.0.position_data');
+
+        $this->assertDatabaseCount('signature_fields', 0);
+    }
+
+    public function test_prepare_rejects_field_page_number_beyond_pdf_page_count(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/prepare-invalid-page.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $this->actingAs($user)
+            ->from(route('documents.prepare', $document))
+            ->post(route('documents.signature-fields.store', $document), [
+                'fields' => [
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::Signature->value,
+                        'page_number' => 2,
+                        'position_data' => [
+                            'x' => 0.1,
+                            'y' => 0.2,
+                            'width' => 0.2,
+                            'height' => 0.08,
+                        ],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('documents.prepare', $document))
+            ->assertSessionHasErrors('fields.0.page_number');
+
+        $this->assertDatabaseCount('signature_fields', 0);
+    }
+
+    public function test_signer_can_complete_signature_field_after_radio_field_completion(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/radio-then-signature.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        $radioField = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Radio,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.08,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $signatureField = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.25,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $this->post(route('sign.signature.store', $signer), [
+            'signature_field_id' => $radioField->id,
+            'signature_image' => self::TINY_PNG_DATA_URL,
+        ])->assertRedirect(route('sign.show', $signer->access_token));
+
+        $signer->refresh();
+        $this->assertSame(DocumentSignerStatus::Pending, $signer->status);
+
+        $this->post(route('sign.signature.store', $signer), [
+            'signature_field_id' => $signatureField->id,
+            'signature_image' => self::TINY_PNG_DATA_URL,
+        ])->assertRedirect(route('sign.show', $signer->access_token));
+
+        $this->assertDatabaseHas('signatures', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'signature_field_id' => $radioField->id,
+        ]);
+
+        $this->assertDatabaseHas('signatures', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'signature_field_id' => $signatureField->id,
+        ]);
+
+        $signer->refresh();
+        $this->assertSame(DocumentSignerStatus::Signed, $signer->status);
+    }
+
     public function test_signer_can_submit_signature_for_field(): void
     {
         Storage::fake('local');

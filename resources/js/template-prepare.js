@@ -116,6 +116,16 @@ function createPrepareSession(cfgEl) {
         console.log(debugPrefix, message, payload ?? '');
     }
 
+    function isEditableTarget(target) {
+        if (!(target instanceof HTMLElement)) {
+            return false;
+        }
+
+        return target.isContentEditable
+            || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+            || Boolean(target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="dialog"]'));
+    }
+
     function owns(node) {
         return cfgEl === node;
     }
@@ -927,6 +937,10 @@ function createPrepareSession(cfgEl) {
 
         listen(window, 'keydown', (event) => {
             if (!fabricCanvas || isRenderingPage) {
+                return;
+            }
+
+             if (isEditableTarget(event.target)) {
                 return;
             }
 

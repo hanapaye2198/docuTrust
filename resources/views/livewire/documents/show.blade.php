@@ -175,12 +175,6 @@ new #[Layout('components.layouts.app')] class extends Component {
         </div>
         <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
             @if ($document->status === DocumentStatus::Draft)
-                <flux:button variant="outline" :href="route('documents.prepare', $document)" wire:navigate :disabled="! $workflow['canPrepare']">
-                    {{ __('Prepare fields') }}
-                </flux:button>
-                <flux:button variant="primary" type="button" wire:click="sendForSignature" :disabled="! $workflow['canSend']">
-                    {{ __('Send for signature') }}
-                </flux:button>
             @endif
             <flux:button variant="ghost" :href="route('documents.index')" wire:navigate>{{ __('Back to list') }}</flux:button>
         </div>
@@ -260,6 +254,14 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     <div class="ui-panel p-6 sm:p-8">
         <livewire:document-signers-manager :document-id="$document->id" :key="'signers-'.$document->id" />
+
+        @if ($document->status === DocumentStatus::Draft)
+            <div class="mt-6 flex justify-end border-t border-zinc-200/80 pt-6 dark:border-zinc-700/80">
+                <flux:button variant="outline" :href="route('documents.prepare', $document)" wire:navigate :disabled="! $workflow['canPrepare']">
+                    {{ __('Prepare fields') }}
+                </flux:button>
+            </div>
+        @endif
     </div>
 
     @php

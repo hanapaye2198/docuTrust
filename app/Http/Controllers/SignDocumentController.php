@@ -36,7 +36,7 @@ class SignDocumentController extends Controller
     public function show(string $token): View|Response
     {
         $signer = $this->resolveSignerFromToken($token);
-        if ($signer === null || ! $this->hasValidAccessLink($signer)) {
+        if ($signer === null || ! $this->hasViewAccessLink($signer)) {
             return $this->invalidLinkResponse();
         }
 
@@ -79,7 +79,7 @@ class SignDocumentController extends Controller
     public function streamPdf(string $token): StreamedResponse|Response
     {
         $signer = $this->resolveSignerFromToken($token);
-        if ($signer === null || ! $this->hasValidAccessLink($signer)) {
+        if ($signer === null || ! $this->hasViewAccessLink($signer)) {
             return $this->invalidLinkResponse();
         }
 
@@ -94,7 +94,7 @@ class SignDocumentController extends Controller
     {
         try {
             $signer = $this->resolveSignerFromToken($token);
-            if ($signer === null || ! $this->hasValidAccessLink($signer)) {
+            if ($signer === null || ! $this->hasViewAccessLink($signer)) {
                 return $this->invalidLinkResponse();
             }
 
@@ -102,7 +102,7 @@ class SignDocumentController extends Controller
                 ->with('documentSigners')
                 ->findOrFail($signer->document_id);
 
-            $signingError = $this->canSignerSign($document, $signer);
+            $signingError = $this->canSignerModifyFields($document, $signer);
             if ($signingError !== null) {
                 return redirect()->route('sign.show', $this->signerRouteToken($signer))
                     ->with('error', $signingError);
@@ -171,7 +171,7 @@ class SignDocumentController extends Controller
     {
         try {
             $signer = $this->resolveSignerFromToken($token);
-            if ($signer === null || ! $this->hasValidAccessLink($signer)) {
+            if ($signer === null || ! $this->hasViewAccessLink($signer)) {
                 return $this->invalidLinkResponse();
             }
 
@@ -179,7 +179,7 @@ class SignDocumentController extends Controller
                 ->with('documentSigners')
                 ->findOrFail($signer->document_id);
 
-            $signingError = $this->canSignerSign($document, $signer);
+            $signingError = $this->canSignerModifyFields($document, $signer);
             if ($signingError !== null) {
                 return redirect()->route('sign.show', $this->signerRouteToken($signer))
                     ->with('error', $signingError);
@@ -189,11 +189,6 @@ class SignDocumentController extends Controller
 
             if ($field->document_id !== $document->id || $field->signer_id !== $signer->id) {
                 abort(403);
-            }
-
-            if (Signature::query()->where('signature_field_id', $field->id)->exists()) {
-                return redirect()->route('sign.show', $this->signerRouteToken($signer))
-                    ->with('error', __('This field has already been signed.'));
             }
 
             $this->ensureSignerKeyPair($signer, $pkiSignatureService);
@@ -215,25 +210,42 @@ class SignDocumentController extends Controller
                 throw new \RuntimeException('Digital signature verification failed after signing.');
             }
 
-            Signature::query()->create([
+            $signatureImagePath = $this->storeSubmittedSignatureImage($request->validated('signature_image'));
+            $existingSignature = Signature::query()
+                ->where('signature_field_id', $field->id)
+                ->where('signer_id', $signer->id)
+                ->first();
+
+            $signature = Signature::query()->updateOrCreate(
+                [
+                    'signature_field_id' => $field->id,
+                ],
+                [
                 'document_id' => $document->id,
                 'signer_id' => $signer->id,
                 'signer_certificate_id' => $signerCertificate->id,
-                'signature_field_id' => $field->id,
-                'signature_path' => $this->storeSubmittedSignatureImage($request->validated('signature_image')),
+                'signature_path' => $signatureImagePath,
                 'signature_value' => $signatureValue,
                 'signature_hash' => $documentHash,
                 'public_key_fingerprint' => $pkiSignatureService->fingerprint($signer->signing_public_key),
                 'signature_algorithm' => 'RSA-SHA256',
                 'position_data' => null,
-            ]);
+                ]
+            );
+
+            $this->deleteStoredSignatureIfReplaced($existingSignature, $signatureImagePath);
 
             SignatureAuditLogger::fieldSigned($document, $signer, (string) $request->ip());
 
             $this->completeSignerIfAllFieldsSigned($signer, $document, $documentPdfStampingService);
 
+            $fieldType = $field->type->value;
+            $isSignatureField = in_array($fieldType, ['signature', 'signature_left', 'signature_right'], true);
+
             return redirect()->route('sign.show', $this->signerRouteToken($signer))
-                ->with('status', __('Signature saved.'));
+                ->with('status', $existingSignature !== null
+                    ? ($isSignatureField ? __('Signature updated.') : __('Field updated.'))
+                    : ($isSignatureField ? __('Signature saved.') : __('Field saved.')));
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Field signature submission failed', [
                 'token' => $token,
@@ -251,7 +263,7 @@ class SignDocumentController extends Controller
     public function streamSignatureImage(string $token, SignatureField $signatureField): StreamedResponse|Response
     {
         $signer = $this->resolveSignerFromToken($token);
-        if ($signer === null || ! $this->hasValidAccessLink($signer)) {
+        if ($signer === null || ! $this->hasViewAccessLink($signer)) {
             return $this->invalidLinkResponse();
         }
 
@@ -275,7 +287,7 @@ class SignDocumentController extends Controller
         $content = $disk->get($signature->signature_path);
 
         return response($content, 200, [
-            'Content-Type' => 'image/png',
+            'Content-Type' => $disk->mimeType($signature->signature_path) ?: 'application/octet-stream',
             'Cache-Control' => 'private, max-age=600, stale-while-revalidate=3600',
         ]);
     }
@@ -285,7 +297,7 @@ class SignDocumentController extends Controller
         return DocumentSigner::query()->where('access_token', $token)->first();
     }
 
-    private function hasValidAccessLink(DocumentSigner $signer): bool
+    private function hasViewAccessLink(DocumentSigner $signer): bool
     {
         if ($signer->access_token === null || $signer->access_token === '') {
             return false;
@@ -295,7 +307,9 @@ class SignDocumentController extends Controller
             return false;
         }
 
-        return $signer->document()->where('status', DocumentStatus::Pending)->exists();
+        return $signer->document()
+            ->whereIn('status', [DocumentStatus::Pending, DocumentStatus::Completed])
+            ->exists();
     }
 
     private function signerRouteToken(DocumentSigner $signer): string
@@ -355,6 +369,23 @@ class SignDocumentController extends Controller
         return null;
     }
 
+    private function canSignerModifyFields(Document $document, DocumentSigner $signer): ?string
+    {
+        if (in_array($document->status, [DocumentStatus::Declined, DocumentStatus::Cancelled], true)) {
+            return __('This document can no longer be signed.');
+        }
+
+        if ($document->status !== DocumentStatus::Pending) {
+            return __('This document is not available for signing.');
+        }
+
+        if ($signer->status === DocumentSignerStatus::Pending) {
+            return $this->canSignerSign($document, $signer);
+        }
+
+        return null;
+    }
+
     private function usesSequentialSigning(Document $document): bool
     {
         return $document->documentSigners->contains(
@@ -398,6 +429,10 @@ class SignDocumentController extends Controller
             return;
         }
 
+        if ($signer->status === DocumentSignerStatus::Signed) {
+            return;
+        }
+
         $signer->update([
             'status' => DocumentSignerStatus::Signed,
             'signed_at' => now(),
@@ -436,5 +471,18 @@ class SignDocumentController extends Controller
         Storage::disk($this->secureDiskName())->put($path, $binary);
 
         return $path;
+    }
+
+    private function deleteStoredSignatureIfReplaced(?Signature $existingSignature, ?string $newPath): void
+    {
+        $existingPath = $existingSignature?->signature_path;
+        if (! is_string($existingPath) || $existingPath === '' || $existingPath === $newPath) {
+            return;
+        }
+
+        $disk = Storage::disk($this->secureDiskName());
+        if ($disk->exists($existingPath)) {
+            $disk->delete($existingPath);
+        }
     }
 }

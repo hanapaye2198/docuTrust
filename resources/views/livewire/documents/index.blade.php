@@ -106,8 +106,10 @@ new #[Layout('components.layouts.app')] class extends Component {
             'documents' => $documentsQuery
                 ->with(['tags', 'documentSigners', 'signatures'])
                 ->withCount('documentSigners')
-                ->latest()
-                ->paginate(10),
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->paginate(10)
+                ->withQueryString(),
             'availableTags' => Tag::query()
                 ->where('organization_id', auth()->user()?->organization_id)
                 ->orderBy('name')
@@ -120,7 +122,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="flex h-full w-full flex-1 flex-col gap-6 p-1">
+<div class="flex min-h-full w-full flex-1 flex-col gap-6 p-1">
 
     {{-- ── Page header ── --}}
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

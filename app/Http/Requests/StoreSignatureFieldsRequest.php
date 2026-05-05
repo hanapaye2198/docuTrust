@@ -5,9 +5,13 @@ namespace App\Http\Requests;
 use App\Enums\DocumentStatus;
 use App\Enums\SignatureFieldType;
 use App\Models\Document;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Enum;
+use setasign\Fpdi\Fpdi;
+use Throwable;
 
 class StoreSignatureFieldsRequest extends FormRequest
 {
@@ -53,5 +57,87 @@ class StoreSignatureFieldsRequest extends FormRequest
             'fields.*.position_data.width' => ['required', 'numeric', 'between:0,1'],
             'fields.*.position_data.height' => ['required', 'numeric', 'between:0,1'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            /** @var Document $document */
+            $document = $this->route('document');
+            $fields = $this->validatedFields();
+
+            foreach ($fields as $index => $field) {
+                $position = $field['position_data'] ?? [];
+                $x = (float) ($position['x'] ?? 0);
+                $y = (float) ($position['y'] ?? 0);
+                $width = (float) ($position['width'] ?? 0);
+                $height = (float) ($position['height'] ?? 0);
+
+                if ($width <= 0.0001 || $height <= 0.0001) {
+                    $validator->errors()->add("fields.$index.position_data", __('Field size must be greater than zero.'));
+                }
+
+                if (($x + $width) > 1.000001) {
+                    $validator->errors()->add("fields.$index.position_data", __('Field extends past the right edge of the page.'));
+                }
+
+                if (($y + $height) > 1.000001) {
+                    $validator->errors()->add("fields.$index.position_data", __('Field extends past the bottom edge of the page.'));
+                }
+
+                if (! $document->documentSigners()->whereKey((int) $field['signer_id'])->exists()) {
+                    $validator->errors()->add("fields.$index.signer_id", __('Invalid signer for this document.'));
+                }
+            }
+
+            $pageCount = $this->resolveDocumentPageCount($document);
+            if ($pageCount === null) {
+                return;
+            }
+
+            foreach ($fields as $index => $field) {
+                $pageNumber = (int) ($field['page_number'] ?? 0);
+                if ($pageNumber < 1 || $pageNumber > $pageCount) {
+                    $validator->errors()->add(
+                        "fields.$index.page_number",
+                        __('Field references page :page, but the document only has :count page(s).', [
+                            'page' => $pageNumber,
+                            'count' => $pageCount,
+                        ])
+                    );
+                }
+            }
+        });
+    }
+
+    /**
+     * @return array<int, array{signer_id:int, type:string, page_number:int, position_data:array{x:float,y:float,width:float,height:float}}>
+     */
+    private function validatedFields(): array
+    {
+        $fields = $this->input('fields', []);
+
+        return is_array($fields) ? $fields : [];
+    }
+
+    private function resolveDocumentPageCount(Document $document): ?int
+    {
+        $path = $document->sourcePdfPath();
+        if (! is_string($path) || $path === '') {
+            return null;
+        }
+
+        $disk = Storage::disk((string) config('filesystems.docutrust_disk', 'local'));
+        if (! $disk->exists($path)) {
+            return null;
+        }
+
+        try {
+            $pdf = new Fpdi();
+
+            return $pdf->setSourceFile($disk->path($path));
+        } catch (Throwable) {
+            return null;
+        }
     }
 }
