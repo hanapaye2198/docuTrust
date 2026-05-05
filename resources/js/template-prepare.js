@@ -638,7 +638,11 @@ function createPrepareSession(cfgEl) {
             }
 
             const viewport = page.getViewport({
-                scale: resolveRenderScale(page, pdfPanel ? pdfPanel.clientWidth : 0),
+                scale: resolveRenderScale(
+                    page,
+                    pdfPanel ? pdfPanel.clientWidth : 0,
+                    pdfPanel ? pdfPanel.clientHeight : 0,
+                ),
             });
 
             const ctx = pdfCanvas?.getContext('2d');
