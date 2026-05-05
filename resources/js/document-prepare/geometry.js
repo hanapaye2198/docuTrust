@@ -9,24 +9,17 @@ function objectFrame(target) {
     };
 }
 
-export function resolveRenderScale(page, panelWidth, panelHeight = 0) {
+export function resolveRenderScale(page, panelWidth) {
     const baseViewport = page.getViewport({ scale: 1 });
     const shellPadding = 24;
-    const shellVerticalPadding = 24;
     const availableWidth = Math.max(320, panelWidth - shellPadding);
-    const availableHeight = panelHeight > 0 ? Math.max(240, panelHeight - shellVerticalPadding) : 0;
 
-    if (baseViewport.width <= 0 || baseViewport.height <= 0) {
+    if (baseViewport.width <= 0) {
         return 1;
     }
 
-    const fitWidthScale = availableWidth / baseViewport.width;
-    const fitHeightScale = availableHeight > 0
-        ? availableHeight / baseViewport.height
-        : fitWidthScale;
-    const fitScale = Math.min(fitWidthScale, fitHeightScale);
-
-    return Math.min(2, Math.max(0.35, fitScale));
+    const fitScale = availableWidth / baseViewport.width;
+    return Math.min(2, Math.max(0.5, fitScale));
 }
 
 export function resolveVisiblePosition({ width, height, pdfPanel, fabricEl }) {
