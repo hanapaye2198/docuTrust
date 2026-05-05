@@ -53,9 +53,21 @@ class DocumentHashService
 
     public function generateDocumentHash(string $filePath): string
     {
-        $fileContents = Storage::disk($this->secureDiskName())->get($filePath);
+        $disk = Storage::disk($this->secureDiskName());
+        $stream = $disk->readStream($filePath);
 
-        return hash('sha256', $fileContents);
+        if (is_resource($stream)) {
+            try {
+                $context = hash_init('sha256');
+                hash_update_stream($context, $stream);
+
+                return hash_final($context);
+            } finally {
+                fclose($stream);
+            }
+        }
+
+        return hash('sha256', $disk->get($filePath));
     }
 
     public function generateHashForDocument(Document $document): string

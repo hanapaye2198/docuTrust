@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\DocumentStatus;
 use App\Events\DocumentSent;
+use App\Jobs\GenerateDocumentPdfJob;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use Illuminate\Support\Str;
@@ -50,7 +51,7 @@ class SendDocumentForSignatureService
             ]);
         });
 
-        app(DocumentPdfStampingService::class)->generatePreparedPdf($document->fresh());
+        GenerateDocumentPdfJob::dispatch($document->id, 'prepared');
         $document->refresh()->load('documentSigners');
 
         event(new DocumentSent($document));

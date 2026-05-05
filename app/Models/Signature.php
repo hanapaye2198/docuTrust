@@ -20,6 +20,7 @@ class Signature extends Model
         'signer_certificate_id',
         'signature_field_id',
         'signature_path',
+        'submitted_value',
         'signature_value',
         'signature_hash',
         'public_key_fingerprint',

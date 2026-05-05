@@ -35,6 +35,7 @@ class StoreDocumentSignatureRequest extends FormRequest
         return [
             'signature_field_id' => ['required', 'integer', 'exists:signature_fields,id'],
             'signature_image' => ['nullable', 'string', 'max:8000000', 'regex:/^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+\/=\r\n]+$/'],
+            'submitted_value' => ['nullable', 'string', 'max:1000'],
         ];
     }
 }

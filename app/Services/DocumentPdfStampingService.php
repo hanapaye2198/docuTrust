@@ -183,7 +183,7 @@ class DocumentPdfStampingService
             return;
         }
 
-        $value = $this->resolvedFieldValue($type, $field);
+        $value = $this->resolvedFieldValue($type, $field, $signature);
         if ($value === '') {
             return;
         }
@@ -221,8 +221,12 @@ class DocumentPdfStampingService
         $pdf->Image($imagePath, $renderX, $y + $margin, $renderWidth, $renderHeight, 'PNG');
     }
 
-    private function resolvedFieldValue(SignatureFieldType $type, SignatureField $field): string
+    private function resolvedFieldValue(SignatureFieldType $type, SignatureField $field, ?Signature $signature = null): string
     {
+        if (is_string($signature?->submitted_value) && $signature->submitted_value !== '') {
+            return $signature->submitted_value;
+        }
+
         $signer = $field->signer;
         if ($signer === null) {
             return '';

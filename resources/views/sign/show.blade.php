@@ -181,7 +181,7 @@
 
             <dialog
                 id="sign-modal"
-                class="w-[calc(100vw-2rem)] max-w-lg rounded-3xl border border-zinc-200/90 bg-white p-0 shadow-2xl shadow-zinc-950/25 backdrop:bg-zinc-950/60 open:backdrop:backdrop-blur-sm dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-black/60"
+                class="w-[calc(100vw-2rem)] max-w-lg rounded-3xl border border-zinc-200/90 bg-white p-0 shadow-2xl shadow-zinc-950/25 backdrop:bg-zinc-950/60 dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-black/60"
             >
                 <div class="border-b border-zinc-200/90 bg-gradient-to-r from-zinc-50 to-white px-6 py-5 dark:border-zinc-700 dark:from-zinc-900 dark:to-zinc-900">
                     <h3 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{{ __('Add your signature') }}</h3>
@@ -200,8 +200,8 @@
                 </div>
                 <div class="p-6">
                     <div id="panel-draw" class="sign-panel">
-                        <canvas id="draw-canvas" width="400" height="200" class="w-full max-w-full rounded-lg border border-zinc-200 bg-white dark:border-zinc-600"></canvas>
-                        <button type="button" id="draw-clear" class="mt-3 text-sm font-medium text-zinc-600 underline dark:text-zinc-400">
+                        <canvas id="draw-canvas" width="400" height="200" class="w-full max-w-full touch-none select-none rounded-lg border border-zinc-200 bg-white dark:border-zinc-600"></canvas>
+                        <button type="button" id="draw-clear" class="mt-3 inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
                             {{ __('Clear') }}
                         </button>
                     </div>
@@ -228,6 +228,7 @@
                     @csrf
                     <input type="hidden" name="signature_field_id" id="modal-field-id" value="" />
                     <input type="hidden" name="signature_image" id="modal-signature-image" value="" />
+                    <input type="hidden" name="submitted_value" id="modal-submitted-value" value="" />
                     <div class="flex justify-end gap-2">
                         <button type="button" id="modal-cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-200/80 dark:text-zinc-400 dark:hover:bg-zinc-800">
                             {{ __('Cancel') }}
@@ -269,6 +270,7 @@
                 const modal = document.getElementById('sign-modal');
                 const modalFieldId = document.getElementById('modal-field-id');
                 const modalSignatureImage = document.getElementById('modal-signature-image');
+                const modalSubmittedValue = document.getElementById('modal-submitted-value');
                 const signForm = document.getElementById('sign-form');
                 const pageIndicator = document.getElementById('page-indicator');
                 const btnPrevPage = document.getElementById('btn-prev-page');
@@ -277,8 +279,13 @@
                 let fabricCanvas = null;
                 let drawContext = null;
                 let drawPointerId = null;
+                let drawCanvasRect = null;
                 let isDrawing = false;
                 let hasDrawnStroke = false;
+                let pendingDrawPoints = [];
+                let drawLastPoint = null;
+                let drawStrokeSegmentCount = 0;
+                let drawFrameId = null;
                 let isSubmitting = false;
                 let pdfDoc = null;
                 let currentPage = 1;
@@ -703,30 +710,30 @@
                         return;
                     }
                     if (field.type === 'name') {
-                        submitSignatureField(field.id, textToDataUrl(signerName));
+                        submitSignatureField(field.id, textToDataUrl(signerName), signerName);
                         return;
                     }
                     if (field.type === 'date') {
                         const d = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium' }).format(
                             new Date()
                         );
-                        submitSignatureField(field.id, textToDataUrl(d));
+                        submitSignatureField(field.id, textToDataUrl(d), d);
                         return;
                     }
                     if (field.type === 'email') {
-                        submitSignatureField(field.id, textToDataUrl(signerEmail));
+                        submitSignatureField(field.id, textToDataUrl(signerEmail), signerEmail);
                         return;
                     }
                     if (field.type === 'initials') {
-                        submitSignatureField(field.id, textToDataUrl(signerInitialsValue()));
+                        submitSignatureField(field.id, textToDataUrl(signerInitialsValue()), signerInitialsValue());
                         return;
                     }
                     if (field.type === 'checkbox') {
-                        submitSignatureField(field.id, textToDataUrl('X'));
+                        submitSignatureField(field.id, textToDataUrl('X'), 'X');
                         return;
                     }
                     if (field.type === 'radio') {
-                        submitSignatureField(field.id, textToDataUrl('O'));
+                        submitSignatureField(field.id, textToDataUrl('O'), 'O');
                         return;
                     }
                     openModal(field.id);
@@ -754,6 +761,47 @@
                     };
                 }
 
+                function buildSignedValueGroup(field, rect, submittedValue) {
+                    const chrome = getFieldChrome(field.type);
+                    const nodes = [];
+                    const inset = Math.max(4, rect.height * 0.12);
+
+                    if (field.type === 'checkbox' || field.type === 'radio') {
+                        nodes.push(new fabric.Text(submittedValue || (field.type === 'checkbox' ? 'X' : 'O'), {
+                            fontSize: clamp(rect.height * 0.56, 14, 24),
+                            fill: chrome.stroke,
+                            fontFamily: 'Georgia, serif',
+                            fontWeight: 700,
+                            originX: 'center',
+                            originY: 'center',
+                            left: rect.width / 2,
+                            top: rect.height / 2,
+                            textAlign: 'center',
+                        }));
+                    } else {
+                        nodes.push(new fabric.Textbox(String(submittedValue || ''), {
+                            width: Math.max(24, rect.width - (inset * 2)),
+                            fontSize: clamp(rect.height * 0.26, 10, 17),
+                            fill: '#0f172a',
+                            fontFamily: 'Georgia, serif',
+                            fontWeight: 500,
+                            originX: 'left',
+                            originY: 'top',
+                            left: inset,
+                            top: Math.max(2, rect.height * 0.16),
+                            textAlign: 'left',
+                            lineHeight: 1,
+                            splitByGrapheme: false,
+                        }));
+                    }
+
+                    return new fabric.Group(nodes, {
+                        left: rect.left,
+                        top: rect.top,
+                        subTargetCheck: true,
+                    });
+                }
+
                 function renderPageFields(cw, ch) {
                     fabricCanvas.clear();
                     const nextField = firstUnsignedField();
@@ -761,62 +809,84 @@
                     fieldsForCurrentPage().forEach(function (field) {
                         const r = rectFromNormalized(field.position_data, cw, ch);
                         if (isSigned(field.id)) {
-                            const url = signedByFieldId[String(field.id)];
-                            fabric.Image.fromURL(
-                                url,
-                                function (img) {
-                                    const placement = signatureImagePlacement(r, img.width, img.height, field.type);
-                                    img.set({
-                                        left: placement.left,
-                                        top: placement.top,
-                                        scaleX: placement.scale,
-                                        scaleY: placement.scale,
-                                        selectable: false,
-                                        evented: canEditFields,
-                                        hasControls: false,
-                                        hoverCursor: canEditFields ? 'pointer' : 'default',
-                                        opacity: 0.98,
+                            const signedField = signedByFieldId[String(field.id)] || {};
+                            const url = signedField.image_url || null;
+                            const submittedValue = signedField.submitted_value || '';
+                            const addSignedDecorators = function (target) {
+                                const badge = new fabric.Text(@json(__('Signed')), {
+                                    left: r.left + 4,
+                                    top: Math.max(2, r.top - 13),
+                                    fontSize: 10,
+                                    fill: '#0f766e',
+                                    fontFamily: 'system-ui, sans-serif',
+                                    selectable: false,
+                                    evented: false,
+                                    hoverCursor: 'default',
+                                    opacity: 0.82,
+                                });
+                                const hitbox = new fabric.Rect({
+                                    left: r.left,
+                                    top: r.top,
+                                    width: r.width,
+                                    height: r.height,
+                                    fill: 'rgba(0,0,0,0.001)',
+                                    selectable: false,
+                                    evented: canEditFields,
+                                    hasControls: false,
+                                    hoverCursor: canEditFields ? 'pointer' : 'default',
+                                });
+                                if (canEditFields) {
+                                    hitbox.on('mousedown', function (e) {
+                                        e.e.preventDefault();
+                                        activateField(field);
                                     });
-                                    if (canEditFields) {
-                                        img.on('mousedown', function (e) {
-                                            e.e.preventDefault();
-                                            activateField(field);
+                                }
+                                fabricCanvas.add(target);
+                                fabricCanvas.add(badge);
+                                fabricCanvas.add(hitbox);
+                                fabricCanvas.requestRenderAll();
+                            };
+
+                            if (url && ['signature', 'signature_left', 'signature_right'].includes(field.type)) {
+                                fabric.Image.fromURL(
+                                    url,
+                                    function (img) {
+                                        const placement = signatureImagePlacement(r, img.width, img.height, field.type);
+                                        img.set({
+                                            left: placement.left,
+                                            top: placement.top,
+                                            scaleX: placement.scale,
+                                            scaleY: placement.scale,
+                                            selectable: false,
+                                            evented: canEditFields,
+                                            hasControls: false,
+                                            hoverCursor: canEditFields ? 'pointer' : 'default',
+                                            opacity: 0.98,
                                         });
-                                    }
-                                    const badge = new fabric.Text(@json(__('Signed')), {
-                                        left: r.left + 4,
-                                        top: r.top + r.height - 16,
-                                        fontSize: 11,
-                                        fill: '#0f766e',
-                                        fontFamily: 'system-ui, sans-serif',
-                                        selectable: false,
-                                        evented: false,
-                                        hoverCursor: 'default',
+                                        if (canEditFields) {
+                                            img.on('mousedown', function (e) {
+                                                e.e.preventDefault();
+                                                activateField(field);
+                                            });
+                                        }
+                                        addSignedDecorators(img);
+                                    },
+                                    { crossOrigin: 'anonymous' }
+                                );
+                            } else {
+                                const valueGroup = buildSignedValueGroup(field, r, submittedValue);
+                                valueGroup.selectable = false;
+                                valueGroup.evented = canEditFields;
+                                valueGroup.hasControls = false;
+                                valueGroup.hoverCursor = canEditFields ? 'pointer' : 'default';
+                                if (canEditFields) {
+                                    valueGroup.on('mousedown', function (e) {
+                                        e.e.preventDefault();
+                                        activateField(field);
                                     });
-                                    const hitbox = new fabric.Rect({
-                                        left: r.left,
-                                        top: r.top,
-                                        width: r.width,
-                                        height: r.height,
-                                        fill: 'rgba(0,0,0,0.001)',
-                                        selectable: false,
-                                        evented: canEditFields,
-                                        hasControls: false,
-                                        hoverCursor: canEditFields ? 'pointer' : 'default',
-                                    });
-                                    if (canEditFields) {
-                                        hitbox.on('mousedown', function (e) {
-                                            e.e.preventDefault();
-                                            activateField(field);
-                                        });
-                                    }
-                                    fabricCanvas.add(img);
-                                    fabricCanvas.add(badge);
-                                    fabricCanvas.add(hitbox);
-                                    fabricCanvas.requestRenderAll();
-                                },
-                                { crossOrigin: 'anonymous' }
-                            );
+                                }
+                                addSignedDecorators(valueGroup);
+                            }
                         } else {
                             const chrome = getFieldChrome(field.type);
                             const group = buildFieldPreviewGroup(chrome, r);
@@ -917,7 +987,7 @@
                     el.height = 120;
                     const fc = new fabric.Canvas(el);
                     const t = new fabric.Text(text, {
-                        fontSize: 28,
+                        fontSize: 34,
                         fontFamily: 'Georgia, serif',
                         fill: '#0f172a',
                         originX: 'center',
@@ -926,10 +996,93 @@
                         top: 60,
                     });
                     fc.add(t);
-                    return fc.toDataURL({ format: 'png' });
+                    return trimmedCanvasDataUrl(el, { mode: 'transparent', padding: 12 });
                 }
 
-                function submitSignatureField(fieldId, dataUrl) {
+                function trimmedCanvasDataUrl(sourceCanvas, options = {}) {
+                    if (!sourceCanvas) {
+                        return '';
+                    }
+
+                    const mode = options.mode || 'transparent';
+                    const padding = Number.isFinite(options.padding) ? Math.max(0, Math.round(options.padding)) : 8;
+                    const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+                    if (!ctx) {
+                        return sourceCanvas.toDataURL('image/png');
+                    }
+
+                    const { width, height } = sourceCanvas;
+                    const imageData = ctx.getImageData(0, 0, width, height);
+                    const data = imageData.data;
+                    let minX = width;
+                    let minY = height;
+                    let maxX = -1;
+                    let maxY = -1;
+
+                    for (let y = 0; y < height; y += 1) {
+                        for (let x = 0; x < width; x += 1) {
+                            const idx = ((y * width) + x) * 4;
+                            const r = data[idx];
+                            const g = data[idx + 1];
+                            const b = data[idx + 2];
+                            const a = data[idx + 3];
+
+                            const hasInk = mode === 'light-bg'
+                                ? a > 0 && (r < 245 || g < 245 || b < 245)
+                                : a > 8;
+
+                            if (!hasInk) {
+                                continue;
+                            }
+
+                            minX = Math.min(minX, x);
+                            minY = Math.min(minY, y);
+                            maxX = Math.max(maxX, x);
+                            maxY = Math.max(maxY, y);
+                        }
+                    }
+
+                    if (maxX < minX || maxY < minY) {
+                        return sourceCanvas.toDataURL('image/png');
+                    }
+
+                    minX = Math.max(0, minX - padding);
+                    minY = Math.max(0, minY - padding);
+                    maxX = Math.min(width - 1, maxX + padding);
+                    maxY = Math.min(height - 1, maxY + padding);
+
+                    const trimmedWidth = Math.max(1, (maxX - minX) + 1);
+                    const trimmedHeight = Math.max(1, (maxY - minY) + 1);
+                    const outputCanvas = document.createElement('canvas');
+                    outputCanvas.width = trimmedWidth;
+                    outputCanvas.height = trimmedHeight;
+
+                    const outputCtx = outputCanvas.getContext('2d');
+                    if (!outputCtx) {
+                        return sourceCanvas.toDataURL('image/png');
+                    }
+
+                    if (mode === 'light-bg') {
+                        outputCtx.fillStyle = '#ffffff';
+                        outputCtx.fillRect(0, 0, trimmedWidth, trimmedHeight);
+                    }
+
+                    outputCtx.drawImage(
+                        sourceCanvas,
+                        minX,
+                        minY,
+                        trimmedWidth,
+                        trimmedHeight,
+                        0,
+                        0,
+                        trimmedWidth,
+                        trimmedHeight
+                    );
+
+                    return outputCanvas.toDataURL('image/png');
+                }
+
+                function submitSignatureField(fieldId, dataUrl, submittedValue = '') {
                     if (!canEditFields || isSubmitting) {
                         return;
                     }
@@ -937,6 +1090,9 @@
                     document.getElementById('modal-submit')?.setAttribute('disabled', 'disabled');
                     modalFieldId.value = String(fieldId);
                     modalSignatureImage.value = dataUrl;
+                    if (modalSubmittedValue) {
+                        modalSubmittedValue.value = submittedValue;
+                    }
                     signForm.submit();
                 }
 
@@ -946,6 +1102,9 @@
                     }
                     modalFieldId.value = String(fieldId);
                     modalSignatureImage.value = '';
+                    if (modalSubmittedValue) {
+                        modalSubmittedValue.value = '';
+                    }
                     modal.showModal();
                     if (drawCanvasEl && drawContext) {
                         clearSignatureCanvas();
@@ -963,9 +1122,18 @@
 
                     drawContext.save();
                     drawContext.setTransform(1, 0, 0, 1, 0, 0);
-                    drawContext.clearRect(0, 0, drawCanvasEl.width, drawCanvasEl.height);
+                    drawContext.fillStyle = '#ffffff';
+                    drawContext.fillRect(0, 0, drawCanvasEl.width, drawCanvasEl.height);
                     drawContext.restore();
                     hasDrawnStroke = false;
+                    pendingDrawPoints = [];
+                    drawLastPoint = null;
+                    drawStrokeSegmentCount = 0;
+
+                    if (drawFrameId !== null) {
+                        cancelAnimationFrame(drawFrameId);
+                        drawFrameId = null;
+                    }
                 }
 
                 function configureSignatureCanvas() {
@@ -976,13 +1144,17 @@
                     const rect = drawCanvasEl.getBoundingClientRect();
                     const cssWidth = Math.max(320, Math.round(rect.width || 400));
                     const cssHeight = Math.max(160, Math.round(cssWidth / 2));
-                    const pixelRatio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+                    const pixelRatio = 1;
 
                     drawCanvasEl.width = Math.round(cssWidth * pixelRatio);
                     drawCanvasEl.height = Math.round(cssHeight * pixelRatio);
+                    drawCanvasEl.style.width = cssWidth + 'px';
                     drawCanvasEl.style.height = cssHeight + 'px';
 
-                    drawContext = drawCanvasEl.getContext('2d');
+                    drawContext = drawCanvasEl.getContext('2d', {
+                        alpha: false,
+                        desynchronized: true,
+                    });
                     drawContext.setTransform(1, 0, 0, 1, 0, 0);
                     drawContext.scale(pixelRatio, pixelRatio);
                     drawContext.lineCap = 'round';
@@ -994,12 +1166,52 @@
                 }
 
                 function signaturePoint(event) {
-                    const rect = drawCanvasEl.getBoundingClientRect();
+                    const rect = drawCanvasRect || drawCanvasEl.getBoundingClientRect();
 
                     return {
                         x: event.clientX - rect.left,
                         y: event.clientY - rect.top,
+                        pressure: typeof event.pressure === 'number' && event.pressure > 0 ? event.pressure : 0.5,
+                        pointerType: event.pointerType || 'mouse',
                     };
+                }
+
+                function flushSignatureStroke() {
+                    drawFrameId = null;
+
+                    if (!isDrawing || pendingDrawPoints.length === 0 || !drawContext || !drawLastPoint) {
+                        return;
+                    }
+
+                    for (const point of pendingDrawPoints) {
+                        const distance = Math.hypot(point.x - drawLastPoint.x, point.y - drawLastPoint.y);
+                        const movementThreshold = point.pointerType === 'mouse' ? 0.12 : 0.35;
+                        if (distance < movementThreshold) {
+                            continue;
+                        }
+
+                        const pressure = point.pointerType === 'mouse'
+                            ? Math.max(point.pressure, 0.72)
+                            : point.pressure;
+                        const targetLineWidth = 1.15 + (pressure * 1.45);
+                        drawContext.lineWidth = targetLineWidth;
+                        drawContext.lineTo(point.x, point.y);
+                        drawContext.stroke();
+                        drawLastPoint = point;
+                        drawStrokeSegmentCount += 1;
+                    }
+
+                    pendingDrawPoints = [];
+                }
+
+                function queueSignatureStroke(point) {
+                    pendingDrawPoints.push(point);
+
+                    if (drawFrameId !== null) {
+                        return;
+                    }
+
+                    drawFrameId = requestAnimationFrame(flushSignatureStroke);
                 }
 
                 function beginSignatureStroke(event) {
@@ -1007,10 +1219,14 @@
                         return;
                     }
 
+                    drawCanvasRect = drawCanvasEl.getBoundingClientRect();
                     const point = signaturePoint(event);
                     isDrawing = true;
                     drawPointerId = event.pointerId;
                     hasDrawnStroke = true;
+                    pendingDrawPoints = [];
+                    drawLastPoint = point;
+                    drawStrokeSegmentCount = 0;
                     drawCanvasEl.setPointerCapture?.(event.pointerId);
                     drawContext.beginPath();
                     drawContext.moveTo(point.x, point.y);
@@ -1022,9 +1238,14 @@
                         return;
                     }
 
-                    const point = signaturePoint(event);
-                    drawContext.lineTo(point.x, point.y);
-                    drawContext.stroke();
+                    const events = typeof event.getCoalescedEvents === 'function'
+                        ? event.getCoalescedEvents()
+                        : [event];
+
+                    for (const nextEvent of events) {
+                        queueSignatureStroke(signaturePoint(nextEvent));
+                    }
+
                     event.preventDefault();
                 }
 
@@ -1033,15 +1254,26 @@
                         return;
                     }
 
+                    flushSignatureStroke();
+
+                    if (drawStrokeSegmentCount === 0 && drawLastPoint && drawContext) {
+                        drawContext.beginPath();
+                        drawContext.arc(drawLastPoint.x, drawLastPoint.y, 1.2, 0, Math.PI * 2);
+                        drawContext.fillStyle = '#0f172a';
+                        drawContext.fill();
+                    }
+
                     isDrawing = false;
                     drawPointerId = null;
+                    drawCanvasRect = null;
                     drawContext?.closePath();
+                    drawLastPoint = null;
                     drawCanvasEl.releasePointerCapture?.(event.pointerId);
                     event.preventDefault();
                 }
 
                 function signatureDataUrl() {
-                    return drawCanvasEl ? drawCanvasEl.toDataURL('image/png') : '';
+                    return drawCanvasEl ? trimmedCanvasDataUrl(drawCanvasEl, { mode: 'light-bg', padding: 10 }) : '';
                 }
 
                 function showTab(name) {
@@ -1114,6 +1346,9 @@
                                 return;
                             }
                             modalSignatureImage.value = signatureDataUrl();
+                            if (modalSubmittedValue) {
+                                modalSubmittedValue.value = '';
+                            }
                             return;
                         }
                         if (!typeHidden) {
@@ -1123,7 +1358,7 @@
                             el.height = 120;
                             const fc = new fabric.Canvas(el);
                             const t = new fabric.Text(txt, {
-                                fontSize: 36,
+                                fontSize: 42,
                                 fontFamily: 'Georgia, serif',
                                 fill: '#0f172a',
                                 originX: 'center',
@@ -1132,7 +1367,10 @@
                                 top: 60,
                             });
                             fc.add(t);
-                            modalSignatureImage.value = fc.toDataURL({ format: 'png' });
+                            modalSignatureImage.value = trimmedCanvasDataUrl(el, { mode: 'transparent', padding: 12 });
+                            if (modalSubmittedValue) {
+                                modalSubmittedValue.value = '';
+                            }
                             return;
                         }
                         if (!uploadHidden) {

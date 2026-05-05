@@ -7,12 +7,12 @@ use App\Enums\DocumentStatus;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSignerCompleted;
 use App\Http\Requests\StoreDocumentSignatureRequest;
+use App\Jobs\GenerateDocumentPdfJob;
 use App\Jobs\GenerateCertificateJob;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
-use App\Services\DocumentPdfStampingService;
 use App\Services\DocumentHashService;
 use App\Services\PkiSignatureService;
 use App\Services\SignerCertificateService;
@@ -35,16 +35,15 @@ class SignDocumentController extends Controller
 
     public function show(string $token): View|Response
     {
-        $signer = $this->resolveSignerFromToken($token);
-        if ($signer === null || ! $this->hasViewAccessLink($signer)) {
-            return $this->invalidLinkResponse();
-        }
-
-        $signer->load([
+        $signer = $this->resolveAccessibleSigner($token, [
             'document' => fn ($q) => $q->withCount('signatureFields'),
             'document.signatureFields',
             'signatures' => fn ($q) => $q->whereNotNull('signature_field_id'),
         ]);
+
+        if ($signer === null) {
+            return $this->invalidLinkResponse();
+        }
 
         $document = $signer->document;
 
@@ -54,12 +53,19 @@ class SignDocumentController extends Controller
 
         $signedByFieldId = [];
         foreach ($signer->signatures as $signature) {
-            if ($signature->signature_field_id !== null && is_string($signature->signature_path) && $signature->signature_path !== '') {
-                $signedByFieldId[$signature->signature_field_id] = route('sign.signature.image', [
-                    'token' => $this->signerRouteToken($signer),
-                    'signatureField' => $signature->signature_field_id,
-                ]);
+            if ($signature->signature_field_id === null) {
+                continue;
             }
+
+            $signedByFieldId[$signature->signature_field_id] = [
+                'image_url' => is_string($signature->signature_path) && $signature->signature_path !== ''
+                    ? route('sign.signature.image', [
+                        'token' => $this->signerRouteToken($signer),
+                        'signatureField' => $signature->signature_field_id,
+                    ])
+                    : null,
+                'submitted_value' => is_string($signature->submitted_value) ? $signature->submitted_value : null,
+            ];
         }
 
         return view('sign.show', [
@@ -78,29 +84,27 @@ class SignDocumentController extends Controller
 
     public function streamPdf(string $token): StreamedResponse|Response
     {
-        $signer = $this->resolveSignerFromToken($token);
-        if ($signer === null || ! $this->hasViewAccessLink($signer)) {
+        $signer = $this->resolveAccessibleSigner($token, ['document']);
+        if ($signer === null) {
             return $this->invalidLinkResponse();
         }
 
-        $document = Document::query()->findOrFail($signer->document_id);
+        $document = $signer->document;
 
         // Use the original source PDF for the live signing view so the interactive
         // overlay and the visible document share the same coordinate basis.
         return PublicPdfStream::inlineResponse($document->sourcePdfPath() ?: $document->activeSigningPdfPath());
     }
 
-    public function sign(string $token, DocumentPdfStampingService $documentPdfStampingService): RedirectResponse|Response
+    public function sign(string $token): RedirectResponse|Response
     {
         try {
-            $signer = $this->resolveSignerFromToken($token);
-            if ($signer === null || ! $this->hasViewAccessLink($signer)) {
+            $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
+            if ($signer === null) {
                 return $this->invalidLinkResponse();
             }
 
-            $document = Document::query()
-                ->with('documentSigners')
-                ->findOrFail($signer->document_id);
+            $document = $signer->document;
 
             $signingError = $this->canSignerModifyFields($document, $signer);
             if ($signingError !== null) {
@@ -132,10 +136,10 @@ class SignDocumentController extends Controller
 
             if ($document->allSignersHaveSigned()) {
                 $document->update(['status' => DocumentStatus::Completed]);
-                $documentPdfStampingService->generateFinalPdf($document->fresh());
+                GenerateDocumentPdfJob::dispatch($document->id, 'final');
                 $completedDocument = $document->fresh();
                 SignatureAuditLogger::documentCompleted($completedDocument, (string) request()->ip());
-                GenerateCertificateJob::dispatchSync($completedDocument->id);
+                GenerateCertificateJob::dispatch($completedDocument->id);
                 event(new DocumentCompleted($completedDocument));
             }
 
@@ -164,20 +168,17 @@ class SignDocumentController extends Controller
         StoreDocumentSignatureRequest $request,
         string $token,
         DocumentHashService $documentHashService,
-        DocumentPdfStampingService $documentPdfStampingService,
         PkiSignatureService $pkiSignatureService,
         SignerCertificateService $signerCertificateService,
     ): RedirectResponse|Response
     {
         try {
-            $signer = $this->resolveSignerFromToken($token);
-            if ($signer === null || ! $this->hasViewAccessLink($signer)) {
+            $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
+            if ($signer === null) {
                 return $this->invalidLinkResponse();
             }
 
-            $document = Document::query()
-                ->with('documentSigners')
-                ->findOrFail($signer->document_id);
+            $document = $signer->document;
 
             $signingError = $this->canSignerModifyFields($document, $signer);
             if ($signingError !== null) {
@@ -210,7 +211,10 @@ class SignDocumentController extends Controller
                 throw new \RuntimeException('Digital signature verification failed after signing.');
             }
 
-            $signatureImagePath = $this->storeSubmittedSignatureImage($request->validated('signature_image'));
+            $submittedValue = $this->resolveSubmittedFieldValue($field, $signer, $request->validated('submitted_value'));
+            $signatureImagePath = $this->shouldPersistSignatureImage($field)
+                ? $this->storeSubmittedSignatureImage($request->validated('signature_image'))
+                : null;
             $existingSignature = Signature::query()
                 ->where('signature_field_id', $field->id)
                 ->where('signer_id', $signer->id)
@@ -225,6 +229,7 @@ class SignDocumentController extends Controller
                 'signer_id' => $signer->id,
                 'signer_certificate_id' => $signerCertificate->id,
                 'signature_path' => $signatureImagePath,
+                'submitted_value' => $submittedValue,
                 'signature_value' => $signatureValue,
                 'signature_hash' => $documentHash,
                 'public_key_fingerprint' => $pkiSignatureService->fingerprint($signer->signing_public_key),
@@ -237,7 +242,7 @@ class SignDocumentController extends Controller
 
             SignatureAuditLogger::fieldSigned($document, $signer, (string) $request->ip());
 
-            $this->completeSignerIfAllFieldsSigned($signer, $document, $documentPdfStampingService);
+            $this->completeSignerIfAllFieldsSigned($signer, $document);
 
             $fieldType = $field->type->value;
             $isSignatureField = in_array($fieldType, ['signature', 'signature_left', 'signature_right'], true);
@@ -262,8 +267,8 @@ class SignDocumentController extends Controller
 
     public function streamSignatureImage(string $token, SignatureField $signatureField): StreamedResponse|Response
     {
-        $signer = $this->resolveSignerFromToken($token);
-        if ($signer === null || ! $this->hasViewAccessLink($signer)) {
+        $signer = $this->resolveAccessibleSigner($token);
+        if ($signer === null) {
             return $this->invalidLinkResponse();
         }
 
@@ -292,24 +297,23 @@ class SignDocumentController extends Controller
         ]);
     }
 
-    private function resolveSignerFromToken(string $token): ?DocumentSigner
+    /**
+     * @param  array<int|string, mixed>  $with
+     */
+    private function resolveAccessibleSigner(string $token, array $with = []): ?DocumentSigner
     {
-        return DocumentSigner::query()->where('access_token', $token)->first();
-    }
-
-    private function hasViewAccessLink(DocumentSigner $signer): bool
-    {
-        if ($signer->access_token === null || $signer->access_token === '') {
-            return false;
-        }
-
-        if ($signer->expires_at !== null && $signer->expires_at->isPast()) {
-            return false;
-        }
-
-        return $signer->document()
-            ->whereIn('status', [DocumentStatus::Pending, DocumentStatus::Completed])
-            ->exists();
+        return DocumentSigner::query()
+            ->when($with !== [], fn ($query) => $query->with($with))
+            ->where('access_token', $token)
+            ->whereNotNull('access_token')
+            ->where(function ($query): void {
+                $query->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            })
+            ->whereHas('document', function ($query): void {
+                $query->whereIn('status', [DocumentStatus::Pending, DocumentStatus::Completed]);
+            })
+            ->first();
     }
 
     private function signerRouteToken(DocumentSigner $signer): string
@@ -410,22 +414,51 @@ class SignDocumentController extends Controller
         $signer->refresh();
     }
 
-    private function completeSignerIfAllFieldsSigned(DocumentSigner $signer, Document $document, DocumentPdfStampingService $documentPdfStampingService): void
+    private function shouldPersistSignatureImage(SignatureField $field): bool
     {
-        $fieldIds = $document->signatureFields()
-            ->where('signer_id', $signer->id)
-            ->pluck('id');
+        return in_array($field->type->value, ['signature', 'signature_left', 'signature_right'], true);
+    }
 
-        if ($fieldIds->isEmpty()) {
+    private function resolveSubmittedFieldValue(SignatureField $field, DocumentSigner $signer, ?string $submittedValue): ?string
+    {
+        $value = is_string($submittedValue) ? trim($submittedValue) : null;
+        if ($value !== null && $value !== '') {
+            return $value;
+        }
+
+        return match ($field->type->value) {
+            'name' => $signer->name,
+            'date' => now()->format('M j, Y'),
+            'email' => $signer->email,
+            'initials' => collect(explode(' ', (string) $signer->name))
+                ->filter()
+                ->take(2)
+                ->map(fn (string $part): string => strtoupper(substr($part, 0, 1)))
+                ->implode(''),
+            'checkbox' => 'X',
+            'radio' => 'O',
+            default => null,
+        };
+    }
+
+    private function completeSignerIfAllFieldsSigned(DocumentSigner $signer, Document $document): void
+    {
+        $signerHasFields = $document->signatureFields()
+            ->where('signer_id', $signer->id)
+            ->exists();
+
+        if (! $signerHasFields) {
             return;
         }
 
-        $signedCount = Signature::query()
+        $hasUnsignedFields = $document->signatureFields()
             ->where('signer_id', $signer->id)
-            ->whereIn('signature_field_id', $fieldIds)
-            ->count();
+            ->whereDoesntHave('signature', function ($query) use ($signer): void {
+                $query->where('signer_id', $signer->id);
+            })
+            ->exists();
 
-        if ($signedCount < $fieldIds->count()) {
+        if ($hasUnsignedFields) {
             return;
         }
 
@@ -443,10 +476,10 @@ class SignDocumentController extends Controller
 
         if ($document->allSignersHaveSigned()) {
             $document->update(['status' => DocumentStatus::Completed]);
-            $documentPdfStampingService->generateFinalPdf($document->fresh());
+            GenerateDocumentPdfJob::dispatch($document->id, 'final');
             $completedDocument = $document->fresh();
             SignatureAuditLogger::documentCompleted($completedDocument, (string) request()->ip());
-            GenerateCertificateJob::dispatchSync($completedDocument->id);
+            GenerateCertificateJob::dispatch($completedDocument->id);
             event(new DocumentCompleted($completedDocument));
         }
     }
