@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\ResetSessionController;
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Controllers\MobileVerificationController;
 use App\Livewire\Actions\Logout;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,9 @@ Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
     ->name('verification.verify');
 
 Route::middleware('auth')->group(function () {
+    Route::post('mobile/send-otp', [MobileVerificationController::class, 'sendOtp'])->name('mobile.send-otp');
+    Route::post('mobile/verify-otp', [MobileVerificationController::class, 'verifyOtp'])->name('mobile.verify-otp');
+
     Volt::route('onboarding/email-verify', 'auth.onboarding-email-verify')->name('onboarding.email.verify');
     Volt::route('onboarding/mobile', 'auth.onboarding-mobile')->name('onboarding.mobile');
     Volt::route('onboarding/kyc', 'auth.onboarding-kyc')->name('onboarding.kyc');

@@ -5,6 +5,8 @@ namespace Tests\Feature\Onboarding;
 use App\Enums\OnboardingStep;
 use App\Mail\EmailOtpVerificationMail;
 use App\Models\User;
+use App\Services\OtpService;
+use App\Services\SmsService;
 use App\Support\AuthSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -40,8 +42,21 @@ class OnboardingEndToEndTest extends TestCase
             ->call('verifyCode')
             ->assertRedirect(route('onboarding.mobile', absolute: false));
 
+        $otpService = \Mockery::mock(OtpService::class);
+        $otpService->shouldReceive('secondsUntilResendAvailable')->andReturn(0);
+        $otpService->shouldReceive('generate')->andReturn('123456');
+        $otpService->shouldReceive('verify')->andReturn(true);
+        app()->instance(OtpService::class, $otpService);
+
+        $smsService = \Mockery::mock(SmsService::class);
+        $smsService->shouldReceive('send')->once();
+        app()->instance(SmsService::class, $smsService);
+
         Volt::test('auth.onboarding-mobile')
-            ->call('skip')
+            ->set('mobile_number', '+15551234567')
+            ->call('sendOtp')
+            ->set('otp', '123456')
+            ->call('verifyOtp')
             ->assertRedirect(route('onboarding.kyc', absolute: false));
 
         Volt::test('auth.onboarding-kyc')

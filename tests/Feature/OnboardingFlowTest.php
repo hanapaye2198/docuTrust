@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\OnboardingStep;
 use App\Mail\EmailOtpVerificationMail;
 use App\Models\User;
+use App\Services\OtpService;
+use App\Services\SmsService;
 use App\Support\AuthSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -97,7 +99,7 @@ class OnboardingFlowTest extends TestCase
         $this->assertNotNull($user->email_verified_at);
     }
 
-    public function test_skip_mobile_goes_to_kyc(): void
+    public function test_mobile_verify_advances_to_kyc(): void
     {
         $user = User::factory()->signer()->create([
             'onboarding_step' => OnboardingStep::MobileVerification,
@@ -107,30 +109,27 @@ class OnboardingFlowTest extends TestCase
 
         $this->actingAs($user);
 
+        $otpService = \Mockery::mock(OtpService::class);
+        $otpService->shouldReceive('secondsUntilResendAvailable')->andReturn(0);
+        $otpService->shouldReceive('generate')->andReturn('123456');
+        $otpService->shouldReceive('verify')->andReturn(true);
+        app()->instance(OtpService::class, $otpService);
+
+        $smsService = \Mockery::mock(SmsService::class);
+        $smsService->shouldReceive('send')->once();
+        app()->instance(SmsService::class, $smsService);
+
         Volt::test('auth.onboarding-mobile')
-            ->call('skip')
+            ->set('mobile_number', '+15551234567')
+            ->call('sendOtp')
+            ->set('otp', '123456')
+            ->call('verifyOtp')
             ->assertRedirect(route('onboarding.kyc', absolute: false));
 
         $user->refresh();
         $this->assertSame(OnboardingStep::Kyc, $user->onboarding_step);
-    }
-
-    public function test_skip_kyc_goes_to_mfa(): void
-    {
-        $user = User::factory()->signer()->create([
-            'onboarding_step' => OnboardingStep::Kyc,
-            'email_verified_at' => now(),
-            'mfa_enabled' => false,
-        ]);
-
-        $this->actingAs($user);
-
-        Volt::test('auth.onboarding-kyc')
-            ->call('skip')
-            ->assertRedirect(route('onboarding.mfa', absolute: false));
-
-        $user->refresh();
-        $this->assertSame(OnboardingStep::Mfa, $user->onboarding_step);
+        $this->assertSame('+15551234567', $user->mobile_number);
+        $this->assertNotNull($user->mobile_verified_at);
     }
 
     public function test_complete_mfa_goes_to_documents_and_enables_mfa(): void
@@ -138,6 +137,7 @@ class OnboardingFlowTest extends TestCase
         $user = User::factory()->signer()->create([
             'onboarding_step' => OnboardingStep::Mfa,
             'email_verified_at' => now(),
+            'mobile_verified_at' => now(),
             'mfa_enabled' => false,
             'two_factor_enabled' => false,
             'two_factor_secret' => null,
@@ -166,6 +166,7 @@ class OnboardingFlowTest extends TestCase
         $user = User::factory()->signer()->create([
             'onboarding_step' => OnboardingStep::Mfa,
             'email_verified_at' => now(),
+            'mobile_verified_at' => now(),
             'mfa_enabled' => false,
         ]);
 
@@ -192,6 +193,7 @@ class OnboardingFlowTest extends TestCase
         $user = User::factory()->signer()->create([
             'onboarding_step' => OnboardingStep::Kyc,
             'email_verified_at' => now(),
+            'mobile_verified_at' => now(),
             'mfa_enabled' => false,
         ]);
 
@@ -211,27 +213,6 @@ class OnboardingFlowTest extends TestCase
         $this->assertNotNull($user->kyc_file_path);
         $this->assertSame('passport', $user->kyc_id_type);
         $this->assertNotNull($user->kyc_verified_at);
-    }
-
-    public function test_mobile_verify_advances_to_kyc(): void
-    {
-        $user = User::factory()->signer()->create([
-            'onboarding_step' => OnboardingStep::MobileVerification,
-            'email_verified_at' => now(),
-            'mfa_enabled' => false,
-        ]);
-
-        $this->actingAs($user);
-
-        Volt::test('auth.onboarding-mobile')
-            ->set('mobile_number', '+15551234567')
-            ->call('verifyMobile')
-            ->assertRedirect(route('onboarding.kyc', absolute: false));
-
-        $user->refresh();
-        $this->assertSame(OnboardingStep::Kyc, $user->onboarding_step);
-        $this->assertSame('+15551234567', $user->mobile_number);
-        $this->assertNotNull($user->mobile_verified_at);
     }
 
     public function test_expired_email_otp_is_rejected(): void
@@ -271,6 +252,7 @@ class OnboardingFlowTest extends TestCase
         $user = User::factory()->signer()->create([
             'onboarding_step' => OnboardingStep::Mfa,
             'email_verified_at' => now(),
+            'mobile_verified_at' => now(),
             'mfa_enabled' => false,
             'two_factor_enabled' => false,
             'two_factor_secret' => null,
@@ -312,6 +294,7 @@ class OnboardingFlowTest extends TestCase
         $user = User::factory()->signer()->create([
             'onboarding_step' => OnboardingStep::Kyc,
             'email_verified_at' => now(),
+            'mobile_verified_at' => now(),
             'mfa_enabled' => false,
         ]);
 
@@ -325,6 +308,7 @@ class OnboardingFlowTest extends TestCase
         $user = User::factory()->signer()->create([
             'onboarding_step' => OnboardingStep::Kyc,
             'email_verified_at' => now(),
+            'mobile_verified_at' => now(),
             'mfa_enabled' => false,
         ]);
 

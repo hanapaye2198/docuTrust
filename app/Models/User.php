@@ -124,6 +124,10 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function onboardingRouteName(): string
     {
+        if ($this->mobile_verified_at === null && $this->onboarding_step !== OnboardingStep::EmailVerification) {
+            return 'onboarding.mobile';
+        }
+
         if ($this->onboarding_step === OnboardingStep::Completed && ! $this->mfa_enabled) {
             return 'onboarding.mfa';
         }
@@ -218,6 +222,14 @@ class User extends Authenticatable implements MustVerifyEmail
     public function appNotifications(): HasMany
     {
         return $this->hasMany(AppNotification::class)->latest('created_at');
+    }
+
+    /**
+     * @return HasMany<MobileOtp, $this>
+     */
+    public function mobileOtps(): HasMany
+    {
+        return $this->hasMany(MobileOtp::class)->latest('created_at');
     }
 
     /**

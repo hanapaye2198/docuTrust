@@ -42,6 +42,7 @@ class EnsureTwoFactorOnboardingMiddlewareTest extends TestCase
         $user = User::factory()->signer()->create([
             'onboarding_step' => OnboardingStep::Kyc,
             'email_verified_at' => now(),
+            'mobile_verified_at' => now(),
             'mfa_enabled' => false,
         ]);
 

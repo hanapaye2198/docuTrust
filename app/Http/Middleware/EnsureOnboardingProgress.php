@@ -25,7 +25,14 @@ class EnsureOnboardingProgress
             return $next($request);
         }
 
-        if ($request->routeIs('logout', 'session.reset', 'verification.verify', 'onboarding.change-email')) {
+        if ($request->routeIs(
+            'logout',
+            'session.reset',
+            'verification.verify',
+            'onboarding.change-email',
+            'mobile.send-otp',
+            'mobile.verify-otp',
+        )) {
             return $next($request);
         }
 
@@ -44,6 +51,10 @@ class EnsureOnboardingProgress
 
     private function allowedRouteName(User $user): string
     {
+        if ($user->mobile_verified_at === null && $user->onboarding_step !== OnboardingStep::EmailVerification) {
+            return 'onboarding.mobile';
+        }
+
         if ($user->onboarding_step === OnboardingStep::Completed && ! $user->mfa_enabled) {
             return 'onboarding.mfa';
         }

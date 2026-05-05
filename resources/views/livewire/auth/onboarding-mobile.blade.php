@@ -2,17 +2,34 @@
 
 use App\Enums\OnboardingStep;
 use App\Services\OnboardingAuditLogger;
+use App\Services\OtpService;
+use App\Services\SmsService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 
 new #[Layout('components.layouts.auth.register')] class extends Component {
     public string $mobile_number = '';
+    public string $otp = '';
+    public bool $otpSent = false;
+    public int $resendAvailableIn = 0;
 
-    public function verifyMobile(OnboardingAuditLogger $auditLogger): void
+    public function mount(OtpService $otpService): void
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return;
+        }
+
+        $this->mobile_number = (string) ($user->mobile_number ?? '');
+        $this->resendAvailableIn = $otpService->secondsUntilResendAvailable($user);
+        $this->otpSent = $this->resendAvailableIn > 0 || $user->mobileOtps()->exists();
+    }
+
+    public function sendOtp(OtpService $otpService, SmsService $smsService): void
     {
         $this->validate([
-            'mobile_number' => ['required', 'string', 'max:32'],
+            'mobile_number' => ['required', 'string', 'max:32', 'regex:/^\+?[0-9]{10,15}$/'],
         ]);
 
         $user = Auth::user();
@@ -22,18 +39,46 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             return;
         }
 
+        $secondsUntilResend = $otpService->secondsUntilResendAvailable($user);
+        if ($secondsUntilResend > 0) {
+            $this->addError('mobile_number', __('Please wait :seconds seconds before requesting another OTP.', [
+                'seconds' => $secondsUntilResend,
+            ]));
+            $this->resendAvailableIn = $secondsUntilResend;
+
+            return;
+        }
+
         $user->forceFill([
             'mobile_number' => $this->mobile_number,
-            'mobile_verified_at' => now(),
-            'onboarding_step' => OnboardingStep::Kyc,
+            'mobile_verified_at' => null,
         ])->save();
-        $auditLogger->log($user, 'phone_verified');
 
-        $this->redirect(route('onboarding.kyc', absolute: false), navigate: true);
+        try {
+            $otp = $otpService->generate($user);
+
+            $smsService->send(
+                $this->mobile_number,
+                __('Your DocuTrust verification code is :otp. It expires in 5 minutes.', ['otp' => $otp]),
+            );
+        } catch (\Throwable $throwable) {
+            report($throwable);
+            $this->addError('mobile_number', __('Unable to send OTP right now. Please try again.'));
+
+            return;
+        }
+
+        $this->otpSent = true;
+        $this->resendAvailableIn = 60;
+        session()->flash('status', __('OTP sent successfully.'));
     }
 
-    public function skip(OnboardingAuditLogger $auditLogger): void
+    public function verifyOtp(OnboardingAuditLogger $auditLogger, OtpService $otpService): void
     {
+        $this->validate([
+            'otp' => ['required', 'digits:6'],
+        ]);
+
         $user = Auth::user();
         if ($user === null) {
             $this->redirect(route('login', absolute: false), navigate: true);
@@ -41,10 +86,18 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             return;
         }
 
+        $isValidOtp = $otpService->verify($user, $this->otp);
+        if (! $isValidOtp) {
+            $this->addError('otp', __('Invalid or expired OTP.'));
+
+            return;
+        }
+
         $user->forceFill([
+            'mobile_verified_at' => now(),
             'onboarding_step' => OnboardingStep::Kyc,
         ])->save();
-        $auditLogger->log($user, 'phone_skipped');
+        $auditLogger->log($user, 'phone_verified');
 
         $this->redirect(route('onboarding.kyc', absolute: false), navigate: true);
     }
@@ -52,11 +105,11 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
 <x-auth.onboarding-wizard-shell :active-step="2">
     <h1 class="text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Mobile Verification') }}</h1>
-    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Please provide your mobile number in the field below. You can skip and add this later from your profile.') }}</p>
+    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Enter your mobile number to receive a one-time verification code via SMS.') }}</p>
 
     <x-auth-session-status class="mt-4 rounded-lg bg-[#2EC4B6]/10 px-3 py-2 text-center text-sm text-[#1B5E20] dark:text-teal-300" :status="session('status')" />
 
-    <form wire:submit="verifyMobile" class="mt-6 flex flex-col gap-6">
+    <form wire:submit="sendOtp" class="mt-6 flex flex-col gap-6">
         <flux:input
             wire:model="mobile_number"
             type="tel"
@@ -67,30 +120,44 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition dark:border-zinc-600"
         />
 
-        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="verifyMobile" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white">
-            <span wire:loading.remove wire:target="verifyMobile">{{ __('Verify Mobile Number') }}</span>
-            <span wire:loading wire:target="verifyMobile">{{ __('Saving…') }}</span>
-        </flux:button>
-
-        <div class="relative">
-            <div class="absolute inset-0 flex items-center" aria-hidden="true">
-                <div class="w-full border-t border-gray-200 dark:border-zinc-700"></div>
-            </div>
-            <div class="relative flex justify-center text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-                <span class="bg-white px-2 dark:bg-zinc-900">{{ __('or') }}</span>
-            </div>
+        <div x-data="{ seconds: @entangle('resendAvailableIn') }" x-init="setInterval(() => { if (seconds > 0) { seconds--; } }, 1000)">
+            <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="sendOtp" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white" x-bind:disabled="seconds > 0">
+                <span wire:loading.remove wire:target="sendOtp">
+                    <span x-show="seconds === 0">{{ __('Send OTP') }}</span>
+                    <span x-show="seconds > 0">{{ __('Resend OTP in ') }}<span x-text="seconds"></span>{{ __('s') }}</span>
+                </span>
+                <span wire:loading wire:target="sendOtp">{{ __('Sending…') }}</span>
+            </flux:button>
         </div>
 
-        <flux:button
-            type="button"
-            wire:click="skip"
-            wire:loading.attr="disabled"
-            wire:target="skip"
-            variant="ghost"
-            class="w-full border border-gray-200 bg-gray-50 text-[#1F2937] hover:bg-gray-100 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
-            <span wire:loading.remove wire:target="skip">{{ __('Skip for now') }}</span>
-            <span wire:loading wire:target="skip">{{ __('Continuing…') }}</span>
-        </flux:button>
+        @if ($otpSent)
+            <flux:input
+                wire:model="otp"
+                type="text"
+                inputmode="numeric"
+                maxlength="6"
+                label="{{ __('One-Time Password') }}"
+                placeholder="{{ __('Enter 6-digit code') }}"
+                class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition dark:border-zinc-600"
+            />
+
+            <flux:button type="button" variant="primary" wire:click="verifyOtp" wire:loading.attr="disabled" wire:target="verifyOtp" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white">
+                <span wire:loading.remove wire:target="verifyOtp">{{ __('Verify OTP') }}</span>
+                <span wire:loading wire:target="verifyOtp">{{ __('Verifying…') }}</span>
+            </flux:button>
+        @endif
+
+        @error('otp')
+            <p class="text-sm text-rose-600 dark:text-rose-400">{{ $message }}</p>
+        @enderror
+
+        @error('mobile_number')
+            <p class="text-sm text-rose-600 dark:text-rose-400">{{ $message }}</p>
+        @enderror
+
+        @if (session('status'))
+            <p class="text-sm text-[#1B5E20] dark:text-teal-300">{{ session('status') }}</p>
+        @endif
+
     </form>
 </x-auth.onboarding-wizard-shell>

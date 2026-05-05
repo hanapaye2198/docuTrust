@@ -40,4 +40,8 @@ return [
         'timeout' => env('BLOCKCHAIN_SERVICE_TIMEOUT', 10),
     ],
 
+    'txtbox' => [
+        'key' => env('TXTBOX_API_KEY'),
+    ],
+
 ];
