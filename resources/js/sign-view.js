@@ -263,6 +263,28 @@ function createSignViewSession(cfgEl) {
         return text.slice(0, Math.max(1, maxCharacters - 1)).trimEnd() + '...';
     }
 
+    function inputFieldMetrics(rect) {
+        const inset = Math.max(6, rect.height * 0.16);
+        const accentWidth = clamp(rect.width * 0.055, 8, 14);
+        const labelLeft = accentWidth + Math.max(10, rect.width * 0.05);
+        const labelFontSize = clamp(rect.height * 0.22, 9, 12);
+        const baselineY = rect.height - Math.max(5, rect.height * 0.16);
+        const valueFontSize = clamp(rect.height * 0.24, 10, 17);
+        const valueLeft = labelLeft;
+        const valueWidth = Math.max(24, rect.width - valueLeft - inset);
+
+        return {
+            inset,
+            accentWidth,
+            labelLeft,
+            labelFontSize,
+            baselineY,
+            valueFontSize,
+            valueLeft,
+            valueWidth,
+        };
+    }
+
     function buildFieldPreviewGroup(chrome, rect) {
         const fabric = window.fabric;
         const nodes = [];
@@ -283,16 +305,51 @@ function createSignViewSession(cfgEl) {
             }
             nodes.push(new fabric.Text(truncateFieldText(chrome.label, usableWidth, labelFontSize), { fontSize: labelFontSize, fill: chrome.fillText, fontFamily: 'system-ui, sans-serif', fontWeight: 700, originX: 'left', originY: 'center', left: labelLeft, top: rect.height / 2 }));
         } else if (chrome.kind === 'input') {
-            const accentWidth = clamp(rect.width * 0.055, 8, 14);
-            const labelLeft = accentWidth + Math.max(10, rect.width * 0.05);
-            const labelFontSize = clamp(rect.height * 0.28, 10, 15);
-            const lineY = rect.height - Math.max(7, rect.height * 0.18);
-            const usableWidth = Math.max(24, rect.width - labelLeft - inset);
+            const metrics = inputFieldMetrics(rect);
+            const ghostText = chrome.label === 'Email'
+                ? 'value appears here'
+                : chrome.label === 'Date'
+                    ? 'date appears here'
+                    : 'type here';
 
             nodes.push(new fabric.Rect({ width: rect.width, height: rect.height, fill: chrome.fill, stroke: chrome.stroke, strokeWidth: 1.5, rx: 8, ry: 8 }));
-            nodes.push(new fabric.Rect({ width: accentWidth, height: rect.height, fill: chrome.stroke, rx: 8, ry: 8, left: 0, top: 0, originX: 'left', originY: 'top' }));
-            nodes.push(new fabric.Text(truncateFieldText(chrome.label, usableWidth, labelFontSize), { fontSize: labelFontSize, fill: chrome.fillText, fontFamily: 'system-ui, sans-serif', fontWeight: 700, originX: 'left', originY: 'top', left: labelLeft, top: inset }));
-            nodes.push(new fabric.Line([labelLeft, lineY, rect.width - inset, lineY], { stroke: chrome.stroke, strokeWidth: 1, selectable: false, evented: false, opacity: 0.4 }));
+            nodes.push(new fabric.Rect({ width: metrics.accentWidth, height: rect.height, fill: chrome.stroke, rx: 8, ry: 8, left: 0, top: 0, originX: 'left', originY: 'top' }));
+            nodes.push(new fabric.Text(truncateFieldText(chrome.label, metrics.valueWidth, metrics.labelFontSize), {
+                fontSize: metrics.labelFontSize,
+                fill: chrome.fillText,
+                fontFamily: 'system-ui, sans-serif',
+                fontWeight: 700,
+                originX: 'left',
+                originY: 'top',
+                left: metrics.labelLeft,
+                top: inset * 0.72,
+            }));
+            nodes.push(new fabric.Line([metrics.valueLeft, metrics.baselineY, rect.width - inset, metrics.baselineY], {
+                stroke: chrome.stroke,
+                strokeWidth: 1,
+                selectable: false,
+                evented: false,
+                opacity: 0.42,
+            }));
+            nodes.push(new fabric.Line([metrics.valueLeft, metrics.baselineY - (metrics.valueFontSize * 0.9), metrics.valueLeft, metrics.baselineY + 1], {
+                stroke: chrome.stroke,
+                strokeWidth: 1,
+                selectable: false,
+                evented: false,
+                opacity: 0.5,
+            }));
+            nodes.push(new fabric.Text(truncateFieldText(ghostText, metrics.valueWidth - 6, metrics.valueFontSize * 0.92), {
+                fontSize: clamp(metrics.valueFontSize * 0.92, 9, 15),
+                fill: chrome.stroke,
+                opacity: 0.45,
+                fontFamily: 'Georgia, serif',
+                fontWeight: 400,
+                originX: 'left',
+                originY: 'bottom',
+                left: metrics.valueLeft + 4,
+                top: metrics.baselineY,
+                textAlign: 'left',
+            }));
         } else {
             const alignment = chrome.signatureAlignment || 'center';
             const accentWidth = clamp(rect.width * 0.07, 10, 18);
@@ -619,7 +676,20 @@ function createSignViewSession(cfgEl) {
     function buildSignedValueGroup(field, rect, submittedValue) {
         const fabric = window.fabric;
         const chrome = getFieldChrome(field.type);
-        const nodes = [];
+        const nodes = [
+            new fabric.Rect({
+                width: rect.width,
+                height: rect.height,
+                left: 0,
+                top: 0,
+                fill: 'rgba(0,0,0,0)',
+                strokeWidth: 0,
+                selectable: false,
+                evented: false,
+                originX: 'left',
+                originY: 'top',
+            }),
+        ];
         const inset = Math.max(4, rect.height * 0.12);
 
         if (field.type === 'checkbox' || field.type === 'radio') {
@@ -635,19 +705,20 @@ function createSignViewSession(cfgEl) {
                 textAlign: 'center',
             }));
         } else {
-            nodes.push(new fabric.Textbox(String(submittedValue || ''), {
-                width: Math.max(24, rect.width - (inset * 2)),
-                fontSize: clamp(rect.height * 0.26, 10, 17),
+            const textValue = String(submittedValue || '');
+            const metrics = inputFieldMetrics(rect);
+
+            nodes.push(new fabric.Text(textValue, {
+                fontSize: metrics.valueFontSize,
                 fill: '#0f172a',
                 fontFamily: 'Georgia, serif',
                 fontWeight: 500,
                 originX: 'left',
-                originY: 'top',
-                left: inset,
-                top: Math.max(2, rect.height * 0.16),
+                originY: 'bottom',
+                left: metrics.valueLeft + 4,
+                top: metrics.baselineY,
                 textAlign: 'left',
                 lineHeight: 1,
-                splitByGrapheme: false,
             }));
         }
 

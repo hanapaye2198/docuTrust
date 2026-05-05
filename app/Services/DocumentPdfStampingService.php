@@ -139,6 +139,7 @@ class DocumentPdfStampingService
         [$r, $g, $b] = $this->colorForType($type);
         $label = $this->labelForType($type);
         $isToggle = in_array($type, [SignatureFieldType::Checkbox, SignatureFieldType::Radio], true);
+        $lineY = $y + ($height - 2.4);
         $pdf->SetDrawColor($r, $g, $b);
         $pdf->SetTextColor($r, $g, $b);
         $pdf->SetLineWidth($isToggle ? 0.3 : 0.35);
@@ -163,22 +164,24 @@ class DocumentPdfStampingService
         $pdf->Cell($width - 3, max(4, $height / 2), $label, 0, 0, 'L');
 
         if ($signerName !== '') {
-            $pdf->Line($x + 1.5, $y + ($height - 2.4), $x + $width - 1.5, $y + ($height - 2.4));
+            $pdf->Line($x + 1.5, $lineY, $x + $width - 1.5, $lineY);
             $pdf->SetFont('Helvetica', '', max(6, min(8, $height * 1.05)));
             $pdf->SetTextColor(100, 116, 139);
-            $pdf->SetXY($x + 1.5, $y + max(3.8, $height * 0.5));
-            $pdf->Cell($width - 3, max(3, $height / 3), $signerName, 0, 0, 'L');
+            $pdf->Text($x + 1.5, $lineY - 0.35, $signerName);
         }
     }
 
     private function drawFinalField(Fpdi $pdf, SignatureFieldType $type, SignatureField $field, ?Signature $signature, float $x, float $y, float $width, float $height): void
     {
         [$r, $g, $b] = $this->colorForType($type);
+        $isToggle = in_array($type, [SignatureFieldType::Checkbox, SignatureFieldType::Radio], true);
+        $isSignature = in_array($type, [SignatureFieldType::Signature, SignatureFieldType::SignatureLeft, SignatureFieldType::SignatureRight], true);
+        $lineY = $y + ($height - 2.4);
         $pdf->SetDrawColor($r, $g, $b);
         $pdf->SetLineWidth(0.25);
         $pdf->Rect($x, $y, $width, $height);
 
-        if (in_array($type, [SignatureFieldType::Signature, SignatureFieldType::SignatureLeft, SignatureFieldType::SignatureRight], true)) {
+        if ($isSignature) {
             $this->drawSignatureImage($pdf, $type, $signature, $x, $y, $width, $height);
             return;
         }
@@ -188,10 +191,19 @@ class DocumentPdfStampingService
             return;
         }
 
+        if (! $isToggle) {
+            $pdf->Line($x + 1.5, $lineY, $x + $width - 1.5, $lineY);
+        }
+
         $pdf->SetFont('Helvetica', '', max(8, min(14, $height * 1.9)));
         $pdf->SetTextColor(15, 23, 42);
-        $pdf->SetXY($x + 1.5, $y + max(1.5, $height * 0.18));
-        $pdf->MultiCell($width - 3, max(3.8, $height * 0.55), $value, 0, 'L');
+        if ($isToggle) {
+            $pdf->SetXY($x + 1.5, $y + max(1.5, $height * 0.18));
+            $pdf->MultiCell($width - 3, max(3.8, $height * 0.55), $value, 0, 'L');
+            return;
+        }
+
+        $pdf->Text($x + 1.5, $lineY - 0.35, $value);
     }
 
     private function drawSignatureImage(Fpdi $pdf, SignatureFieldType $type, ?Signature $signature, float $x, float $y, float $width, float $height): void
