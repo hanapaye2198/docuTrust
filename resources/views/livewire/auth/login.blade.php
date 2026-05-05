@@ -134,15 +134,31 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             </div>
         </aside>
 
-        <main class="col-span-12 flex items-center bg-[#F8FAFC] px-4 py-8 transition-colors duration-300 dark:bg-zinc-950 sm:px-6 lg:col-span-7 lg:px-10">
+        <main class="col-span-12 flex items-center bg-[#F8FAFC] px-4 py-6 transition-colors duration-300 dark:bg-zinc-950 sm:px-6 sm:py-8 lg:col-span-7 lg:px-10">
             <div class="mx-auto w-full max-w-md">
-                <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-md transition-all duration-300 dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">
+                <div class="mb-4 rounded-2xl border border-[#2EC4B6]/30 bg-white/80 p-4 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/80 lg:hidden">
+                    <div class="flex items-center gap-3">
+                        <div class="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#2EC4B6]/30 bg-[#2EC4B6]/10 p-2 dark:border-teal-400/30 dark:bg-teal-400/10">
+                            <x-app-logo-icon class="size-5 fill-current text-[#1B5E20] dark:text-teal-300" />
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold text-[#1F2937] dark:text-zinc-100">{{ config('app.name', 'DocuTrust') }}</p>
+                            <p class="text-xs text-zinc-600 dark:text-zinc-400">{{ __('Your secure access portal') }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-lg transition-all duration-300 dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">
                     <h1 class="text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Sign in') }}</h1>
                     <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Enter your email and password to continue') }}</p>
 
                     <x-auth-session-status class="mt-4 rounded-lg bg-[#2EC4B6]/10 px-3 py-2 text-center text-sm text-[#1B5E20] dark:text-teal-300" :status="session('status')" />
 
-                    <form wire:submit="login" class="mt-6 flex flex-col gap-6">
+                    @php
+                        $authInputClasses = 'rounded-xl border-gray-300 bg-white/95 text-base text-[#1F2937] placeholder:text-gray-400 transition duration-200 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/25 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-400';
+                    @endphp
+
+                    <form wire:submit="login" class="mt-6 flex flex-col gap-5 sm:gap-6">
                         <flux:input
                             wire:model="email"
                             label="{{ __('Email address') }}"
@@ -152,10 +168,13 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                             autofocus
                             autocomplete="email"
                             placeholder="Email"
-                            class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
+                            inputmode="email"
+                            autocapitalize="off"
+                            spellcheck="false"
+                            class="{{ $authInputClasses }}"
                         />
 
-                        <div class="relative">
+                        <div class="space-y-2">
                             <flux:input
                                 wire:model="password"
                                 label="{{ __('Password') }}"
@@ -164,11 +183,11 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                 required
                                 autocomplete="current-password"
                                 placeholder="{{ __('Password') }}"
-                                class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
+                                class="{{ $authInputClasses }}"
                             />
 
                             @if (Route::has('password.request'))
-                                <x-text-link class="absolute right-0 top-0 text-[#1B5E20] hover:text-[#2EC4B6] dark:text-teal-300 dark:hover:text-teal-200" href="{{ route('password.request') }}">
+                                <x-text-link class="inline-flex min-h-10 items-center text-sm text-[#1B5E20] hover:text-[#2EC4B6] dark:text-teal-300 dark:hover:text-teal-200" href="{{ route('password.request') }}">
                                     {{ __('Forgot password?') }}
                                 </x-text-link>
                             @endif

@@ -11,7 +11,7 @@
     ];
 @endphp
 
-<div class="min-h-screen">
+<div class="min-h-screen overflow-x-clip">
     <div class="grid min-h-screen lg:grid-cols-12">
         <aside
             class="relative hidden overflow-hidden lg:col-span-5 lg:flex lg:flex-col lg:justify-end"
@@ -46,10 +46,24 @@
             </div>
         </aside>
 
-        <main class="col-span-12 flex items-center bg-[#F8FAFC] px-4 py-8 transition-colors duration-300 dark:bg-zinc-950 sm:px-6 lg:col-span-7 lg:px-10">
+        <main class="col-span-12 flex items-center bg-[#F8FAFC] px-4 py-6 transition-colors duration-300 dark:bg-zinc-950 sm:px-6 sm:py-8 lg:col-span-7 lg:px-10">
             <div class="mx-auto w-full max-w-2xl">
-                <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-xl shadow-gray-200/60 backdrop-blur transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/30 sm:p-7">
-                    <nav class="mb-6 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4" aria-label="{{ __('Onboarding progress') }}">
+                <div class="mb-4 rounded-2xl border border-[#2EC4B6]/30 bg-white/80 p-4 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/80 lg:hidden">
+                    <div class="flex items-center gap-3">
+                        <div class="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#2EC4B6]/30 bg-[#2EC4B6]/10 p-2 dark:border-teal-400/30 dark:bg-teal-400/10">
+                            <x-app-logo-icon class="size-5 fill-current text-[#1B5E20] dark:text-teal-300" />
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold text-[#1F2937] dark:text-zinc-100">{{ config('app.name', 'DocuTrust') }}</p>
+                            <p class="text-xs text-zinc-600 dark:text-zinc-400">
+                                {{ __('Step :step of :total', ['step' => $activeStep, 'total' => count($labels)]) }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-xl shadow-gray-200/60 backdrop-blur transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/30 sm:p-7">
+                    <nav class="mb-6 grid grid-cols-2 gap-2 text-[11px] leading-tight sm:grid-cols-4 sm:gap-3 sm:text-xs" aria-label="{{ __('Onboarding progress') }}">
                         @foreach ($labels as $num => $label)
                             @php
                                 $isCurrent = (int) $activeStep === $num;
@@ -57,7 +71,7 @@
                             @endphp
                             <div
                                 @class([
-                                    'flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-lg border p-2.5 text-center transition-all duration-300 ease-out',
+                                    'flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-lg border px-2.5 py-2.5 text-center transition-all duration-300 ease-out',
                                     'border-[#2EC4B6] bg-[#2EC4B6] text-white shadow-md ring-2 ring-[#2EC4B6]/40 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900 motion-safe:scale-[1.02]' => $isCurrent,
                                     'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/50 dark:text-emerald-200' => $isDone && ! $isCurrent,
                                     'border-gray-200 bg-gray-100 text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' => ! $isCurrent && ! $isDone,

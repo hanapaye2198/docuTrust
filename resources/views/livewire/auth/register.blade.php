@@ -83,7 +83,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
     }
 }; ?>
 
-<div class="min-h-screen">
+<div class="min-h-screen overflow-x-clip">
     <div class="grid min-h-screen lg:grid-cols-12">
         <aside
             class="relative hidden overflow-hidden lg:col-span-5 lg:flex lg:flex-col lg:justify-end"
@@ -120,20 +120,36 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             </div>
         </aside>
 
-        <main class="col-span-12 flex items-center bg-[#F8FAFC] px-4 py-8 transition-colors duration-300 dark:bg-zinc-950 sm:px-6 lg:col-span-7 lg:px-10">
+        <main class="col-span-12 flex items-center bg-[#F8FAFC] px-4 py-6 transition-colors duration-300 dark:bg-zinc-950 sm:px-6 sm:py-8 lg:col-span-7 lg:px-10">
             <div class="mx-auto w-full max-w-2xl">
-                <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-xl shadow-gray-200/60 backdrop-blur transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/30 sm:p-7">
-                    <nav class="mb-6 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-                        <div class="rounded-lg border border-[#2EC4B6] bg-[#2EC4B6] p-2 text-white">{{ __('1. Account Setup') }}</div>
-                        <div class="rounded-lg border border-gray-200 bg-gray-100 p-2 text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{{ __('2. Mobile Verification') }}</div>
-                        <div class="rounded-lg border border-gray-200 bg-gray-100 p-2 text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{{ __('3. eKYC Verification') }}</div>
-                        <div class="rounded-lg border border-gray-200 bg-gray-100 p-2 text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{{ __('4. MFA Setup') }}</div>
+                <div class="mb-4 rounded-2xl border border-[#2EC4B6]/30 bg-white/80 p-4 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/80 lg:hidden">
+                    <div class="flex items-center gap-3">
+                        <div class="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#2EC4B6]/30 bg-[#2EC4B6]/10 p-2 dark:border-teal-400/30 dark:bg-teal-400/10">
+                            <x-app-logo-icon class="size-5 fill-current text-[#1B5E20] dark:text-teal-300" />
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold text-[#1F2937] dark:text-zinc-100">{{ config('app.name', 'DocuTrust') }}</p>
+                            <p class="text-xs text-zinc-600 dark:text-zinc-400">{{ __('Secure onboarding in minutes') }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-xl shadow-gray-200/60 backdrop-blur transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/30 sm:p-7">
+                    <nav class="mb-6 grid grid-cols-2 gap-2 text-[11px] leading-tight sm:grid-cols-4 sm:gap-3 sm:text-xs">
+                        <div class="rounded-lg border border-[#2EC4B6] bg-[#2EC4B6] px-2.5 py-2 text-center text-white sm:px-3">{{ __('1. Account Setup') }}</div>
+                        <div class="rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-2 text-center text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 sm:px-3">{{ __('2. Mobile Verification') }}</div>
+                        <div class="rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-2 text-center text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 sm:px-3">{{ __('3. eKYC Verification') }}</div>
+                        <div class="rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-2 text-center text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 sm:px-3">{{ __('4. MFA Setup') }}</div>
                     </nav>
 
                     <h1 class="text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Create your free Signer account') }}</h1>
                     <x-auth-session-status class="mt-4 rounded-lg bg-[#2EC4B6]/10 px-3 py-2 text-center text-sm text-[#1B5E20] dark:text-teal-300" :status="session('status')" />
 
-                    <form wire:submit="register" class="mt-6 flex flex-col gap-6" x-data="{ showPassword: false }">
+                    @php
+                        $authInputClasses = 'rounded-xl border-gray-300 bg-white/95 text-base text-[#1F2937] placeholder:text-gray-400 transition duration-200 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/25 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-400';
+                    @endphp
+
+                    <form wire:submit="register" class="mt-6 flex flex-col gap-5 sm:gap-6" x-data="{ showPassword: false }">
                         <div class="grid gap-4 sm:grid-cols-2">
                             <flux:input
                                 wire:model.live="first_name"
@@ -145,7 +161,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                 autofocus
                                 autocomplete="given-name"
                                 placeholder="Enter first name"
-                                class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
+                                class="{{ $authInputClasses }}"
                             />
                             <flux:input
                                 wire:model.live="middle_name"
@@ -155,7 +171,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                 name="middle_name"
                                 autocomplete="additional-name"
                                 placeholder="Enter middle name"
-                                class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
+                                class="{{ $authInputClasses }}"
                             />
                         </div>
 
@@ -170,7 +186,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                     required
                                     autocomplete="family-name"
                                     placeholder="Enter last name"
-                                    class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
+                                    class="{{ $authInputClasses }}"
                                 />
                             </div>
                             <flux:input
@@ -181,7 +197,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                 name="suffix"
                                 autocomplete="honorific-suffix"
                                 placeholder="Jr., Sr."
-                                class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
+                                class="{{ $authInputClasses }}"
                             />
                         </div>
 
@@ -194,7 +210,10 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                             required
                             autocomplete="email"
                             placeholder="email@example.com"
-                            class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
+                            inputmode="email"
+                            autocapitalize="off"
+                            spellcheck="false"
+                            class="{{ $authInputClasses }}"
                         />
 
                         <div class="grid gap-4 sm:grid-cols-2">
@@ -209,12 +228,12 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                         required
                                         autocomplete="new-password"
                                         placeholder="Create a strong password"
-                                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-[#1F2937] outline-none transition duration-200 placeholder:text-gray-400 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/30 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                                        class="w-full rounded-xl border border-gray-300 bg-white/95 px-3 py-3 text-base text-[#1F2937] outline-none transition duration-200 placeholder:text-gray-400 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/25 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                                     />
                                     <button
                                         type="button"
                                         x-on:click="showPassword = !showPassword"
-                                        class="absolute inset-y-0 right-0 px-3 text-xs font-medium text-gray-500 transition hover:text-[#1B5E20] dark:text-zinc-400 dark:hover:text-teal-300"
+                                        class="absolute inset-y-0 right-0 inline-flex min-h-11 items-center px-3 text-xs font-medium text-gray-500 transition hover:text-[#1B5E20] dark:text-zinc-400 dark:hover:text-teal-300"
                                     >
                                         <span x-text="showPassword ? 'Hide' : 'Show'"></span>
                                     </button>
@@ -233,7 +252,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                 required
                                 autocomplete="new-password"
                                 placeholder="Re-enter your password"
-                                class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition"
+                                class="{{ $authInputClasses }}"
                             />
                         </div>
 
