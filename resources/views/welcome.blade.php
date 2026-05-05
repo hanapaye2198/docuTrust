@@ -30,10 +30,12 @@
 <meta name="theme-color" content="#f0f7f5" media="(prefers-color-scheme: light)">
 <title>DocuTrust | Secure & Tamper-Proof Digital Signatures</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="{{ asset('images/docutrust-logo.png') }}" type="image/png">
 <style>
 :root {
+  --font-body: 'Source Sans 3', system-ui, sans-serif;
+  --font-display: 'Outfit', system-ui, sans-serif;
   --teal: #2EC4B6;
   --teal-dark: #1a9e92;
   --teal-light: #7ce8dc;
@@ -177,7 +179,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{color-scheme:dark light;scroll-behavior:smooth}
 body{
-  font-family:'DM Sans',sans-serif;
+  font-family:var(--font-body);
   background:var(--bg);
   color:var(--text);
   overflow-x:hidden;
@@ -341,7 +343,7 @@ html.light-scheme .logo-mark:has(picture) .logo-img{
   filter:none;
 }
 .logo-text{
-  font-family:'Syne',sans-serif;
+  font-family:var(--font-display);
   font-weight:800;
   font-size:1.2rem;
   color:var(--text);
@@ -451,7 +453,7 @@ section{position:relative;z-index:1}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
 
 .hero h1{
-  font-family:'Syne',sans-serif;
+  font-family:var(--font-display);
   font-size:clamp(1.75rem,3.6vw,2.75rem);
   font-weight:800;
   line-height:1.18;
@@ -534,7 +536,7 @@ section{position:relative;z-index:1}
   margin-bottom:20px;
 }
 .doc-title{
-  font-family:'Syne',sans-serif;
+  font-family:var(--font-display);
   font-weight:700;
   font-size:1rem;
   color:var(--headline);
@@ -655,7 +657,7 @@ section{position:relative;z-index:1}
 }
 @keyframes badgeFloat2{0%,100%{transform:translateY(0) rotate(1deg)}50%{transform:translateY(8px) rotate(-1deg)}}
 .badge-float2-label{font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px}
-.badge-float2-val{font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;color:var(--teal)}
+.badge-float2-val{font-family:var(--font-display);font-weight:700;font-size:.95rem;color:var(--teal)}
 
 /* ── TRUST BAR ── */
 .trust-bar{
@@ -732,7 +734,7 @@ section{position:relative;z-index:1}
 }
 .csc-badge svg{width:12px;height:12px}
 .csc-card h2{
-  font-family:'Syne',sans-serif;
+  font-family:var(--font-display);
   font-size:1.65rem;font-weight:800;color:var(--headline);
   line-height:1.2;margin-bottom:14px;
   letter-spacing:-0.01em;
@@ -756,7 +758,7 @@ section{position:relative;z-index:1}
   text-align:center;
 }
 .csc-stat-num{
-  font-family:'Syne',sans-serif;font-weight:800;
+  font-family:var(--font-display);font-weight:800;
   font-size:1.6rem;
   background:linear-gradient(90deg,var(--teal),var(--teal-light));
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
@@ -771,7 +773,7 @@ section{position:relative;z-index:1}
   color:var(--teal);font-weight:700;margin-bottom:12px;
 }
 .section-title{
-  font-family:'Syne',sans-serif;font-weight:800;
+  font-family:var(--font-display);font-weight:800;
   font-size:clamp(1.55rem,3vw,2.1rem);
   color:var(--headline);line-height:1.2;margin-bottom:14px;
   letter-spacing:-0.01em;
@@ -831,7 +833,7 @@ section{position:relative;z-index:1}
   margin-bottom:10px;
 }
 .feature-card h3{
-  font-family:'Syne',sans-serif;font-weight:700;
+  font-family:var(--font-display);font-weight:700;
   font-size:1rem;color:var(--headline);margin-bottom:8px;
 }
 .feature-card p{font-size:.875rem;color:var(--text-muted);line-height:1.65}
@@ -864,7 +866,7 @@ section{position:relative;z-index:1}
 }
 .kpi-card:hover{border-color:rgba(46,196,182,0.3);transform:translateY(-2px)}
 .kpi-num{
-  font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;
+  font-family:var(--font-display);font-weight:800;font-size:2rem;
   background:linear-gradient(90deg,var(--teal),var(--teal-light));
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
   display:block;margin-bottom:4px;
@@ -1002,7 +1004,7 @@ section{position:relative;z-index:1}
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
 .industry-icon svg{width:18px;height:18px;color:var(--teal)}
-.industry-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;color:var(--headline);margin-bottom:4px}
+.industry-name{font-family:var(--font-display);font-weight:700;font-size:.9rem;color:var(--headline);margin-bottom:4px}
 .industry-desc{font-size:.78rem;color:var(--text-dim)}
 
 /* ── ABOUT ── */
@@ -1083,7 +1085,7 @@ section{position:relative;z-index:1}
   padding:16px 20px;
 }
 .about-stat-num{
-  font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;
+  font-family:var(--font-display);font-weight:800;font-size:1.5rem;
   color:var(--teal);display:block;margin-bottom:2px;
 }
 .about-stat-label{font-size:.75rem;color:var(--text-dim)}
@@ -1101,7 +1103,7 @@ section{position:relative;z-index:1}
 .testimonial::before{
   content:'"';
   position:absolute;top:16px;right:20px;
-  font-family:'Syne',sans-serif;font-size:4rem;font-weight:800;
+  font-family:var(--font-display);font-size:4rem;font-weight:800;
   color:rgba(46,196,182,0.1);line-height:1;
 }
 .testimonial-text{
@@ -1115,7 +1117,7 @@ section{position:relative;z-index:1}
   width:36px;height:36px;border-radius:10px;
   background:linear-gradient(135deg,var(--teal),var(--green));
   display:flex;align-items:center;justify-content:center;
-  font-family:'Syne',sans-serif;font-weight:700;font-size:.8rem;color:#fff;
+  font-family:var(--font-display);font-weight:700;font-size:.8rem;color:#fff;
 }
 .testimonial-name{font-weight:600;font-size:.85rem;color:var(--headline)}
 .testimonial-role{font-size:.75rem;color:var(--text-dim)}
@@ -1183,7 +1185,7 @@ section{position:relative;z-index:1}
   pointer-events:none;
 }
 .cta-inner h2{
-  font-family:'Syne',sans-serif;font-weight:800;
+  font-family:var(--font-display);font-weight:800;
   font-size:clamp(1.6rem,3.5vw,2.4rem);color:var(--headline);
   margin-bottom:14px;position:relative;z-index:1;
   letter-spacing:-0.01em;
@@ -1220,7 +1222,7 @@ footer{
   margin-bottom:40px;
 }
 .footer-logo{display:flex;align-items:center;gap:10px;margin-bottom:16px;text-decoration:none}
-.footer-logo .logo-text{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:var(--headline)}
+.footer-logo .logo-text{font-family:var(--font-display);font-weight:800;font-size:1.1rem;color:var(--headline)}
 .footer-desc{font-size:.82rem;color:var(--text-dim);line-height:1.65;max-width:240px}
 .footer-csc{
   display:inline-flex;align-items:center;gap:6px;
@@ -1234,7 +1236,7 @@ footer{
 }
 .footer-csc:hover{background:rgba(46,196,182,0.14)}
 .footer-col h4{
-  font-family:'Syne',sans-serif;font-weight:700;
+  font-family:var(--font-display);font-weight:700;
   font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;
   color:var(--text-muted);margin-bottom:14px;
 }
@@ -1317,7 +1319,7 @@ footer{
 }
 .mobile-nav.open{display:flex}
 .mobile-nav a{
-  font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:700;
+  font-family:var(--font-display);font-size:1.5rem;font-weight:700;
   color:var(--text-muted);text-decoration:none;transition:color .2s;
 }
 .mobile-nav a:hover{color:var(--teal)}
