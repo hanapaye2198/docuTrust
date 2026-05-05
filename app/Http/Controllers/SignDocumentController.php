@@ -18,6 +18,7 @@ use App\Services\PkiSignatureService;
 use App\Services\SignerCertificateService;
 use App\Services\SignatureAuditLogger;
 use App\Support\PublicPdfStream;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -57,15 +58,7 @@ class SignDocumentController extends Controller
                 continue;
             }
 
-            $signedByFieldId[$signature->signature_field_id] = [
-                'image_url' => is_string($signature->signature_path) && $signature->signature_path !== ''
-                    ? route('sign.signature.image', [
-                        'token' => $this->signerRouteToken($signer),
-                        'signatureField' => $signature->signature_field_id,
-                    ])
-                    : null,
-                'submitted_value' => is_string($signature->submitted_value) ? $signature->submitted_value : null,
-            ];
+            $signedByFieldId[$signature->signature_field_id] = $this->signatureFieldResponsePayload($signature, $signer);
         }
 
         return view('sign.show', [
@@ -170,7 +163,7 @@ class SignDocumentController extends Controller
         DocumentHashService $documentHashService,
         PkiSignatureService $pkiSignatureService,
         SignerCertificateService $signerCertificateService,
-    ): RedirectResponse|Response
+    ): RedirectResponse|Response|JsonResponse
     {
         try {
             $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
@@ -182,6 +175,12 @@ class SignDocumentController extends Controller
 
             $signingError = $this->canSignerModifyFields($document, $signer);
             if ($signingError !== null) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => $signingError,
+                    ], 422);
+                }
+
                 return redirect()->route('sign.show', $this->signerRouteToken($signer))
                     ->with('error', $signingError);
             }
@@ -247,10 +246,48 @@ class SignDocumentController extends Controller
             $fieldType = $field->type->value;
             $isSignatureField = in_array($fieldType, ['signature', 'signature_left', 'signature_right'], true);
 
+            $successMessage = $existingSignature !== null
+                ? ($isSignatureField ? __('Signature updated.') : __('Field updated.'))
+                : ($isSignatureField ? __('Signature saved.') : __('Field saved.'));
+
+            if ($request->expectsJson()) {
+                $document->refresh();
+                $signer->refresh();
+                $signature->refresh();
+
+                $signedCount = Signature::query()
+                    ->where('document_id', $document->id)
+                    ->where('signer_id', $signer->id)
+                    ->whereNotNull('signature_field_id')
+                    ->count();
+
+                $assignedCount = $document->signatureFields()
+                    ->where('signer_id', $signer->id)
+                    ->count();
+
+                return response()->json([
+                    'message' => $successMessage,
+                    'field' => [
+                        'id' => $field->id,
+                        ...$this->signatureFieldResponsePayload($signature, $signer),
+                    ],
+                    'summary' => [
+                        'assigned' => $assignedCount,
+                        'completed' => $signedCount,
+                        'remaining' => max(0, $assignedCount - $signedCount),
+                        'progress_percent' => $assignedCount > 0
+                            ? (int) round(($signedCount / $assignedCount) * 100)
+                            : 0,
+                        'can_edit_fields' => $signer->status === DocumentSignerStatus::Pending
+                            && $document->status === DocumentStatus::Pending,
+                        'signer_status' => $signer->status->value,
+                        'document_status' => $document->status->value,
+                    ],
+                ]);
+            }
+
             return redirect()->route('sign.show', $this->signerRouteToken($signer))
-                ->with('status', $existingSignature !== null
-                    ? ($isSignatureField ? __('Signature updated.') : __('Field updated.'))
-                    : ($isSignatureField ? __('Signature saved.') : __('Field saved.')));
+                ->with('status', $successMessage);
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Field signature submission failed', [
                 'token' => $token,
@@ -259,6 +296,12 @@ class SignDocumentController extends Controller
                 'message' => $throwable->getMessage(),
                 'ip_address' => (string) $request->ip(),
             ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => __('Unable to save your signature right now. Please try again.'),
+                ], 500);
+            }
 
             return redirect()->route('sign.show', $token)
                 ->with('error', __('Unable to save your signature right now. Please try again.'));
@@ -517,5 +560,25 @@ class SignDocumentController extends Controller
         if ($disk->exists($existingPath)) {
             $disk->delete($existingPath);
         }
+    }
+
+    /**
+     * @return array{image_url: ?string, submitted_value: ?string}
+     */
+    private function signatureFieldResponsePayload(Signature $signature, DocumentSigner $signer): array
+    {
+        $imageUrl = null;
+
+        if (is_string($signature->signature_path) && $signature->signature_path !== '' && $signature->signature_field_id !== null) {
+            $imageUrl = route('sign.signature.image', [
+                'token' => $this->signerRouteToken($signer),
+                'signatureField' => $signature->signature_field_id,
+            ]).'?v='.$signature->updated_at?->timestamp;
+        }
+
+        return [
+            'image_url' => $imageUrl,
+            'submitted_value' => is_string($signature->submitted_value) ? $signature->submitted_value : null,
+        ];
     }
 }

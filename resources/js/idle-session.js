@@ -3,6 +3,7 @@
  */
 const ACTIVITY_EVENTS = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
 const TICK_MS = 1000;
+const MIN_ACTIVITY_UPDATE_MS = 250;
 
 let lastActivityAt = Date.now();
 let tickTimer = null;
@@ -124,7 +125,16 @@ function resetIdleTimer() {
 }
 
 function onActivity() {
-    resetIdleTimer();
+    const now = Date.now();
+    if (now - lastActivityAt < MIN_ACTIVITY_UPDATE_MS) {
+        return;
+    }
+
+    lastActivityAt = now;
+
+    if (warningVisible) {
+        hideWarning();
+    }
 }
 
 function tick() {

@@ -68,7 +68,7 @@ function createPrepareSession(cfgEl) {
     const pdfCanvas = document.getElementById('pdf-canvas');
     const fabricEl = document.getElementById('fabric-canvas');
     const pdfShell = document.getElementById('pdf-shell');
-    const pdfPanel = pdfShell?.closest('.ui-panel');
+    const pdfPanel = document.getElementById('pdf-stage') || pdfShell?.parentElement;
     const pdfLoadError = document.getElementById('pdf-load-error');
 
     const pageIndicator = document.getElementById('page-indicator');

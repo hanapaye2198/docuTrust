@@ -7,7 +7,7 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-zinc-100 dark:bg-zinc-950">
+    <body class="app-shell min-h-screen bg-zinc-100 dark:bg-zinc-950">
         <flux:sidebar
             sticky
             collapsible

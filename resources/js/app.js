@@ -1,9 +1,9 @@
-import Chart from 'chart.js/auto';
-import { initIdleSession } from './idle-session';
-import { initTemplatePreparePage } from './template-prepare';
-
 let docuTrustStatusChart = null;
 let docuTrustActivityChart = null;
+let chartModulePromise = null;
+let idleSessionModulePromise = null;
+let templatePrepareModulePromise = null;
+let signViewModulePromise = null;
 
 function destroyDocuTrustChart() {
     if (docuTrustStatusChart) {
@@ -16,9 +16,34 @@ function destroyDocuTrustChart() {
     }
 }
 
-function initDocuTrustDashboardChart() {
+function loadChartModule() {
+    chartModulePromise ??= import('chart.js/auto');
+
+    return chartModulePromise;
+}
+
+function loadIdleSessionModule() {
+    idleSessionModulePromise ??= import('./idle-session');
+
+    return idleSessionModulePromise;
+}
+
+function loadTemplatePrepareModule() {
+    templatePrepareModulePromise ??= import('./template-prepare');
+
+    return templatePrepareModulePromise;
+}
+
+function loadSignViewModule() {
+    signViewModulePromise ??= import('./sign-view');
+
+    return signViewModulePromise;
+}
+
+async function initDocuTrustDashboardChart() {
     const canvas = document.getElementById('docutrust-status-pie');
     if (!canvas?.dataset?.chart) {
+        destroyDocuTrustChart();
         return;
     }
 
@@ -30,6 +55,11 @@ function initDocuTrustDashboardChart() {
     }
 
     if (!payload?.labels?.length || !payload?.values) {
+        return;
+    }
+
+    const { default: Chart } = await loadChartModule();
+    if (!canvas.isConnected) {
         return;
     }
 
@@ -83,9 +113,13 @@ function initDocuTrustDashboardChart() {
     });
 }
 
-function initDocuTrustActivityChart() {
+async function initDocuTrustActivityChart() {
     const canvas = document.getElementById('docutrust-activity-chart');
     if (!canvas?.dataset?.chart) {
+        if (docuTrustActivityChart) {
+            docuTrustActivityChart.destroy();
+            docuTrustActivityChart = null;
+        }
         return;
     }
 
@@ -97,6 +131,11 @@ function initDocuTrustActivityChart() {
     }
 
     if (!payload?.labels?.length || !payload?.weeklyValues || !payload?.monthlyValues) {
+        return;
+    }
+
+    const { default: Chart } = await loadChartModule();
+    if (!canvas.isConnected) {
         return;
     }
 
@@ -172,13 +211,48 @@ function initDocuTrustActivityChart() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', initDocuTrustDashboardChart);
-document.addEventListener('livewire:navigated', initDocuTrustDashboardChart);
-document.addEventListener('DOMContentLoaded', initDocuTrustActivityChart);
-document.addEventListener('livewire:navigated', initDocuTrustActivityChart);
+async function initTemplatePreparePage() {
+    const hasPrepareConfig = Boolean(document.getElementById('template-prepare-config'));
 
-document.addEventListener('DOMContentLoaded', initTemplatePreparePage);
-document.addEventListener('livewire:navigated', initTemplatePreparePage);
+    if (!hasPrepareConfig && !templatePrepareModulePromise) {
+        return;
+    }
 
-document.addEventListener('DOMContentLoaded', initIdleSession);
-document.addEventListener('livewire:navigated', initIdleSession);
+    const { initTemplatePreparePage: initPage } = await loadTemplatePrepareModule();
+    initPage();
+}
+
+async function initIdleSession() {
+    if (
+        typeof window.APP_IDLE_CONFIG === 'undefined'
+        && !document.getElementById('idle-timeout-overlay')
+        && !idleSessionModulePromise
+    ) {
+        return;
+    }
+
+    const { initIdleSession: initSession } = await loadIdleSessionModule();
+    initSession();
+}
+
+async function initSignView() {
+    const hasSignViewConfig = Boolean(document.getElementById('sign-view-config'));
+
+    if (!hasSignViewConfig && !signViewModulePromise) {
+        return;
+    }
+
+    const { initSignView: initView } = await loadSignViewModule();
+    initView();
+}
+
+function bootDocuTrustUi() {
+    void initDocuTrustDashboardChart();
+    void initDocuTrustActivityChart();
+    void initTemplatePreparePage();
+    void initIdleSession();
+    void initSignView();
+}
+
+document.addEventListener('DOMContentLoaded', bootDocuTrustUi);
+document.addEventListener('livewire:navigated', bootDocuTrustUi);

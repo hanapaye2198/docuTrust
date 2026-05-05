@@ -6,7 +6,7 @@
   $secondaryHeaderUrl = $authenticatedUser ? route('settings.profile') : route('login');
   $secondaryHeaderLabel = $authenticatedUser ? __('Settings') : __('Login');
 @endphp
-<html lang="en">
+<html lang="en" class="docutrust-smooth-scroll">
 <head>
 <script>
 (function () {
@@ -177,7 +177,10 @@
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{color-scheme:dark light;scroll-behavior:smooth;font-size:18px}
+html{color-scheme:dark light;font-size:18px}
+@media (prefers-reduced-motion:no-preference){
+  html.docutrust-smooth-scroll{scroll-behavior:smooth}
+}
 body{
   font-family:var(--font-body);
   background:var(--bg);
