@@ -35,6 +35,27 @@ class SignatureEngineTest extends TestCase
         Storage::disk('local')->put($path, Pdf::loadHTML('<h1>DocuTrust</h1>')->output());
     }
 
+    private function storeTinySignaturePng(): string
+    {
+        $path = 'signatures/'.Str::uuid()->toString().'.png';
+        [, $encoded] = explode(',', self::TINY_PNG_DATA_URL, 2);
+        Storage::disk('local')->put($path, base64_decode($encoded, true));
+
+        return $path;
+    }
+
+    private function provisionSignerCrypto(DocumentSigner $signer): void
+    {
+        $keys = app(PkiSignatureService::class)->generateKeyPair();
+
+        $signer->update([
+            'signing_public_key' => $keys['public_key'],
+            'signing_private_key' => $keys['private_key'],
+        ]);
+
+        app(\App\Services\SignerCertificateService::class)->getOrIssueForSigner($signer->fresh());
+    }
+
     private function runQueuedCompletionWork(Document $document): void
     {
         $document->refresh();
@@ -646,6 +667,84 @@ class SignatureEngineTest extends TestCase
             ->assertHeader('content-type', 'application/pdf');
     }
 
+    public function test_owner_can_stream_completed_document_from_archive_disk(): void
+    {
+        config()->set('filesystems.disks.archive_testing', [
+            'driver' => 'local',
+            'root' => storage_path('framework/testing/disks/archive-testing'),
+            'throw' => false,
+        ]);
+        config()->set('filesystems.docutrust_archive_disk', 'archive_testing');
+
+        Storage::fake('local');
+        Storage::fake('archive_testing');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Completed,
+            'file_path' => 'documents/source.pdf',
+            'final_pdf_path' => 'documents/generated/final-local.pdf',
+            'archive_storage_disk' => 'archive_testing',
+            'archive_document_path' => 'archives/documents/1/final-archived.pdf',
+            'archived_at' => now(),
+        ]);
+        Storage::disk('archive_testing')->put('archives/documents/1/final-archived.pdf', '%PDF-1.4 archived final');
+
+        $this->actingAs($user)
+            ->get(route('documents.stream', $document))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_completed_document_stream_self_heals_missing_final_pdf(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/heal-stream-source.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Completed,
+            'file_path' => $path,
+            'final_pdf_path' => null,
+            'certificate_path' => null,
+            'archive_document_path' => null,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+        $this->provisionSignerCrypto($signer);
+        $field = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+        Signature::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'signature_field_id' => $field->id,
+            'signature_path' => $this->storeTinySignaturePng(),
+            'signature_algorithm' => 'RSA-SHA256',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('documents.stream', $document))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $document->refresh();
+        $this->assertNotNull($document->final_pdf_path);
+        $this->assertTrue(Storage::disk('local')->exists($document->final_pdf_path));
+        $this->assertNotNull($document->certificate_path);
+    }
+
     public function test_guest_can_stream_pdf_for_signing_session(): void
     {
         Storage::fake('local');
@@ -704,6 +803,9 @@ class SignatureEngineTest extends TestCase
         $this->assertTrue(Storage::disk('local')->exists($document->final_pdf_path));
         $this->assertNotNull($document->certificate_path);
         $this->assertTrue(Storage::disk('local')->exists($document->certificate_path));
+        $this->assertNotNull($document->archived_at);
+        $this->assertNotNull($document->archive_document_path);
+        $this->assertNotNull($document->archive_certificate_path);
 
         $this->assertDatabaseHas('signature_audit_events', [
             'document_id' => $document->id,
@@ -730,6 +832,101 @@ class SignatureEngineTest extends TestCase
             ->get(route('documents.certificate.download', $document))
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_owner_can_download_final_signed_document(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Completed,
+            'final_pdf_path' => 'documents/generated/sample-final.pdf',
+            'archive_storage_disk' => 'local',
+            'archive_document_path' => 'documents/generated/sample-final.pdf',
+            'archived_at' => now(),
+        ]);
+        Storage::disk('local')->put('documents/generated/sample-final.pdf', '%PDF-1.4 final');
+
+        $this->actingAs($user)
+            ->get(route('documents.download', $document))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_owner_can_download_final_signed_document_from_archive_disk(): void
+    {
+        config()->set('filesystems.disks.archive_testing', [
+            'driver' => 'local',
+            'root' => storage_path('framework/testing/disks/archive-testing-download'),
+            'throw' => false,
+        ]);
+        config()->set('filesystems.docutrust_archive_disk', 'archive_testing');
+
+        Storage::fake('local');
+        Storage::fake('archive_testing');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Completed,
+            'archive_storage_disk' => 'archive_testing',
+            'archive_document_path' => 'archives/documents/77/final.pdf',
+            'archived_at' => now(),
+        ]);
+        Storage::disk('archive_testing')->put('archives/documents/77/final.pdf', '%PDF-1.4 archived final');
+
+        $this->actingAs($user)
+            ->get(route('documents.download', $document))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_completed_document_download_self_heals_missing_final_pdf(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/heal-download-source.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Completed,
+            'file_path' => $path,
+            'final_pdf_path' => null,
+            'certificate_path' => null,
+            'archive_document_path' => null,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+        $this->provisionSignerCrypto($signer);
+        $field = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+        Signature::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'signature_field_id' => $field->id,
+            'signature_path' => $this->storeTinySignaturePng(),
+            'signature_algorithm' => 'RSA-SHA256',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('documents.download', $document))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $document->refresh();
+        $this->assertNotNull($document->final_pdf_path);
+        $this->assertNotNull($document->archive_document_path);
     }
 
     public function test_signing_link_is_invalid_for_unknown_token(): void

@@ -8,11 +8,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 final class PublicPdfStream
 {
     /**
-     * Stream a PDF from the public disk. Paths are storage-relative (e.g. documents/foo.pdf), not URLs.
+     * Stream a PDF from a private disk. Paths are storage-relative (e.g. documents/foo.pdf), not URLs.
      */
-    public static function inlineResponse(?string $relativePath): StreamedResponse
+    public static function inlineResponse(?string $relativePath, ?string $diskName = null): StreamedResponse
     {
-        $disk = Storage::disk((string) config('filesystems.docutrust_disk', 'local'));
+        $disk = Storage::disk($diskName ?: (string) config('filesystems.docutrust_disk', 'local'));
 
         if ($relativePath === null || $relativePath === '' || ! $disk->exists($relativePath)) {
             abort(404);

@@ -56,6 +56,9 @@ class SignDocumentController extends Controller
         $document = $signer->document;
         $documentAccessProtected = $document->hasAccessPassword();
         $documentAccessLocked = $documentAccessProtected && ! $this->documentAccessUnlocked($document);
+        $signingAvailabilityMessage = ! $documentAccessLocked
+            ? $this->documentSigningWorkflowService->canSignerModifyFields($document->loadMissing('documentSigners'), $signer)
+            : null;
         $trustAuthorizationEnabled = (string) config('docutrust.pki.signing_backend', 'app_managed') === 'remote_managed';
         $trustAuthorizationSession = $trustAuthorizationEnabled
             ? $signer->trustAuthorizationSessions()
@@ -93,6 +96,7 @@ class SignDocumentController extends Controller
             'documentAccessProtected' => $documentAccessProtected,
             'documentAccessLocked' => $documentAccessLocked,
             'documentAccessHint' => $document->access_password_hint,
+            'signingAvailabilityMessage' => $signingAvailabilityMessage,
             'trustAuthorizationEnabled' => $trustAuthorizationEnabled,
             'trustAuthorizationSession' => $trustAuthorizationSession !== null
                 ? $this->trustAuthorizationSessionPayload($trustAuthorizationSession)

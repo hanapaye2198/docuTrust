@@ -10,6 +10,25 @@
             <p class="ui-muted mt-1">{{ __('Invite people who need to sign this document') }}</p>
         </div>
 
+        <div class="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-4 dark:border-zinc-700/80 dark:bg-zinc-800/30">
+            <form wire:submit="saveSigningWorkflow" class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <flux:field class="min-w-0 flex-1">
+                    <flux:label>{{ __('Signing workflow') }}</flux:label>
+                    <flux:select wire:model="signingWorkflow">
+                        <option value="{{ \App\Models\Document::SIGNING_WORKFLOW_SEQUENTIAL }}">{{ __('Sequential') }}</option>
+                        <option value="{{ \App\Models\Document::SIGNING_WORKFLOW_PARALLEL }}">{{ __('Parallel') }}</option>
+                    </flux:select>
+                    <flux:error name="signingWorkflow" />
+                </flux:field>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400 lg:max-w-md">
+                    {{ $signingWorkflow === \App\Models\Document::SIGNING_WORKFLOW_SEQUENTIAL
+                        ? __('Signers will be prompted in order. Reorder the list below to control who signs next.')
+                        : __('Any signer can sign as soon as the document is sent. Signer order is ignored in parallel mode.') }}
+                </p>
+                <flux:button variant="outline" type="submit">{{ __('Save workflow') }}</flux:button>
+            </form>
+        </div>
+
         <form wire:submit="addSigner" class="space-y-4">
             <div class="relative space-y-2 sm:col-span-2">
                 <div class="grid gap-4 sm:grid-cols-2">
@@ -105,7 +124,7 @@
                                 <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{{ $signer->name }}</td>
                                 <td class="px-4 py-3 text-zinc-600 dark:text-zinc-300">{{ $signer->email }}</td>
                                 <td class="px-4 py-3 capitalize text-zinc-600 dark:text-zinc-300">{{ $signer->status->value }}</td>
-                                <td class="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">{{ $signer->signing_order }}</td>
+                                <td class="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">{{ $document->usesSequentialSigningWorkflow() ? $signer->signing_order : '—' }}</td>
                                 <td class="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">
                                     {{ $signer->signed_at?->format('M j, Y g:i A') ?? '—' }}
                                 </td>
@@ -126,12 +145,14 @@
                                 @if ($document->status === DocumentStatus::Draft)
                                     <td class="px-4 py-3 text-right">
                                         <div class="flex justify-end gap-2">
-                                            <flux:button size="sm" variant="ghost" type="button" wire:click="moveSignerUp({{ $signer->id }})">
-                                                {{ __('Up') }}
-                                            </flux:button>
-                                            <flux:button size="sm" variant="ghost" type="button" wire:click="moveSignerDown({{ $signer->id }})">
-                                                {{ __('Down') }}
-                                            </flux:button>
+                                            @if ($document->usesSequentialSigningWorkflow())
+                                                <flux:button size="sm" variant="ghost" type="button" wire:click="moveSignerUp({{ $signer->id }})">
+                                                    {{ __('Up') }}
+                                                </flux:button>
+                                                <flux:button size="sm" variant="ghost" type="button" wire:click="moveSignerDown({{ $signer->id }})">
+                                                    {{ __('Down') }}
+                                                </flux:button>
+                                            @endif
                                             <flux:button size="sm" variant="ghost" type="button" wire:click="startEditingSigner({{ $signer->id }})">
                                                 {{ __('Edit') }}
                                             </flux:button>

@@ -100,28 +100,47 @@ class DocumentSigningWorkflowService
             return null;
         }
 
-        $hasUnsignedPreviousSigner = $document->documentSigners->contains(function (DocumentSigner $otherSigner) use ($signer): bool {
-            if ($otherSigner->id === $signer->id || $otherSigner->signing_order === null) {
-                return false;
-            }
+        $blockingSigner = $this->pendingPrerequisiteSigner($document, $signer);
 
-            if ($otherSigner->signing_order >= $signer->signing_order) {
-                return false;
-            }
+        if ($blockingSigner === null) {
+            return null;
+        }
 
-            return $otherSigner->status !== DocumentSignerStatus::Signed;
-        });
+        $blockingName = trim((string) $blockingSigner->name);
+        $blockingLabel = $blockingName !== ''
+            ? $blockingName
+            : __('Signer #:order', ['order' => $blockingSigner->signing_order]);
 
-        return $hasUnsignedPreviousSigner
-            ? __('You cannot sign yet. Previous signer has not completed signing.')
-            : null;
+        return __('You cannot sign yet. Waiting for signer :order (:name) to finish first.', [
+            'order' => $blockingSigner->signing_order,
+            'name' => $blockingLabel,
+        ]);
     }
 
     private function usesSequentialSigning(Document $document): bool
     {
-        return $document->documentSigners->contains(
-            fn (DocumentSigner $documentSigner): bool => $documentSigner->signing_order !== null
-        );
+        return $document->usesSequentialSigningWorkflow();
+    }
+
+    private function pendingPrerequisiteSigner(Document $document, DocumentSigner $signer): ?DocumentSigner
+    {
+        /** @var ?DocumentSigner $blockingSigner */
+        $blockingSigner = $document->documentSigners
+            ->filter(function (DocumentSigner $otherSigner) use ($signer): bool {
+                if ($otherSigner->id === $signer->id || $otherSigner->signing_order === null) {
+                    return false;
+                }
+
+                if ($otherSigner->signing_order >= $signer->signing_order) {
+                    return false;
+                }
+
+                return $otherSigner->status !== DocumentSignerStatus::Signed;
+            })
+            ->sortBy('signing_order')
+            ->first();
+
+        return $blockingSigner;
     }
 
     private function ensureActiveTrustAuthorizationIfRequired(DocumentSigner $signer): void

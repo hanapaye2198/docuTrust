@@ -17,6 +17,10 @@ class Document extends Model
     /** @use HasFactory<\Database\Factories\DocumentFactory> */
     use HasFactory;
 
+    public const SIGNING_WORKFLOW_SEQUENTIAL = 'sequential';
+
+    public const SIGNING_WORKFLOW_PARALLEL = 'parallel';
+
     /**
      * @var list<string>
      */
@@ -27,10 +31,15 @@ class Document extends Model
         'file_path',
         'access_password_hash',
         'access_password_hint',
+        'signing_workflow',
         'prepared_pdf_path',
         'final_pdf_path',
         'files',
         'certificate_path',
+        'archive_storage_disk',
+        'archive_document_path',
+        'archive_certificate_path',
+        'archived_at',
         'status',
         'sent_at',
     ];
@@ -43,6 +52,7 @@ class Document extends Model
         return [
             'status' => DocumentStatus::class,
             'sent_at' => 'datetime',
+            'archived_at' => 'datetime',
             'files' => 'array',
         ];
     }
@@ -151,7 +161,20 @@ class Document extends Model
 
     public function previewPdfPath(): ?string
     {
+        if ($this->hasArchivedFinalDocument()) {
+            return $this->archive_document_path;
+        }
+
         return $this->final_pdf_path ?: $this->prepared_pdf_path ?: $this->sourcePdfPath();
+    }
+
+    public function previewPdfDisk(): string
+    {
+        if ($this->hasArchivedFinalDocument()) {
+            return $this->archiveDisk();
+        }
+
+        return (string) config('filesystems.docutrust_disk', 'local');
     }
 
     public function verifiablePdfPath(): ?string
@@ -166,6 +189,39 @@ class Document extends Model
     public function hasAccessPassword(): bool
     {
         return is_string($this->access_password_hash) && $this->access_password_hash !== '';
+    }
+
+    public function signingWorkflow(): string
+    {
+        $workflow = (string) ($this->signing_workflow ?? self::SIGNING_WORKFLOW_SEQUENTIAL);
+
+        return in_array($workflow, [self::SIGNING_WORKFLOW_SEQUENTIAL, self::SIGNING_WORKFLOW_PARALLEL], true)
+            ? $workflow
+            : self::SIGNING_WORKFLOW_SEQUENTIAL;
+    }
+
+    public function usesSequentialSigningWorkflow(): bool
+    {
+        return $this->signingWorkflow() === self::SIGNING_WORKFLOW_SEQUENTIAL;
+    }
+
+    public function archiveDisk(): string
+    {
+        return (string) ($this->archive_storage_disk ?: config('filesystems.docutrust_archive_disk', config('filesystems.docutrust_disk', 'local')));
+    }
+
+    public function finalDownloadPath(): ?string
+    {
+        if ($this->hasArchivedFinalDocument()) {
+            return $this->archive_document_path;
+        }
+
+        return $this->previewPdfPath();
+    }
+
+    public function hasArchivedFinalDocument(): bool
+    {
+        return is_string($this->archive_document_path) && $this->archive_document_path !== '';
     }
 
     public function hasDocumentSigners(): bool
@@ -219,7 +275,8 @@ class Document extends Model
         return $this->status === DocumentStatus::Draft
             && $this->hasDocumentSigners()
             && $this->hasSignatureFields()
-            && $this->signersMissingFields()->isEmpty();
+            && $this->signersMissingFields()->isEmpty()
+            && $this->workflowConfigurationIsValid();
     }
 
     public function allSignersHaveSigned(): bool
@@ -231,6 +288,34 @@ class Document extends Model
         return $this->documentSigners->every(
             fn (DocumentSigner $signer) => $signer->status === DocumentSignerStatus::Signed
         );
+    }
+
+    public function workflowConfigurationIsValid(): bool
+    {
+        if (! $this->usesSequentialSigningWorkflow()) {
+            return true;
+        }
+
+        $signers = $this->relationLoaded('documentSigners')
+            ? $this->documentSigners
+            : $this->documentSigners()->get();
+
+        if ($signers->isEmpty()) {
+            return true;
+        }
+
+        $orders = $signers
+            ->pluck('signing_order')
+            ->filter(fn ($value) => $value !== null)
+            ->map(fn ($value) => (int) $value)
+            ->sort()
+            ->values();
+
+        if ($orders->count() !== $signers->count()) {
+            return false;
+        }
+
+        return $orders->all() === range(1, $signers->count());
     }
 
     protected static function booted(): void

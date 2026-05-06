@@ -209,6 +209,7 @@ class DocumentSignerWorkflowTest extends TestCase
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
         DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'name' => 'Alice Example',
             'signing_order' => 1,
         ]);
         $secondSigner = DocumentSigner::factory()->for($document)->create([
@@ -218,7 +219,7 @@ class DocumentSignerWorkflowTest extends TestCase
 
         $this->post(route('sign.store', $secondSigner))
             ->assertRedirect(route('sign.show', $secondSigner->access_token))
-            ->assertSessionHas('error', 'You cannot sign yet. Previous signer has not completed signing.');
+            ->assertSessionHas('error', 'You cannot sign yet. Waiting for signer 1 (Alice Example) to finish first.');
     }
 
     public function test_sequential_signer_can_sign_after_previous_signer_completes(): void
@@ -241,10 +242,33 @@ class DocumentSignerWorkflowTest extends TestCase
         $this->assertSame(DocumentSignerStatus::Signed, $secondSigner->status);
     }
 
-    public function test_parallel_signers_can_sign_in_any_order(): void
+    public function test_sign_page_shows_clear_sequential_block_message(): void
     {
         $user = User::factory()->create();
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'name' => 'Alice Example',
+            'signing_order' => 1,
+        ]);
+        $secondSigner = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'name' => 'Bob Example',
+            'signing_order' => 2,
+        ]);
+
+        $this->get(route('sign.show', $secondSigner->access_token))
+            ->assertOk()
+            ->assertSee('You cannot sign yet. Waiting for signer 1 (Alice Example) to finish first.');
+    }
+
+    public function test_parallel_signers_can_sign_in_any_order(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'signing_workflow' => Document::SIGNING_WORKFLOW_PARALLEL,
+        ]);
         $firstSigner = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
             'signing_order' => null,
@@ -262,6 +286,28 @@ class DocumentSignerWorkflowTest extends TestCase
 
         $this->assertSame(DocumentSignerStatus::Signed, $firstSigner->status);
         $this->assertSame(DocumentSignerStatus::Signed, $secondSigner->status);
+    }
+
+    public function test_owner_can_switch_signing_workflow_to_parallel(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'signing_workflow' => Document::SIGNING_WORKFLOW_SEQUENTIAL,
+        ]);
+        DocumentSigner::factory()->for($document)->create(['signing_order' => 1]);
+        DocumentSigner::factory()->for($document)->create(['signing_order' => 2]);
+
+        $this->actingAs($user);
+
+        Livewire::test(DocumentSignersManager::class, ['documentId' => $document->id])
+            ->set('signingWorkflow', Document::SIGNING_WORKFLOW_PARALLEL)
+            ->call('saveSigningWorkflow')
+            ->assertHasNoErrors();
+
+        $document->refresh();
+        $this->assertSame(Document::SIGNING_WORKFLOW_PARALLEL, $document->signingWorkflow());
+        $this->assertSame(0, $document->documentSigners()->whereNotNull('signing_order')->count());
     }
 
     public function test_duplicate_signing_is_blocked(): void

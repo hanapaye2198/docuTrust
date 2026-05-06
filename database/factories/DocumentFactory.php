@@ -21,6 +21,7 @@ class DocumentFactory extends Factory
             'user_id' => User::factory(),
             'title' => fake()->sentence(3),
             'file_path' => 'documents/'.fake()->uuid().'.pdf',
+            'signing_workflow' => Document::SIGNING_WORKFLOW_SEQUENTIAL,
             'status' => DocumentStatus::Draft,
         ];
     }

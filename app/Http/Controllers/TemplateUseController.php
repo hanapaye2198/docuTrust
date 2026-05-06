@@ -56,6 +56,9 @@ class TemplateUseController extends Controller
                 'file_path' => $newPath,
                 'access_password_hash' => $accessPassword !== '' ? Hash::make($accessPassword) : null,
                 'access_password_hint' => $accessPasswordHint !== '' ? $accessPasswordHint : null,
+                'signing_workflow' => $template->document_workflow
+                    ? Document::SIGNING_WORKFLOW_SEQUENTIAL
+                    : Document::SIGNING_WORKFLOW_PARALLEL,
                 'status' => DocumentStatus::Draft,
             ]);
 

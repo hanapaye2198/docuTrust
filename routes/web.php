@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DocumentPrepareController;
 use App\Http\Controllers\DocumentCertificateController;
+use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\DocumentStreamController;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
@@ -42,6 +43,7 @@ Route::middleware(['auth', 'role:admin,signer'])->group(function () {
     Volt::route('documents/{document}', 'documents.show')->name('documents.show');
 
     Route::get('documents/{document}/stream', DocumentStreamController::class)->name('documents.stream');
+    Route::get('documents/{document}/download', DocumentDownloadController::class)->name('documents.download');
     Route::get('documents/{document}/certificate', [DocumentCertificateController::class, 'show'])->name('documents.certificate.show');
     Route::get('documents/{document}/certificate/download', [DocumentCertificateController::class, 'download'])->name('documents.certificate.download');
     Route::get('documents/{document}/prepare', [DocumentPrepareController::class, 'show'])->name('documents.prepare');

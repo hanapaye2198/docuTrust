@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Symfony\Component\HttpFoundation\Response;
 
 class AddSecurityHeaders
@@ -19,14 +20,23 @@ class AddSecurityHeaders
         $isLocal = app()->environment('local');
 
         $scriptSrc = "'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com";
-        $styleSrc = "'self' 'unsafe-inline' https://fonts.googleapis.com";
+        $styleSrc = "'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.bunny.net";
         $connectSrc = "'self'";
-        $fontSrc = "'self' data: https://fonts.gstatic.com";
+        $fontSrc = "'self' data: https://fonts.gstatic.com https://fonts.bunny.net";
 
         if ($isLocal) {
-            $scriptSrc .= " 'unsafe-eval' http://127.0.0.1:5173 http://localhost:5173";
-            $styleSrc .= " http://127.0.0.1:5173 http://localhost:5173";
-            $connectSrc .= " http://127.0.0.1:5173 http://localhost:5173 ws://127.0.0.1:5173 ws://localhost:5173";
+            $scriptSrc .= " 'unsafe-eval'";
+
+            foreach ($this->viteDevOrigins() as $origin) {
+                $scriptSrc .= " {$origin}";
+                $styleSrc .= " {$origin}";
+                $connectSrc .= " {$origin}";
+
+                $websocketOrigin = preg_replace('/^http/i', 'ws', $origin);
+                if (is_string($websocketOrigin)) {
+                    $connectSrc .= " {$websocketOrigin}";
+                }
+            }
         }
 
         $response->headers->set('X-Frame-Options', 'DENY');
@@ -48,5 +58,27 @@ class AddSecurityHeaders
         );
 
         return $response;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function viteDevOrigins(): array
+    {
+        $origins = [
+            'http://127.0.0.1:5173',
+            'http://localhost:5173',
+        ];
+
+        $hotFile = public_path('hot');
+        if (File::exists($hotFile)) {
+            $hotUrl = trim((string) File::get($hotFile));
+
+            if ($hotUrl !== '') {
+                $origins[] = rtrim($hotUrl, '/');
+            }
+        }
+
+        return array_values(array_unique($origins));
     }
 }

@@ -16,6 +16,11 @@ class SendDocumentForSignatureService
     {
         $document->refresh()->load(['documentSigners', 'signatureFields']);
 
+        if ($document->usesSequentialSigningWorkflow()) {
+            $this->normalizeSequentialSigningOrder($document);
+            $document->refresh()->load(['documentSigners', 'signatureFields']);
+        }
+
         if ($document->status !== DocumentStatus::Draft) {
             throw new RuntimeException(__('Only draft documents can be sent for signature.'));
         }
@@ -39,6 +44,10 @@ class SendDocumentForSignatureService
             ]));
         }
 
+        if (! $document->workflowConfigurationIsValid()) {
+            throw new RuntimeException(__('Sequential signing requires every signer to have a unique signing order.'));
+        }
+
         $document->update([
             'status' => DocumentStatus::Pending,
             'sent_at' => now(),
@@ -55,5 +64,17 @@ class SendDocumentForSignatureService
         $document->refresh()->load('documentSigners');
 
         event(new DocumentSent($document));
+    }
+
+    private function normalizeSequentialSigningOrder(Document $document): void
+    {
+        $document->documentSigners()
+            ->orderByRaw('CASE WHEN signing_order IS NULL OR signing_order < 1 THEN 999999 ELSE signing_order END')
+            ->orderBy('id')
+            ->get()
+            ->values()
+            ->each(function (DocumentSigner $signer, int $index): void {
+                $signer->update(['signing_order' => $index + 1]);
+            });
     }
 }

@@ -28,6 +28,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | DocuTrust Archive Disk
+    |--------------------------------------------------------------------------
+    |
+    | Completed documents can be copied here for long-term private retention.
+    | This may point at the same disk as the secure working store or at a
+    | private cloud bucket such as S3 with encryption enabled.
+    |
+    */
+    'docutrust_archive_disk' => env('DOCUTRUST_ARCHIVE_DISK', env('DOCUTRUST_FILESYSTEM_DISK', 'local')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Document;
+use App\Services\DocumentArchiveService;
 use App\Services\CompletedDocumentSealingService;
 use App\Services\DocumentCertificateService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,6 +23,7 @@ class GenerateCertificateJob implements ShouldQueue
     public function handle(
         CompletedDocumentSealingService $completedDocumentSealingService,
         DocumentCertificateService $documentCertificateService,
+        DocumentArchiveService $documentArchiveService,
     ): void
     {
         try {
@@ -37,6 +39,7 @@ class GenerateCertificateJob implements ShouldQueue
 
             $completedDocumentSealingService->seal($completedDocument);
             $documentCertificateService->createForCompletedDocument($completedDocument->fresh());
+            $documentArchiveService->archiveCompletedDocument($completedDocument->fresh());
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Queued certificate generation failed', [
                 'document_id' => $this->documentId,

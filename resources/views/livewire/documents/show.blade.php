@@ -67,12 +67,14 @@ new #[Layout('components.layouts.app')] class extends Component {
         return [
             'signerCount' => $document->documentSigners->count(),
             'fieldCount' => $document->signatureFields->count(),
+            'workflowMode' => $document->signingWorkflow(),
             'missingSignerNames' => $missingSigners
                 ->pluck('name')
                 ->filter(fn ($name) => is_string($name) && $name !== '')
                 ->values(),
             'canPrepare' => $document->canPrepareForSigning(),
             'canSend' => $document->canSendForSigning(),
+            'workflowValid' => $document->workflowConfigurationIsValid(),
         ];
     }
 
@@ -186,6 +188,11 @@ new #[Layout('components.layouts.app')] class extends Component {
         <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
             @if ($document->status === DocumentStatus::Draft)
             @endif
+            @if ($document->status === DocumentStatus::Completed)
+                <flux:button variant="outline" :href="route('documents.download', $document)">
+                    {{ __('Download signed PDF') }}
+                </flux:button>
+            @endif
             <flux:button variant="ghost" :href="route('documents.index')" wire:navigate>{{ __('Back to list') }}</flux:button>
         </div>
     </div>
@@ -201,12 +208,18 @@ new #[Layout('components.layouts.app')] class extends Component {
             <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                     <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Workflow') }}</h2>
-                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Documents move in a fixed order: add signer, prepare fields, then send for signature.') }}</p>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Documents move through signer setup, field preparation, and final delivery. The sender can use a sequential or parallel signing flow.') }}</p>
                 </div>
                 <div class="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                    {{ __('Draft workflow') }}
+                    {{ ucfirst($workflow['workflowMode']) }} {{ __('workflow') }}
                 </div>
             </div>
+
+            @if (! $workflow['workflowValid'])
+                <div class="mt-4 rounded-2xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                    {{ __('Sequential signing requires every signer to have a unique order before the document can be sent.') }}
+                </div>
+            @endif
 
             <div class="mt-5 grid gap-4 lg:grid-cols-3">
                 <div class="rounded-2xl border {{ $workflow['signerCount'] > 0 ? 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/20' : 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/60' }} p-4">
@@ -404,16 +417,4 @@ new #[Layout('components.layouts.app')] class extends Component {
         </div>
     </div>
 
-    <div class="ui-panel p-6">
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Preview') }}</h2>
-        <a
-            href="{{ route('documents.stream', $document) }}"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-teal-700 underline decoration-teal-500/30 underline-offset-4 transition hover:text-teal-800 hover:decoration-teal-500 dark:text-teal-300 dark:hover:text-teal-200"
-        >
-            {{ __('Open PDF in new tab') }}
-            <span aria-hidden="true">&nearr;</span>
-        </a>
-    </div>
 </div>

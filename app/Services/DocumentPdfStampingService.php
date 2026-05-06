@@ -179,12 +179,13 @@ class DocumentPdfStampingService
         $lineY = $y + ($height - 2.4);
         $pdf->SetDrawColor($r, $g, $b);
         $pdf->SetLineWidth(0.25);
-        $pdf->Rect($x, $y, $width, $height);
 
         if ($isSignature) {
             $this->drawSignatureImage($pdf, $type, $signature, $x, $y, $width, $height);
             return;
         }
+
+        $pdf->Rect($x, $y, $width, $height);
 
         $value = $this->resolvedFieldValue($type, $field, $signature);
         if ($value === '') {

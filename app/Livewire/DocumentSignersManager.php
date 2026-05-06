@@ -23,6 +23,8 @@ class DocumentSignersManager extends Component
 
     public string $email = '';
 
+    public string $signingWorkflow = Document::SIGNING_WORKFLOW_SEQUENTIAL;
+
     public ?int $editingSignerId = null;
 
     public string $editingName = '';
@@ -39,7 +41,9 @@ class DocumentSignersManager extends Component
     public function mount(int $documentId): void
     {
         $this->documentId = $documentId;
-        $this->authorize('update', $this->resolveDocument());
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+        $this->signingWorkflow = $document->signingWorkflow();
     }
 
     public function addSigner(): void
@@ -75,7 +79,9 @@ class DocumentSignersManager extends Component
             'email' => $normalizedEmail,
             'access_token' => (string) Str::uuid(),
             'status' => DocumentSignerStatus::Pending,
-            'signing_order' => $nextOrder > 0 ? $nextOrder : 1,
+            'signing_order' => $this->signingWorkflow === Document::SIGNING_WORKFLOW_SEQUENTIAL
+                ? ($nextOrder > 0 ? $nextOrder : 1)
+                : null,
             'expires_at' => null,
         ]);
 
@@ -87,12 +93,44 @@ class DocumentSignersManager extends Component
         $this->dispatch('document-updated');
     }
 
+    public function saveSigningWorkflow(): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Draft) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'signingWorkflow' => ['required', 'in:'.Document::SIGNING_WORKFLOW_SEQUENTIAL.','.Document::SIGNING_WORKFLOW_PARALLEL],
+        ]);
+
+        $workflow = (string) $validated['signingWorkflow'];
+
+        $document->update(['signing_workflow' => $workflow]);
+
+        if ($workflow === Document::SIGNING_WORKFLOW_PARALLEL) {
+            $document->documentSigners()->update(['signing_order' => null]);
+        } else {
+            $this->normalizeSigningOrder($document);
+        }
+
+        $this->forgetResolvedDocument();
+        $this->dispatch('document-updated');
+        session()->flash('status', __('Signing workflow updated.'));
+    }
+
     public function startEditingSigner(int $signerId): void
     {
         $document = $this->resolveDocument();
         $this->authorize('update', $document);
 
         if ($document->status !== DocumentStatus::Draft) {
+            return;
+        }
+
+        if ($document->signingWorkflow() !== Document::SIGNING_WORKFLOW_SEQUENTIAL) {
             return;
         }
 
@@ -332,6 +370,12 @@ class DocumentSignersManager extends Component
 
     protected function normalizeSigningOrder(Document $document): void
     {
+        if ($document->signingWorkflow() !== Document::SIGNING_WORKFLOW_SEQUENTIAL) {
+            $document->documentSigners()->update(['signing_order' => null]);
+
+            return;
+        }
+
         $document->documentSigners()
             ->orderBy('signing_order')
             ->orderBy('id')
