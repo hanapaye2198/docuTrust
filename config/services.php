@@ -53,8 +53,11 @@ return [
         'default_credential_id' => env('REMOTE_SIGNING_DEFAULT_CREDENTIAL_ID', ''),
         'csc' => [
             'sign_hash_endpoint' => env('REMOTE_SIGNING_CSC_SIGN_HASH_ENDPOINT', '/csc/v1/signatures/signHash'),
+            'authorize_endpoint' => env('REMOTE_SIGNING_CSC_AUTHORIZE_ENDPOINT', '/csc/v2/credentials/authorize'),
+            'authorize_check_endpoint' => env('REMOTE_SIGNING_CSC_AUTHORIZE_CHECK_ENDPOINT', '/csc/v2/credentials/authorizeCheck'),
             'hash_algorithm' => env('REMOTE_SIGNING_CSC_HASH_ALGORITHM', '2.16.840.1.101.3.4.2.1'),
             'sign_algorithm' => env('REMOTE_SIGNING_CSC_SIGN_ALGORITHM', '1.2.840.113549.1.1.11'),
+            'authorization_mode' => env('REMOTE_SIGNING_CSC_AUTHORIZATION_MODE', 'explicit'),
         ],
         'legacy' => [
             'sign_endpoint' => env('REMOTE_SIGNING_SIGN_ENDPOINT', '/sign'),

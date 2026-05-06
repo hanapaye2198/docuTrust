@@ -14,6 +14,7 @@ use App\Models\SignerCertificate;
 use App\Models\Signature;
 use App\Models\SignatureAuditEvent;
 use App\Models\SignatureField;
+use App\Models\TrustAuthorizationSession;
 use App\Models\User;
 use App\Services\PkiSignatureService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -466,6 +467,48 @@ class SignatureEngineTest extends TestCase
         $this->assertTrue($isValid);
     }
 
+    public function test_remote_managed_field_submission_requires_active_trust_authorization(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/remote-managed-trust-required.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'remote_credential_id' => 'credential-required-001',
+        ]);
+        $field = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $this->postJson(route('sign.signature.store', $signer), [
+            'signature_field_id' => $field->id,
+            'signature_image' => self::TINY_PNG_DATA_URL,
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Start trust authorization before completing your assigned fields.');
+
+        $this->assertDatabaseMissing('signatures', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'signature_field_id' => $field->id,
+        ]);
+    }
+
     public function test_legacy_sign_is_blocked_when_document_has_any_signature_fields(): void
     {
         $user = User::factory()->create();
@@ -651,17 +694,28 @@ class SignatureEngineTest extends TestCase
             ],
         ]);
 
+        TrustAuthorizationSession::factory()->for($signer, 'signer')->create([
+            'provider_name' => 'trust_service_provider',
+            'credential_id' => 'credential-signer-001',
+            'authorization_reference' => 'auth-ref-remote-001',
+            'sad' => 'sad-remote-001',
+        ]);
+
         $chain = $this->makeRemoteManagedCertificateChain();
 
         Http::fake([
             'https://remote-signing.test/csc/v1/signatures/signHash' => function ($request) use ($chain) {
                 $payload = $request->data();
                 $this->assertSame('credential-signer-001', $payload['credentialID']);
+                $this->assertSame('sad-remote-001', $payload['SAD']);
                 $this->assertSame('2.16.840.1.101.3.4.2.1', $payload['hashAlgo']);
                 $this->assertSame('1.2.840.113549.1.1.11', $payload['signAlgo']);
                 $this->assertSame(1, $payload['numSignatures']);
                 $this->assertCount(1, $payload['hashes']);
                 $this->assertIsString($payload['clientData']);
+
+                $clientData = json_decode((string) base64_decode((string) $payload['clientData'], true), true, 512, JSON_THROW_ON_ERROR);
+                $this->assertSame('auth-ref-remote-001', $clientData['authorization_reference'] ?? null);
 
                 $decodedHash = base64_decode((string) $payload['hashes'][0], true);
                 $this->assertNotFalse($decodedHash);
@@ -730,5 +784,92 @@ class SignatureEngineTest extends TestCase
         $this->assertSame('remote-sign-ref-001', $signerCertificate->provider_reference);
         $this->assertNull($signerCertificate->certificate_authority_id);
         $this->assertNotNull($signerCertificate->issuer_certificate_pem);
+    }
+
+    public function test_remote_managed_backend_uses_active_trust_authorization_session_when_present(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        config()->set('services.remote_signing.base_url', 'https://remote-signing.test');
+        config()->set('services.remote_signing.provider_name', 'trust_service_provider');
+        config()->set('services.remote_signing.api_mode', 'csc');
+        config()->set('services.remote_signing.csc.sign_hash_endpoint', '/csc/v1/signatures/signHash');
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/remote-managed-with-auth-session.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'remote_credential_id' => 'credential-signer-002',
+        ]);
+        $field = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        TrustAuthorizationSession::factory()->for($signer, 'signer')->create([
+            'provider_name' => 'trust_service_provider',
+            'credential_id' => 'credential-signer-002',
+            'authorization_reference' => 'auth-ref-001',
+            'sad' => 'sad-authorization-token',
+        ]);
+
+        $chain = $this->makeRemoteManagedCertificateChain();
+
+        Http::fake([
+            'https://remote-signing.test/csc/v1/signatures/signHash' => function ($request) use ($chain) {
+                $payload = $request->data();
+                $this->assertSame('credential-signer-002', $payload['credentialID']);
+                $this->assertSame('sad-authorization-token', $payload['SAD']);
+
+                $clientData = json_decode((string) base64_decode((string) $payload['clientData'], true), true, 512, JSON_THROW_ON_ERROR);
+                $this->assertSame('auth-ref-001', $clientData['authorization_reference'] ?? null);
+
+                $decodedHash = base64_decode((string) $payload['hashes'][0], true);
+                $this->assertNotFalse($decodedHash);
+                $documentHash = bin2hex($decodedHash);
+
+                $signatureValue = app(PkiSignatureService::class)->signHash(
+                    $documentHash,
+                    $chain['private_key_pem'],
+                );
+
+                return Http::response([
+                    'signatures' => [$signatureValue],
+                    'signAlgo' => 'RSA-SHA256',
+                    'credentialID' => 'credential-signer-002',
+                    'transactionID' => 'remote-sign-ref-002',
+                    'certificates' => [
+                        $chain['certificate_pem'],
+                        $chain['issuer_certificate_pem'],
+                    ],
+                    'public_key_pem' => $chain['public_key_pem'],
+                    'SCAL' => '2',
+                    'authMode' => 'explicit_otp',
+                ]);
+            },
+            'http://127.0.0.1:3001/anchor' => Http::response([
+                'transactionHash' => '0xremoteproof456',
+            ]),
+        ]);
+
+        $this->post(route('sign.signature.store', $signer), [
+            'signature_field_id' => $field->id,
+            'signature_image' => self::TINY_PNG_DATA_URL,
+        ])->assertRedirect(route('sign.show', $signer->access_token));
+
+        $signature = Signature::query()->where('signature_field_id', $field->id)->firstOrFail();
+        $this->assertSame('remote-sign-ref-002', $signature->signing_provider_reference);
     }
 }

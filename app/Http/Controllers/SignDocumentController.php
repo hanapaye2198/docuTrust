@@ -2,22 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Contracts\SignerKeyStore;
-use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
-use App\Events\DocumentCompleted;
-use App\Events\DocumentSignerCompleted;
+use App\Http\Requests\StartTrustAuthorizationRequest;
 use App\Http\Requests\StoreDocumentSignatureRequest;
-use App\Jobs\GenerateDocumentPdfJob;
-use App\Jobs\GenerateCertificateJob;
-use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
-use App\Services\PkiSignatureService;
-use App\Services\SignerCertificateService;
-use App\Services\SignatureAuditLogger;
+use App\Models\TrustAuthorizationSession;
+use App\Services\DocumentSigningWorkflowService;
+use App\Services\FieldSignatureCaptureService;
 use App\Support\PublicPdfStream;
+use App\Trust\Authorization\TrustAuthorizationRequiredException;
+use App\Trust\Authorization\TrustAuthorizationWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
@@ -30,7 +26,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class SignDocumentController extends Controller
 {
     public function __construct(
-        private readonly SignerKeyStore $signerKeyStore,
+        private readonly DocumentSigningWorkflowService $documentSigningWorkflowService,
+        private readonly FieldSignatureCaptureService $fieldSignatureCaptureService,
+        private readonly TrustAuthorizationWorkflowService $trustAuthorizationWorkflowService,
     ) {}
 
     private function secureDiskName(): string
@@ -51,6 +49,15 @@ class SignDocumentController extends Controller
         }
 
         $document = $signer->document;
+        $trustAuthorizationEnabled = (string) config('docutrust.pki.signing_backend', 'app_managed') === 'remote_managed';
+        $trustAuthorizationSession = $trustAuthorizationEnabled
+            ? $signer->trustAuthorizationSessions()
+                ->latest('id')
+                ->first()
+            : null;
+        $trustAuthorizationSessionActive = $trustAuthorizationSession !== null
+            && $trustAuthorizationSession->status === 'authorized'
+            && ($trustAuthorizationSession->expires_at === null || $trustAuthorizationSession->expires_at->isFuture());
 
         $fieldsForSigner = $document->signatureFields
             ->where('signer_id', $signer->id)
@@ -76,6 +83,11 @@ class SignDocumentController extends Controller
                 'position_data' => $f->position_data,
             ])->values()->all(),
             'signedByFieldId' => $signedByFieldId,
+            'trustAuthorizationEnabled' => $trustAuthorizationEnabled,
+            'trustAuthorizationSession' => $trustAuthorizationSession !== null
+                ? $this->trustAuthorizationSessionPayload($trustAuthorizationSession)
+                : null,
+            'trustAuthorizationSessionActive' => $trustAuthorizationSessionActive,
         ]);
     }
 
@@ -123,22 +135,7 @@ class SignDocumentController extends Controller
                     ->with('error', __('Please complete each signature field on the document.'));
             }
 
-            $signer->update([
-                'status' => DocumentSignerStatus::Signed,
-                'signed_at' => now(),
-            ]);
-            event(new DocumentSignerCompleted($document->fresh(), $signer->fresh()));
-
-            $document->refresh()->load('documentSigners');
-
-            if ($document->allSignersHaveSigned()) {
-                $document->update(['status' => DocumentStatus::Completed]);
-                GenerateDocumentPdfJob::dispatch($document->id, 'final');
-                $completedDocument = $document->fresh();
-                SignatureAuditLogger::documentCompleted($completedDocument, (string) request()->ip());
-                GenerateCertificateJob::dispatch($completedDocument->id);
-                event(new DocumentCompleted($completedDocument));
-            }
+            $this->documentSigningWorkflowService->completeLegacySigning($signer, (string) request()->ip());
 
             Log::channel('audit')->info('Document signed (legacy flow)', [
                 'document_id' => $document->id,
@@ -148,6 +145,9 @@ class SignDocumentController extends Controller
 
             return redirect()->route('sign.show', $this->signerRouteToken($signer))
                 ->with('status', __('Thank you. Your signature has been recorded.'));
+        } catch (TrustAuthorizationRequiredException $exception) {
+            return redirect()->route('sign.show', $token)
+                ->with('error', $exception->getMessage());
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Document signing failed', [
                 'token' => $token,
@@ -164,8 +164,6 @@ class SignDocumentController extends Controller
     public function storeSignature(
         StoreDocumentSignatureRequest $request,
         string $token,
-        PkiSignatureService $pkiSignatureService,
-        SignerCertificateService $signerCertificateService,
     ): RedirectResponse|Response|JsonResponse
     {
         try {
@@ -189,60 +187,23 @@ class SignDocumentController extends Controller
             }
 
             $field = SignatureField::query()->findOrFail($request->validated('signature_field_id'));
-
-            if ($field->document_id !== $document->id || $field->signer_id !== $signer->id) {
-                abort(403);
-            }
-
-            $this->ensureSignerKeyPair($signer, $pkiSignatureService);
-            $signerCertificate = $signerCertificateService->getOrIssueForSigner($signer->fresh());
-
-            $signerKeyPair = $this->signerKeyStore->keyPairFor($signer);
-
-            $submittedValue = $this->resolveSubmittedFieldValue($field, $signer, $request->validated('submitted_value'));
-            $signatureImagePath = $this->shouldPersistSignatureImage($field)
-                ? $this->storeSubmittedSignatureImage($request->validated('signature_image'))
-                : null;
-            $existingSignature = Signature::query()
-                ->where('signature_field_id', $field->id)
-                ->where('signer_id', $signer->id)
-                ->first();
-
-            $signature = Signature::query()->updateOrCreate(
-                [
-                    'signature_field_id' => $field->id,
-                ],
-                [
-                'document_id' => $document->id,
-                'signer_id' => $signer->id,
-                'signer_certificate_id' => $signerCertificate->id,
-                'signature_path' => $signatureImagePath,
-                'submitted_value' => $submittedValue,
-                'signature_value' => null,
-                'signature_hash' => null,
-                'public_key_fingerprint' => $pkiSignatureService->fingerprint($signerKeyPair['public_key']),
-                'signature_algorithm' => 'RSA-SHA256',
-                'position_data' => null,
-                ]
+            $captureResult = $this->fieldSignatureCaptureService->capture(
+                $signer,
+                $field,
+                $request->validated('submitted_value'),
+                $request->validated('signature_image'),
+                (string) $request->ip(),
+            );
+            $this->documentSigningWorkflowService->completeSignerIfAllFieldsSigned(
+                $captureResult->signer,
+                $captureResult->document,
+                (string) $request->ip(),
             );
 
-            $this->deleteStoredSignatureIfReplaced($existingSignature, $signatureImagePath);
-
-            SignatureAuditLogger::fieldSigned($document, $signer, (string) $request->ip());
-
-            $this->completeSignerIfAllFieldsSigned($signer, $document);
-
-            $fieldType = $field->type->value;
-            $isSignatureField = in_array($fieldType, ['signature', 'signature_left', 'signature_right'], true);
-
-            $successMessage = $existingSignature !== null
-                ? ($isSignatureField ? __('Signature updated.') : __('Field updated.'))
-                : ($isSignatureField ? __('Signature saved.') : __('Field saved.'));
-
             if ($request->expectsJson()) {
-                $document->refresh();
-                $signer->refresh();
-                $signature->refresh();
+                $document = $captureResult->document->fresh();
+                $signer = $captureResult->signer->fresh();
+                $signature = $captureResult->signature->fresh();
 
                 $signedCount = Signature::query()
                     ->where('document_id', $document->id)
@@ -255,7 +216,7 @@ class SignDocumentController extends Controller
                     ->count();
 
                 return response()->json([
-                    'message' => $successMessage,
+                    'message' => $captureResult->message,
                     'field' => [
                         'id' => $field->id,
                         ...$this->signatureFieldResponsePayload($signature, $signer),
@@ -276,7 +237,16 @@ class SignDocumentController extends Controller
             }
 
             return redirect()->route('sign.show', $this->signerRouteToken($signer))
-                ->with('status', $successMessage);
+                ->with('status', $captureResult->message);
+        } catch (TrustAuthorizationRequiredException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
+
+            return redirect()->route('sign.show', $token)
+                ->with('error', $exception->getMessage());
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Field signature submission failed', [
                 'token' => $token,
@@ -329,6 +299,79 @@ class SignDocumentController extends Controller
         ]);
     }
 
+    public function startTrustAuthorization(StartTrustAuthorizationRequest $request, string $token): JsonResponse|Response
+    {
+        $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
+        if ($signer === null) {
+            return $this->invalidLinkResponse();
+        }
+
+        $signingError = $this->canSignerModifyFields($signer->document, $signer);
+        if ($signingError !== null) {
+            return response()->json([
+                'message' => $signingError,
+            ], 422);
+        }
+
+        try {
+            $session = $this->trustAuthorizationWorkflowService->startForSigner(
+                $signer,
+                (int) ($request->validated('num_signatures') ?? 1),
+            );
+
+            return response()->json([
+                'message' => $session->status === 'pending'
+                    ? __('Trust authorization started and is awaiting completion.')
+                    : __('Trust authorization completed.'),
+                'session' => $this->trustAuthorizationSessionPayload($session),
+            ]);
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->error('Trust authorization start failed', [
+                'token' => $token,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => __('Unable to start trust authorization right now. Please try again.'),
+            ], 500);
+        }
+    }
+
+    public function pollTrustAuthorization(string $token, TrustAuthorizationSession $session): JsonResponse|Response
+    {
+        $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
+        if ($signer === null) {
+            return $this->invalidLinkResponse();
+        }
+
+        if ($session->document_signer_id !== $signer->id) {
+            abort(404);
+        }
+
+        try {
+            $session = $this->trustAuthorizationWorkflowService->pollSession($session);
+
+            return response()->json([
+                'message' => $session->status === 'pending'
+                    ? __('Trust authorization is still pending.')
+                    : __('Trust authorization completed.'),
+                'session' => $this->trustAuthorizationSessionPayload($session),
+            ]);
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->error('Trust authorization poll failed', [
+                'token' => $token,
+                'session_id' => $session->id,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => __('Unable to check trust authorization right now. Please try again.'),
+            ], 500);
+        }
+    }
+
     /**
      * @param  array<int|string, mixed>  $with
      */
@@ -360,188 +403,27 @@ class SignDocumentController extends Controller
         ], 403);
     }
 
-    private function canSignerSign(Document $document, DocumentSigner $signer): ?string
+    private function canSignerModifyFields(\App\Models\Document $document, DocumentSigner $signer): ?string
     {
-        if ($signer->status === DocumentSignerStatus::Signed) {
-            return __('You have already signed this document.');
-        }
-
-        if (in_array($document->status, [DocumentStatus::Declined, DocumentStatus::Cancelled], true)) {
-            return __('This document can no longer be signed.');
-        }
-
-        if ($document->status !== DocumentStatus::Pending) {
-            return __('This document is not available for signing.');
-        }
-
-        if (! $this->usesSequentialSigning($document)) {
-            return null;
-        }
-
-        if ($signer->signing_order === null) {
-            return null;
-        }
-
-        $hasUnsignedPreviousSigner = $document->documentSigners->contains(function (DocumentSigner $otherSigner) use ($signer): bool {
-            if ($otherSigner->id === $signer->id) {
-                return false;
-            }
-
-            if ($otherSigner->signing_order === null) {
-                return false;
-            }
-
-            if ($otherSigner->signing_order >= $signer->signing_order) {
-                return false;
-            }
-
-            return $otherSigner->status !== DocumentSignerStatus::Signed;
-        });
-
-        if ($hasUnsignedPreviousSigner) {
-            return __('You cannot sign yet. Previous signer has not completed signing.');
-        }
-
-        return null;
+        return $this->documentSigningWorkflowService->canSignerModifyFields($document, $signer);
     }
 
-    private function canSignerModifyFields(Document $document, DocumentSigner $signer): ?string
+    /**
+     * @return array<string, mixed>
+     */
+    private function trustAuthorizationSessionPayload(TrustAuthorizationSession $session): array
     {
-        if ($signer->status === DocumentSignerStatus::Signed) {
-            return __('You have already signed this document.');
-        }
-
-        if (in_array($document->status, [DocumentStatus::Declined, DocumentStatus::Cancelled], true)) {
-            return __('This document can no longer be signed.');
-        }
-
-        if ($document->status !== DocumentStatus::Pending) {
-            return __('This document is not available for signing.');
-        }
-
-        return $this->canSignerSign($document, $signer);
-    }
-
-    private function usesSequentialSigning(Document $document): bool
-    {
-        return $document->documentSigners->contains(
-            fn (DocumentSigner $documentSigner): bool => $documentSigner->signing_order !== null
-        );
-    }
-
-    private function ensureSignerKeyPair(DocumentSigner $signer, PkiSignatureService $pkiSignatureService): void
-    {
-        if ($this->signerKeyStore->hasKeyPair($signer)) {
-            return;
-        }
-
-        $keys = $pkiSignatureService->generateKeyPair();
-        $this->signerKeyStore->storeKeyPair($signer, $keys['public_key'], $keys['private_key']);
-    }
-
-    private function shouldPersistSignatureImage(SignatureField $field): bool
-    {
-        return in_array($field->type->value, ['signature', 'signature_left', 'signature_right'], true);
-    }
-
-    private function resolveSubmittedFieldValue(SignatureField $field, DocumentSigner $signer, ?string $submittedValue): ?string
-    {
-        $value = is_string($submittedValue) ? trim($submittedValue) : null;
-        if ($value !== null && $value !== '') {
-            return $value;
-        }
-
-        return match ($field->type->value) {
-            'name' => $signer->name,
-            'date' => now()->format('M j, Y'),
-            'email' => $signer->email,
-            'initials' => collect(explode(' ', (string) $signer->name))
-                ->filter()
-                ->take(2)
-                ->map(fn (string $part): string => strtoupper(substr($part, 0, 1)))
-                ->implode(''),
-            'checkbox' => 'X',
-            'radio' => 'O',
-            default => null,
-        };
-    }
-
-    private function completeSignerIfAllFieldsSigned(DocumentSigner $signer, Document $document): void
-    {
-        $signerHasFields = $document->signatureFields()
-            ->where('signer_id', $signer->id)
-            ->exists();
-
-        if (! $signerHasFields) {
-            return;
-        }
-
-        $hasUnsignedFields = $document->signatureFields()
-            ->where('signer_id', $signer->id)
-            ->whereDoesntHave('signature', function ($query) use ($signer): void {
-                $query->where('signer_id', $signer->id);
-            })
-            ->exists();
-
-        if ($hasUnsignedFields) {
-            return;
-        }
-
-        if ($signer->status === DocumentSignerStatus::Signed) {
-            return;
-        }
-
-        $signer->update([
-            'status' => DocumentSignerStatus::Signed,
-            'signed_at' => now(),
-        ]);
-        event(new DocumentSignerCompleted($document->fresh(), $signer->fresh()));
-
-        $document->refresh()->load('documentSigners');
-
-        if ($document->allSignersHaveSigned()) {
-            $document->update(['status' => DocumentStatus::Completed]);
-            GenerateDocumentPdfJob::dispatch($document->id, 'final');
-            $completedDocument = $document->fresh();
-            SignatureAuditLogger::documentCompleted($completedDocument, (string) request()->ip());
-            GenerateCertificateJob::dispatch($completedDocument->id);
-            event(new DocumentCompleted($completedDocument));
-        }
-    }
-
-    private function storeSubmittedSignatureImage(?string $dataUrl): ?string
-    {
-        if (! is_string($dataUrl) || $dataUrl === '') {
-            return null;
-        }
-
-        if (! preg_match('/^data:image\/(?P<type>png|jpeg|jpg|webp);base64,(?P<data>.+)$/', $dataUrl, $matches)) {
-            return null;
-        }
-
-        $binary = base64_decode((string) $matches['data'], true);
-        if ($binary === false) {
-            return null;
-        }
-
-        $extension = $matches['type'] === 'jpeg' ? 'jpg' : (string) $matches['type'];
-        $path = 'signatures/'.\Illuminate\Support\Str::uuid()->toString().'.'.$extension;
-        Storage::disk($this->secureDiskName())->put($path, $binary);
-
-        return $path;
-    }
-
-    private function deleteStoredSignatureIfReplaced(?Signature $existingSignature, ?string $newPath): void
-    {
-        $existingPath = $existingSignature?->signature_path;
-        if (! is_string($existingPath) || $existingPath === '' || $existingPath === $newPath) {
-            return;
-        }
-
-        $disk = Storage::disk($this->secureDiskName());
-        if ($disk->exists($existingPath)) {
-            $disk->delete($existingPath);
-        }
+        return [
+            'id' => $session->id,
+            'provider_name' => $session->provider_name,
+            'credential_id' => $session->credential_id,
+            'authorization_mode' => $session->authorization_mode,
+            'status' => $session->status,
+            'authorization_reference' => $session->authorization_reference,
+            'expires_at' => $session->expires_at?->toDateTimeString(),
+            'completed_at' => $session->completed_at?->toDateTimeString(),
+            'payload' => is_array($session->payload) ? $session->payload : null,
+        ];
     }
 
     /**

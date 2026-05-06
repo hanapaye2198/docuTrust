@@ -11,8 +11,10 @@ use App\Models\Contact;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\SignatureField;
+use App\Models\TrustAuthorizationSession;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Livewire\Volt\Volt as LivewireVolt;
@@ -38,6 +40,66 @@ class DocumentSignerWorkflowTest extends TestCase
             ->assertSee($document->title);
     }
 
+    public function test_remote_managed_sign_page_shows_trust_authorization_panel(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        config()->set('services.remote_signing.provider_name', 'trust_service_provider');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'remote_credential_id' => 'credential-ui-001',
+        ]);
+
+        SignatureField::factory()->for($document)->create([
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.2,
+                'y' => 0.2,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        TrustAuthorizationSession::factory()->for($signer, 'signer')->create([
+            'provider_name' => 'trust_service_provider',
+            'credential_id' => 'credential-ui-001',
+            'status' => 'pending',
+            'authorization_reference' => 'handle-ui-001',
+            'completed_at' => null,
+            'expires_at' => now()->addMinutes(5),
+        ]);
+
+        $this->get(route('sign.show', $signer->access_token))
+            ->assertOk()
+            ->assertSee('Trust authorization')
+            ->assertSee('credential-ui-001')
+            ->assertSee('handle-ui-001')
+            ->assertSee('Start authorization');
+    }
+
+    public function test_remote_managed_legacy_sign_page_shows_trust_authorization_state(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        config()->set('services.remote_signing.provider_name', 'trust_service_provider');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'remote_credential_id' => 'credential-legacy-ui-001',
+        ]);
+
+        $this->get(route('sign.show', $signer->access_token))
+            ->assertOk()
+            ->assertSee('Trust authorization')
+            ->assertSee('credential-legacy-ui-001')
+            ->assertSee('Start authorization')
+            ->assertSee('Start trust authorization to enable cloud signing for this document.');
+    }
+
     public function test_signing_updates_signer_and_completes_document_when_only_one_signer(): void
     {
         $user = User::factory()->create();
@@ -52,6 +114,57 @@ class DocumentSignerWorkflowTest extends TestCase
         $this->assertNotNull($signer->signed_at);
 
         $document->refresh();
+        $this->assertSame(DocumentStatus::Completed, $document->status);
+    }
+
+    public function test_remote_managed_legacy_sign_requires_active_trust_authorization(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        config()->set('services.remote_signing.provider_name', 'trust_service_provider');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'remote_credential_id' => 'credential-legacy-001',
+        ]);
+
+        $this->post(route('sign.store', $signer))
+            ->assertRedirect(route('sign.show', $signer->access_token))
+            ->assertSessionHas('error', 'Start trust authorization before completing your assigned fields.');
+
+        $signer->refresh();
+        $document->refresh();
+        $this->assertSame(DocumentSignerStatus::Pending, $signer->status);
+        $this->assertSame(DocumentStatus::Pending, $document->status);
+    }
+
+    public function test_remote_managed_legacy_sign_completes_with_active_trust_authorization(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        config()->set('services.remote_signing.provider_name', 'trust_service_provider');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'remote_credential_id' => 'credential-legacy-002',
+        ]);
+
+        TrustAuthorizationSession::factory()->for($signer, 'signer')->create([
+            'provider_name' => 'trust_service_provider',
+            'credential_id' => 'credential-legacy-002',
+            'authorization_reference' => 'auth-legacy-002',
+            'sad' => 'sad-legacy-002',
+        ]);
+
+        $this->post(route('sign.store', $signer))
+            ->assertRedirect(route('sign.show', $signer->access_token));
+
+        $signer->refresh();
+        $document->refresh();
+        $this->assertSame(DocumentSignerStatus::Signed, $signer->status);
+        $this->assertNotNull($signer->signed_at);
         $this->assertSame(DocumentStatus::Completed, $document->status);
     }
 
@@ -400,5 +513,79 @@ class DocumentSignerWorkflowTest extends TestCase
         $secondSigner->refresh();
         $this->assertSame($originalSecondSignerToken, $secondSigner->access_token);
         $this->assertSame($originalSecondSignerExpiry, $secondSigner->expires_at?->toDateTimeString());
+    }
+
+    public function test_signer_can_start_trust_authorization_session(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        config()->set('services.remote_signing.base_url', 'https://remote-signing.test');
+        config()->set('services.remote_signing.provider_name', 'trust_service_provider');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'remote_credential_id' => 'credential-start-001',
+        ]);
+
+        Http::fake([
+            'https://remote-signing.test/csc/v2/credentials/authorize' => Http::response([
+                'handle' => 'handle-001',
+            ], 202),
+        ]);
+
+        $this->postJson(route('sign.trust.authorize', $signer), [
+            'num_signatures' => 2,
+        ])
+            ->assertOk()
+            ->assertJsonPath('session.status', 'pending')
+            ->assertJsonPath('session.authorization_reference', 'handle-001');
+
+        $this->assertDatabaseHas('trust_authorization_sessions', [
+            'document_signer_id' => $signer->id,
+            'provider_name' => 'trust_service_provider',
+            'credential_id' => 'credential-start-001',
+            'status' => 'pending',
+            'authorization_reference' => 'handle-001',
+        ]);
+    }
+
+    public function test_signer_can_poll_trust_authorization_session(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        config()->set('services.remote_signing.base_url', 'https://remote-signing.test');
+        config()->set('services.remote_signing.provider_name', 'trust_service_provider');
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+        $session = TrustAuthorizationSession::factory()->for($signer, 'signer')->create([
+            'provider_name' => 'trust_service_provider',
+            'status' => 'pending',
+            'authorization_reference' => 'handle-002',
+            'sad' => null,
+            'completed_at' => null,
+        ]);
+
+        Http::fake([
+            'https://remote-signing.test/csc/v2/credentials/authorizeCheck' => Http::response([
+                'SAD' => 'sad-token-002',
+                'expiresIn' => 600,
+            ], 200),
+        ]);
+
+        $this->getJson(route('sign.trust.authorize.poll', [
+            'token' => $signer->access_token,
+            'session' => $session->id,
+        ]))
+            ->assertOk()
+            ->assertJsonPath('session.status', 'authorized');
+
+        $session->refresh();
+        $this->assertSame('authorized', $session->status);
+        $this->assertSame('sad-token-002', $session->sad);
+        $this->assertNotNull($session->completed_at);
     }
 }

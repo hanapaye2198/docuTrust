@@ -19,6 +19,8 @@ Route::middleware('throttle:signing-links')->group(function () {
     Route::get('/sign/{token}/signature-image/{signatureField}', [SignDocumentController::class, 'streamSignatureImage'])->name('sign.signature.image');
     Route::post('/sign/{token}', [SignDocumentController::class, 'sign'])->name('sign.store');
     Route::post('/sign/{token}/signature', [SignDocumentController::class, 'storeSignature'])->name('sign.signature.store');
+    Route::post('/sign/{token}/trust/authorize', [SignDocumentController::class, 'startTrustAuthorization'])->name('sign.trust.authorize');
+    Route::get('/sign/{token}/trust/authorize/{session}', [SignDocumentController::class, 'pollTrustAuthorization'])->name('sign.trust.authorize.poll');
     Route::post('/sign/{token}/complete', [SignDocumentController::class, 'complete'])->name('sign.complete');
 });
 Volt::route('verify', 'pages.verify')->name('verify.index');

@@ -71,6 +71,10 @@ function createSignViewSession(cfgEl) {
     const signerEmail = config.signerEmail || '';
     const dateLocale = config.dateLocale || 'en-US';
     const canEditFields = Boolean(config.canEditFields);
+    const trustAuthorizationConfig = config.trustAuthorization && typeof config.trustAuthorization === 'object'
+        ? config.trustAuthorization
+        : {};
+    const trustAuthorizationEnabled = Boolean(trustAuthorizationConfig.enabled);
 
     const pdfCanvas = document.getElementById('pdf-canvas');
     const fabricEl = document.getElementById('fabric-canvas');
@@ -103,6 +107,16 @@ function createSignViewSession(cfgEl) {
     const panelDraw = document.getElementById('panel-draw');
     const panelType = document.getElementById('panel-type');
     const panelUpload = document.getElementById('panel-upload');
+    const trustAuthorizationPanel = document.getElementById('trust-authorization-panel');
+    const trustAuthorizationStatusEl = document.getElementById('trust-authorization-status');
+    const trustAuthorizationProviderEl = document.getElementById('trust-authorization-provider');
+    const trustAuthorizationCredentialEl = document.getElementById('trust-authorization-credential');
+    const trustAuthorizationDetailEl = document.getElementById('trust-authorization-detail');
+    const trustAuthorizationTimingEl = document.getElementById('trust-authorization-timing');
+    const trustAuthorizationDescriptionEl = document.getElementById('trust-authorization-description');
+    const trustAuthorizationStartButton = document.getElementById('trust-authorization-start');
+    const legacySignSubmitButton = document.getElementById('legacy-sign-submit');
+    const legacySignTrustNoteEl = document.getElementById('legacy-sign-trust-note');
 
     let fabricCanvas = null;
     let drawContext = null;
@@ -124,6 +138,9 @@ function createSignViewSession(cfgEl) {
     let currentModalFieldType = 'signature';
     let renderSequence = 0;
     let destroyed = false;
+    let trustAuthorizationSession = trustAuthorizationConfig.currentSession || null;
+    let trustAuthorizationStartInFlight = false;
+    let trustAuthorizationPollTimerId = null;
 
     const renderScale = 1.5;
     const pdfPageCache = new Map();
@@ -169,6 +186,265 @@ function createSignViewSession(cfgEl) {
 
         feedbackEl.className = baseClasses + variantClasses;
         feedbackEl.textContent = message;
+    }
+
+    function clearTrustAuthorizationPollTimer() {
+        if (trustAuthorizationPollTimerId === null) {
+            return;
+        }
+
+        window.clearTimeout(trustAuthorizationPollTimerId);
+        trustAuthorizationPollTimerId = null;
+    }
+
+    function hasTrustAuthorizationCredential() {
+        return typeof trustAuthorizationConfig.credentialId === 'string'
+            && trustAuthorizationConfig.credentialId.trim() !== '';
+    }
+
+    function hasActiveTrustAuthorization() {
+        if (!trustAuthorizationEnabled) {
+            return true;
+        }
+
+        if (trustAuthorizationConfig.isActive === true && !trustAuthorizationSession) {
+            return true;
+        }
+
+        if (!trustAuthorizationSession || trustAuthorizationSession.status !== 'authorized') {
+            return false;
+        }
+
+        if (!trustAuthorizationSession.expires_at) {
+            return true;
+        }
+
+        const expiresAt = new Date(trustAuthorizationSession.expires_at);
+        return !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() > Date.now();
+    }
+
+    function trustAuthorizationPollUrl(sessionId) {
+        const template = typeof trustAuthorizationConfig.pollUrlTemplate === 'string'
+            ? trustAuthorizationConfig.pollUrlTemplate
+            : '';
+
+        return template.replace('__SESSION__', String(sessionId));
+    }
+
+    function trustAuthorizationTimingLabel(session) {
+        if (!session) {
+            return messages.trustAuthorizationTimingNone;
+        }
+
+        if (session.completed_at) {
+            return `${messages.trustAuthorizationCompletedAt} ${session.completed_at}`;
+        }
+
+        if (session.expires_at) {
+            return `${messages.trustAuthorizationExpiresAt} ${session.expires_at}`;
+        }
+
+        return messages.trustAuthorizationTimingNone;
+    }
+
+    function renderTrustAuthorizationSession() {
+        if (!trustAuthorizationPanel) {
+            renderLegacySignState();
+            return;
+        }
+
+        const status = !trustAuthorizationSession
+            ? 'not_started'
+            : hasActiveTrustAuthorization()
+                ? 'authorized'
+                : trustAuthorizationSession.status === 'pending'
+                    ? 'pending'
+                    : trustAuthorizationSession.expires_at && new Date(trustAuthorizationSession.expires_at).getTime() <= Date.now()
+                        ? 'expired'
+                        : trustAuthorizationSession.status || 'not_started';
+
+        const statusMap = {
+            not_started: {
+                label: messages.trustAuthorizationNotStarted,
+                classes: 'inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-200',
+            },
+            pending: {
+                label: messages.trustAuthorizationPending,
+                classes: 'inline-flex items-center rounded-full border border-sky-200 bg-sky-100 px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/50 dark:text-sky-200',
+            },
+            authorized: {
+                label: messages.trustAuthorizationAuthorized,
+                classes: 'inline-flex items-center rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/50 dark:text-emerald-200',
+            },
+            expired: {
+                label: messages.trustAuthorizationExpired,
+                classes: 'inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-red-800 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-200',
+            },
+        };
+
+        const currentStatus = statusMap[status] || statusMap.not_started;
+        const canStartAuthorization = Boolean(trustAuthorizationConfig.canStart) && hasTrustAuthorizationCredential();
+
+        if (trustAuthorizationStatusEl) {
+            trustAuthorizationStatusEl.className = currentStatus.classes;
+            trustAuthorizationStatusEl.textContent = currentStatus.label;
+        }
+
+        if (trustAuthorizationProviderEl) {
+            trustAuthorizationProviderEl.textContent = trustAuthorizationSession?.provider_name
+                || trustAuthorizationConfig.providerName
+                || 'remote_managed';
+        }
+
+        if (trustAuthorizationCredentialEl) {
+            trustAuthorizationCredentialEl.textContent = hasTrustAuthorizationCredential()
+                ? trustAuthorizationConfig.credentialId
+                : messages.trustAuthorizationProviderMissing;
+        }
+
+        if (trustAuthorizationDetailEl) {
+            trustAuthorizationDetailEl.textContent = trustAuthorizationSession?.authorization_reference
+                || messages.trustAuthorizationSessionMissing;
+        }
+
+        if (trustAuthorizationTimingEl) {
+            trustAuthorizationTimingEl.textContent = trustAuthorizationTimingLabel(trustAuthorizationSession);
+        }
+
+        if (trustAuthorizationDescriptionEl) {
+            trustAuthorizationDescriptionEl.textContent = status === 'authorized'
+                ? messages.trustAuthorizationReady
+                : status === 'pending'
+                    ? messages.trustAuthorizationInProgress
+                    : messages.trustAuthorizationDescription;
+        }
+
+        if (trustAuthorizationStartButton) {
+            trustAuthorizationStartButton.textContent = trustAuthorizationStartInFlight
+                ? messages.trustAuthorizationStarting
+                : status === 'authorized'
+                    ? messages.trustAuthorizationRestart
+                    : messages.trustAuthorizationStart;
+
+            trustAuthorizationStartButton.disabled = trustAuthorizationStartInFlight || !canStartAuthorization;
+        }
+
+        renderLegacySignState();
+    }
+
+    function renderLegacySignState() {
+        if (!legacySignSubmitButton && !legacySignTrustNoteEl) {
+            return;
+        }
+
+        const active = hasActiveTrustAuthorization();
+
+        if (legacySignSubmitButton) {
+            legacySignSubmitButton.disabled = trustAuthorizationEnabled && !active;
+        }
+
+        if (legacySignTrustNoteEl) {
+            legacySignTrustNoteEl.textContent = active
+                ? messages.legacyTrustAuthorizationReady
+                : messages.legacyTrustAuthorizationRequired;
+        }
+    }
+
+    function scheduleTrustAuthorizationPoll(sessionId) {
+        clearTrustAuthorizationPollTimer();
+
+        trustAuthorizationPollTimerId = window.setTimeout(() => {
+            pollTrustAuthorizationSession(sessionId).catch((error) => {
+                showFeedback(error.message || messages.genericSaveError, 'error');
+            });
+        }, 3000);
+    }
+
+    async function pollTrustAuthorizationSession(sessionId) {
+        if (!trustAuthorizationEnabled || !sessionId) {
+            return;
+        }
+
+        const response = await fetch(trustAuthorizationPollUrl(sessionId), {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+        });
+
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch {
+            payload = null;
+        }
+
+        if (!response.ok) {
+            throw new Error(payload?.message || messages.genericSaveError);
+        }
+
+        trustAuthorizationSession = payload?.session || null;
+        renderTrustAuthorizationSession();
+
+        if (trustAuthorizationSession?.status === 'pending') {
+            scheduleTrustAuthorizationPoll(trustAuthorizationSession.id);
+            return;
+        }
+
+        clearTrustAuthorizationPollTimer();
+        showFeedback(payload?.message || messages.trustAuthorizationReady, 'success');
+    }
+
+    async function startTrustAuthorizationSession() {
+        if (!trustAuthorizationEnabled || trustAuthorizationStartInFlight || !trustAuthorizationConfig.startUrl) {
+            return;
+        }
+
+        trustAuthorizationStartInFlight = true;
+        renderTrustAuthorizationSession();
+
+        try {
+            const unsignedFieldCount = orderedFields().filter((field) => !isSigned(field.id)).length;
+            const response = await fetch(trustAuthorizationConfig.startUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    num_signatures: Math.max(1, unsignedFieldCount || 1),
+                }),
+            });
+
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                throw new Error(payload?.message || messages.genericSaveError);
+            }
+
+            trustAuthorizationSession = payload?.session || null;
+            renderTrustAuthorizationSession();
+            showFeedback(payload?.message || messages.trustAuthorizationReady, 'success');
+
+            if (trustAuthorizationSession?.status === 'pending') {
+                scheduleTrustAuthorizationPoll(trustAuthorizationSession.id);
+            } else {
+                clearTrustAuthorizationPollTimer();
+            }
+        } finally {
+            trustAuthorizationStartInFlight = false;
+            renderTrustAuthorizationSession();
+        }
     }
 
     function isSigned(fieldId) {
@@ -622,6 +898,11 @@ function createSignViewSession(cfgEl) {
 
     function activateField(field) {
         if (!currentCanEditFields || isSubmitting) {
+            return;
+        }
+
+        if (!hasActiveTrustAuthorization()) {
+            showFeedback(messages.trustAuthorizationRequired, 'error');
             return;
         }
 
@@ -1309,6 +1590,22 @@ function createSignViewSession(cfgEl) {
     }
 
     async function init() {
+        renderTrustAuthorizationSession();
+
+        if (trustAuthorizationEnabled) {
+            listen(trustAuthorizationStartButton, 'click', () => {
+                startTrustAuthorizationSession().catch((error) => {
+                    trustAuthorizationStartInFlight = false;
+                    renderTrustAuthorizationSession();
+                    showFeedback(error.message || messages.genericSaveError, 'error');
+                });
+            });
+
+            if (trustAuthorizationSession?.status === 'pending' && trustAuthorizationSession.id) {
+                scheduleTrustAuthorizationPoll(trustAuthorizationSession.id);
+            }
+        }
+
         if (!pdfCanvas || !fabricEl || !pdfShell || !modal || !signForm || !pdfUrl) {
             return;
         }
@@ -1374,6 +1671,7 @@ function createSignViewSession(cfgEl) {
             cancelAnimationFrame(drawFrameId);
             drawFrameId = null;
         }
+        clearTrustAuthorizationPollTimer();
         clearAllFieldObjects();
         fabricCanvas?.dispose();
         destroyed = true;

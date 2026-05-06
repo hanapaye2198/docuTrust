@@ -87,4 +87,12 @@ class DocumentSigner extends Model
     {
         return $this->hasMany(SignatureField::class, 'signer_id');
     }
+
+    /**
+     * @return HasMany<TrustAuthorizationSession, $this>
+     */
+    public function trustAuthorizationSessions(): HasMany
+    {
+        return $this->hasMany(TrustAuthorizationSession::class, 'document_signer_id');
+    }
 }
