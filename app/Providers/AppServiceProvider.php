@@ -2,10 +2,15 @@
 
 namespace App\Providers;
 
+use App\Contracts\CertificateAuthorityKeyStore;
+use App\Contracts\SignerKeyStore;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSent;
 use App\Events\DocumentSignerCompleted;
+use App\Services\DatabaseCertificateAuthorityKeyStore;
+use App\Services\DatabaseSignerKeyStore;
 use App\Services\DocumentNotificationService;
+use App\Services\FileBackedCertificateAuthorityKeyStore;
 use App\View\Breadcrumbs;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\Event;
@@ -21,7 +26,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(CertificateAuthorityKeyStore::class, FileBackedCertificateAuthorityKeyStore::class);
+        $this->app->bind(SignerKeyStore::class, DatabaseSignerKeyStore::class);
     }
 
     /**

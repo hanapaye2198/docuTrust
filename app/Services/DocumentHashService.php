@@ -21,18 +21,44 @@ class DocumentHashService
     public function createForCompletedDocument(Document $document): ?DocumentHash
     {
         try {
-            $existing = DocumentHash::query()->where('document_id', $document->id)->first();
-            if ($existing !== null) {
-                return $existing;
-            }
-
-            $filePath = $document->primaryPdfPath();
+            $filePath = $document->verifiablePdfPath();
             if ($filePath === null || ! Storage::disk($this->secureDiskName())->exists($filePath)) {
                 return null;
             }
 
             $hash = $this->generateDocumentHash($filePath);
+
+            return $this->createOrRefreshForCompletedDocument($document, $hash);
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->error('Document hash creation failed', [
+                'document_id' => $document->id,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    public function createOrRefreshForCompletedDocument(Document $document, string $hash): ?DocumentHash
+    {
+        try {
+            $existing = DocumentHash::query()->where('document_id', $document->id)->first();
+            if ($existing !== null && hash_equals(strtolower($existing->hash), strtolower($hash))) {
+                return $existing;
+            }
+
             $transactionId = $this->anchorHashOnBlockchain($hash);
+
+            if ($existing !== null) {
+                $existing->forceFill([
+                    'hash' => $hash,
+                    'transaction_id' => $transactionId,
+                    'created_at' => now(),
+                ])->save();
+
+                return $existing->refresh();
+            }
 
             return DocumentHash::query()->create([
                 'document_id' => $document->id,
@@ -41,8 +67,9 @@ class DocumentHashService
                 'created_at' => now(),
             ]);
         } catch (Throwable $throwable) {
-            Log::channel('errors')->error('Document hash creation failed', [
+            Log::channel('errors')->error('Document hash persistence failed', [
                 'document_id' => $document->id,
+                'hash' => $hash,
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);
@@ -72,7 +99,7 @@ class DocumentHashService
 
     public function generateHashForDocument(Document $document): string
     {
-        $filePath = $document->primaryPdfPath();
+        $filePath = $document->verifiablePdfPath() ?: $document->primaryPdfPath();
         if ($filePath !== null && Storage::disk($this->secureDiskName())->exists($filePath)) {
             return $this->generateDocumentHash($filePath);
         }

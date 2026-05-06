@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Enums\SignatureFieldType;
+use App\Jobs\GenerateCertificateJob;
+use App\Jobs\GenerateDocumentPdfJob;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Document;
 use App\Models\DocumentSigner;
@@ -15,6 +17,7 @@ use App\Models\SignatureField;
 use App\Models\User;
 use App\Services\PkiSignatureService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -28,6 +31,76 @@ class SignatureEngineTest extends TestCase
     private function putValidPdf(string $path): void
     {
         Storage::disk('local')->put($path, Pdf::loadHTML('<h1>DocuTrust</h1>')->output());
+    }
+
+    private function runQueuedCompletionWork(Document $document): void
+    {
+        $document->refresh();
+
+        if ($document->status !== DocumentStatus::Completed) {
+            return;
+        }
+
+        app()->call([new GenerateDocumentPdfJob($document->id, 'final'), 'handle']);
+        app()->call([new GenerateCertificateJob($document->id), 'handle']);
+    }
+
+    /**
+     * @return array{
+     *   certificate_pem: string,
+     *   issuer_certificate_pem: string,
+     *   public_key_pem: string,
+     *   private_key_pem: string
+     * }
+     */
+    private function makeRemoteManagedCertificateChain(): array
+    {
+        $config = [
+            'private_key_bits' => 2048,
+            'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            'config' => (string) config('docutrust.pki.openssl_config_path'),
+            'x509_extensions' => 'v3_ca',
+        ];
+
+        $issuerKey = openssl_pkey_new($config);
+        openssl_pkey_export($issuerKey, $issuerPrivateKeyPem, null, $config);
+        $issuerDn = [
+            'commonName' => 'Remote Signing Root',
+            'organizationName' => 'DocuTrust Remote Provider',
+            'organizationalUnitName' => 'Trust Service Provider',
+            'countryName' => 'PH',
+        ];
+        $issuerCsr = openssl_csr_new($issuerDn, $issuerKey, $config);
+        $issuerCert = openssl_csr_sign($issuerCsr, null, $issuerKey, 3650, $config, 7001);
+        openssl_x509_export($issuerCert, $issuerCertificatePem);
+
+        $signerConfig = [
+            'private_key_bits' => 2048,
+            'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            'config' => (string) config('docutrust.pki.openssl_config_path'),
+            'x509_extensions' => 'usr_cert',
+        ];
+        $signerKey = openssl_pkey_new($signerConfig);
+        openssl_pkey_export($signerKey, $signerPrivateKeyPem, null, $signerConfig);
+        $signerDetails = openssl_pkey_get_details($signerKey);
+        $signerDn = [
+            'commonName' => 'Remote Managed Signer',
+            'emailAddress' => 'remote@example.test',
+            'organizationName' => 'DocuTrust',
+            'organizationalUnitName' => 'Signer',
+            'countryName' => 'PH',
+        ];
+        $signerCsr = openssl_csr_new($signerDn, $signerKey, $signerConfig);
+        $issuerCertResource = openssl_x509_read($issuerCertificatePem);
+        $signerCert = openssl_csr_sign($signerCsr, $issuerCertResource, $issuerKey, 825, $signerConfig, 7002);
+        openssl_x509_export($signerCert, $signerCertificatePem);
+
+        return [
+            'certificate_pem' => $signerCertificatePem,
+            'issuer_certificate_pem' => $issuerCertificatePem,
+            'public_key_pem' => (string) ($signerDetails['key'] ?? ''),
+            'private_key_pem' => $signerPrivateKeyPem,
+        ];
     }
 
     public function test_guest_cannot_visit_prepare_page(): void
@@ -341,6 +414,8 @@ class SignatureEngineTest extends TestCase
             'signature_image' => self::TINY_PNG_DATA_URL,
         ])->assertRedirect(route('sign.show', $signer->access_token));
 
+        $this->runQueuedCompletionWork($document);
+
         $this->assertDatabaseHas('signatures', [
             'document_id' => $document->id,
             'signer_id' => $signer->id,
@@ -355,6 +430,9 @@ class SignatureEngineTest extends TestCase
         $this->assertTrue(Storage::disk('local')->exists($signature->signature_path));
         $this->assertSame(64, strlen((string) $signature->public_key_fingerprint));
         $this->assertSame('RSA-SHA256', $signature->signature_algorithm);
+        $this->assertSame('app_managed', $signature->signing_provider);
+        $this->assertNull($signature->signing_provider_reference);
+        $this->assertNull($signature->signing_provider_payload);
         $this->assertNotNull($signature->signer_certificate_id);
 
         $signer->refresh();
@@ -367,6 +445,18 @@ class SignatureEngineTest extends TestCase
         $this->assertSame((string) $signer->signing_public_key, $signerCertificate->public_key_pem);
         $this->assertSame('active', $signerCertificate->status);
         $this->assertStringContainsString('BEGIN CERTIFICATE', $signerCertificate->certificate_pem);
+
+        $parsedSignerCertificate = openssl_x509_parse((string) $signerCertificate->certificate_pem);
+        $this->assertIsArray($parsedSignerCertificate);
+        $this->assertSame((string) $signerCertificate->serial_number, strtoupper((string) ($parsedSignerCertificate['serialNumberHex'] ?? '')));
+        $this->assertSame('CA:FALSE', (string) ($parsedSignerCertificate['extensions']['basicConstraints'] ?? ''));
+
+        $certificateAuthority = $signerCertificate->certificateAuthority()->first();
+        $this->assertNotNull($certificateAuthority);
+        $parsedAuthorityCertificate = openssl_x509_parse((string) $certificateAuthority->certificate_pem);
+        $this->assertIsArray($parsedAuthorityCertificate);
+        $this->assertSame((string) $certificateAuthority->serial_number, strtoupper((string) ($parsedAuthorityCertificate['serialNumberHex'] ?? '')));
+        $this->assertStringContainsString('CA:TRUE', (string) ($parsedAuthorityCertificate['extensions']['basicConstraints'] ?? ''));
 
         $isValid = app(PkiSignatureService::class)->verifySignature(
             (string) $signature->signature_hash,
@@ -462,6 +552,8 @@ class SignatureEngineTest extends TestCase
             'signature_image' => self::TINY_PNG_DATA_URL,
         ])->assertRedirect(route('sign.show', $signer->access_token));
 
+        $this->runQueuedCompletionWork($document);
+
         $this->assertDatabaseHas('signature_audit_events', [
             'document_id' => $document->id,
             'signer_id' => $signer->id,
@@ -525,5 +617,118 @@ class SignatureEngineTest extends TestCase
         $this->post(route('sign.store', $signer->access_token))
             ->assertForbidden()
             ->assertSee('Link expired or invalid');
+    }
+
+    public function test_remote_managed_backend_seals_document_using_provider_response(): void
+    {
+        config()->set('docutrust.pki.signing_backend', 'remote_managed');
+        config()->set('services.remote_signing.base_url', 'https://remote-signing.test');
+        config()->set('services.remote_signing.provider_name', 'trust_service_provider');
+        config()->set('services.remote_signing.api_mode', 'csc');
+        config()->set('services.remote_signing.csc.sign_hash_endpoint', '/csc/v1/signatures/signHash');
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/remote-managed-source.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'remote_credential_id' => 'credential-signer-001',
+        ]);
+        $field = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $chain = $this->makeRemoteManagedCertificateChain();
+
+        Http::fake([
+            'https://remote-signing.test/csc/v1/signatures/signHash' => function ($request) use ($chain) {
+                $payload = $request->data();
+                $this->assertSame('credential-signer-001', $payload['credentialID']);
+                $this->assertSame('2.16.840.1.101.3.4.2.1', $payload['hashAlgo']);
+                $this->assertSame('1.2.840.113549.1.1.11', $payload['signAlgo']);
+                $this->assertSame(1, $payload['numSignatures']);
+                $this->assertCount(1, $payload['hashes']);
+                $this->assertIsString($payload['clientData']);
+
+                $decodedHash = base64_decode((string) $payload['hashes'][0], true);
+                $this->assertNotFalse($decodedHash);
+                $documentHash = bin2hex($decodedHash);
+                $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $documentHash);
+
+                $signatureValue = app(PkiSignatureService::class)->signHash(
+                    $documentHash,
+                    $chain['private_key_pem'],
+                );
+
+                return Http::response([
+                    'signatures' => [$signatureValue],
+                    'signAlgo' => 'RSA-SHA256',
+                    'credentialID' => 'credential-signer-001',
+                    'transactionID' => 'remote-sign-ref-001',
+                    'certificates' => [
+                        $chain['certificate_pem'],
+                        $chain['issuer_certificate_pem'],
+                    ],
+                    'public_key_pem' => $chain['public_key_pem'],
+                    'SCAL' => '2',
+                    'authMode' => 'explicit_otp',
+                    'signingTime' => '2026-05-06T09:00:00Z',
+                    'validationInfo' => [
+                        'policy' => 'csc',
+                    ],
+                    'evidence' => [
+                        'authentication_method' => 'otp',
+                    ],
+                ]);
+            },
+            'http://127.0.0.1:3001/anchor' => Http::response([
+                'transactionHash' => '0xremoteproof123',
+            ]),
+        ]);
+
+        $this->post(route('sign.signature.store', $signer), [
+            'signature_field_id' => $field->id,
+            'signature_image' => self::TINY_PNG_DATA_URL,
+        ])->assertRedirect(route('sign.show', $signer->access_token));
+
+        $document->refresh();
+        $this->assertSame(DocumentStatus::Completed, $document->status);
+        $this->assertDatabaseHas('document_hashes', [
+            'document_id' => $document->id,
+            'transaction_id' => '0xremoteproof123',
+        ]);
+
+        $signature = Signature::query()->where('signature_field_id', $field->id)->firstOrFail();
+        $this->assertNotNull($signature->signature_value);
+        $this->assertNotNull($signature->signature_hash);
+        $this->assertSame('trust_service_provider', $signature->signing_provider);
+        $this->assertSame('remote-sign-ref-001', $signature->signing_provider_reference);
+        $this->assertSame('credential-signer-001', $signature->signing_provider_payload['credential_id'] ?? null);
+        $this->assertSame('remote-sign-ref-001', $signature->signing_provider_payload['transaction_id'] ?? null);
+        $this->assertSame('2', $signature->signing_provider_payload['scal'] ?? null);
+        $this->assertSame('explicit_otp', $signature->signing_provider_payload['authentication_mode'] ?? null);
+        $this->assertSame('otp', $signature->signing_provider_payload['authentication_method'] ?? null);
+        $this->assertSame('csc', $signature->signing_provider_payload['validation_info']['policy'] ?? null);
+
+        $signerCertificate = SignerCertificate::query()->find($signature->signer_certificate_id);
+        $this->assertNotNull($signerCertificate);
+        $this->assertSame('provider_managed', $signerCertificate->certificate_source);
+        $this->assertSame('trust_service_provider', $signerCertificate->provider_name);
+        $this->assertSame('remote-sign-ref-001', $signerCertificate->provider_reference);
+        $this->assertNull($signerCertificate->certificate_authority_id);
+        $this->assertNotNull($signerCertificate->issuer_certificate_pem);
     }
 }

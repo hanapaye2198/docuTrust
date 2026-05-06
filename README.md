@@ -2,6 +2,20 @@
 
 Laravel 12 application with a Vite frontend and a separate Node-based blockchain sidecar for Polygon document anchoring.
 
+## Blockchain Setup
+
+DocuTrust anchors completed document hashes to Polygon through a backend signing wallet. The current integration is server-side only: Laravel calls the local blockchain sidecar, and the sidecar signs Polygon transactions with the configured wallet.
+
+For this deployment model:
+
+- `POLYGON_RPC_URL` should point to your Polygon RPC provider.
+- `POLYGON_PRIVATE_KEY` should be the private key of the backend Polygon wallet used for anchoring transactions.
+- A dedicated wallet is recommended. If you are using a Coins.ph Polygon wallet for custody, use that wallet's Polygon private key here.
+- `DOCUMENT_NOTARY_ADDRESS` should be the deployed `DocumentNotary` contract address.
+- `POLYGON_NETWORK` is used as an environment label in service health responses and logs, for example `amoy` or `mainnet`.
+
+The blockchain sidecar must have enough POL/MATIC balance in the configured wallet to pay gas for anchor transactions.
+
 ## CI/CD
 
 This repo now includes:
@@ -55,6 +69,29 @@ Then:
 2. Copy `deploy/systemd/docutrust-queue.service` and `deploy/systemd/docutrust-blockchain.service` into `/etc/systemd/system/`.
 3. Create `/var/www/docutrust/shared/.env` from `deploy/production.env.example`.
 4. Enable and start the services with `systemctl daemon-reload` followed by `systemctl enable --now docutrust-queue docutrust-blockchain`.
+
+## Root CA Key Storage
+
+For production, prefer storing the root CA private key outside the database.
+
+- Set `DOCUTRUST_ROOT_CA_PRIVATE_KEY_PATH` to a filesystem path readable only by the application user.
+- New root CA keys will be written to that file and the database will store the marker `external://root-ca`.
+- For an existing deployment that still has the root CA private key stored in the database, run:
+
+```bash
+php artisan docutrust:move-root-ca-key
+```
+
+- Use `php artisan docutrust:move-root-ca-key --force` only if you intentionally need to overwrite an existing external key file.
+
+## CSC-Style Remote Signing
+
+For cloud signing, prefer `DOCUTRUST_SIGNING_BACKEND=remote_managed` in production.
+
+- `REMOTE_SIGNING_API_MODE=csc` configures the remote adapter for a CSC-style `signatures/signHash` flow.
+- Each signer should have a provider credential ID available through `document_signers.remote_credential_id`. A global fallback can be set with `REMOTE_SIGNING_DEFAULT_CREDENTIAL_ID`, but signer-specific credentials are preferred.
+- The remote adapter signs the final document hash and stores the returned certificate chain plus provider evidence on the signature record.
+- App-managed signing remains available for internal or development use, but it is not the target architecture for a CSC-aligned deployment.
 
 ## Notes
 

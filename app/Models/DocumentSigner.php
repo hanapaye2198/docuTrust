@@ -21,6 +21,7 @@ class DocumentSigner extends Model
         'role_name',
         'name',
         'email',
+        'remote_credential_id',
         'access_token',
         'status',
         'signing_order',

@@ -1,5 +1,5 @@
 import express from "express";
-import { Contract, JsonRpcProvider, Wallet, isHexString } from "ethers";
+import { Contract, JsonRpcProvider, Wallet, getAddress, isAddress, isHexString } from "ethers";
 import { DOCUMENT_NOTARY_ABI } from "./contractAbi.js";
 
 const app = express();
@@ -12,15 +12,33 @@ const POLYGON_PRIVATE_KEY = process.env.POLYGON_PRIVATE_KEY ?? "";
 const DOCUMENT_NOTARY_ADDRESS = process.env.DOCUMENT_NOTARY_ADDRESS ?? "";
 
 if (POLYGON_RPC_URL === "" || POLYGON_PRIVATE_KEY === "" || DOCUMENT_NOTARY_ADDRESS === "") {
-  throw new Error("Missing required blockchain configuration.");
+  throw new Error("Missing required Polygon blockchain configuration.");
+}
+
+if (!/^https?:\/\//i.test(POLYGON_RPC_URL)) {
+  throw new Error("POLYGON_RPC_URL must be a valid HTTP(S) Polygon RPC endpoint.");
+}
+
+if (!isHexString(POLYGON_PRIVATE_KEY, 32)) {
+  throw new Error("POLYGON_PRIVATE_KEY must be a 32-byte hex private key for the backend Polygon wallet.");
+}
+
+if (!isAddress(DOCUMENT_NOTARY_ADDRESS)) {
+  throw new Error("DOCUMENT_NOTARY_ADDRESS must be a valid deployed DocumentNotary contract address.");
 }
 
 const provider = new JsonRpcProvider(POLYGON_RPC_URL);
 const wallet = new Wallet(POLYGON_PRIVATE_KEY, provider);
-const notaryContract = new Contract(DOCUMENT_NOTARY_ADDRESS, DOCUMENT_NOTARY_ABI, wallet);
+const normalizedNotaryAddress = getAddress(DOCUMENT_NOTARY_ADDRESS);
+const notaryContract = new Contract(normalizedNotaryAddress, DOCUMENT_NOTARY_ABI, wallet);
 
 app.get("/health", (request, response) => {
-  response.json({ status: "ok", network: `polygon-${POLYGON_NETWORK}` });
+  response.json({
+    status: "ok",
+    network: `polygon-${POLYGON_NETWORK}`,
+    walletAddress: wallet.address,
+    contractAddress: normalizedNotaryAddress
+  });
 });
 
 app.post("/anchor", async (request, response) => {
@@ -66,7 +84,7 @@ app.post("/verify", async (request, response) => {
         return response.json({ exists: false, transactionMatches: false });
       }
 
-      transactionMatches = receipt.to?.toLowerCase() === DOCUMENT_NOTARY_ADDRESS.toLowerCase();
+      transactionMatches = receipt.to?.toLowerCase() === normalizedNotaryAddress.toLowerCase();
       blockNumber = receipt.blockNumber;
     }
 

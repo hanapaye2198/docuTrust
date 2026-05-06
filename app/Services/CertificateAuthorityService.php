@@ -2,12 +2,17 @@
 
 namespace App\Services;
 
+use App\Contracts\CertificateAuthorityKeyStore;
 use App\Models\CertificateAuthority;
 use DateTimeImmutable;
 use RuntimeException;
 
 class CertificateAuthorityService
 {
+    public function __construct(
+        private readonly CertificateAuthorityKeyStore $certificateAuthorityKeyStore,
+    ) {}
+
     public function getOrCreateRootAuthority(): CertificateAuthority
     {
         $authority = CertificateAuthority::query()
@@ -58,8 +63,8 @@ class CertificateAuthorityService
         }
 
         $days = (int) config('docutrust.pki.root_ca_valid_days', 3650);
-        $serialNumber = $this->generateSerialNumber();
-        $x509 = openssl_csr_sign($csr, null, $privateKeyResource, $days, $this->opensslCertificateOptions(), $this->certificateSerialInteger($serialNumber));
+        $serialNumber = $this->generateCertificateSerialInteger();
+        $x509 = openssl_csr_sign($csr, null, $privateKeyResource, $days, $this->opensslCertificateOptions(self::PROFILE_ROOT_CA), $serialNumber);
 
         if ($x509 === false) {
             throw new RuntimeException('Unable to sign root CA certificate.');
@@ -76,7 +81,7 @@ class CertificateAuthorityService
         }
 
         return [
-            'serial_number' => $serialNumber,
+            'serial_number' => $this->parsedSerialNumber($parsed),
             'public_key_pem' => $keyPair['public_key_pem'],
             'private_key_pem' => $keyPair['private_key_pem'],
             'certificate_pem' => $certificatePem,
@@ -113,9 +118,9 @@ class CertificateAuthorityService
         ];
     }
 
-    public function generateSerialNumber(): string
+    public function generateCertificateSerialInteger(): int
     {
-        return strtoupper(bin2hex(random_bytes(16)));
+        return random_int(1, 0x7fffffff);
     }
 
     public function distinguishedNameToString(array $distinguishedName): string
@@ -159,7 +164,7 @@ class CertificateAuthorityService
             'issuer_dn' => $certificate['issuer_dn'],
             'serial_number' => $certificate['serial_number'],
             'public_key_pem' => $certificate['public_key_pem'],
-            'private_key_pem' => $certificate['private_key_pem'],
+            'private_key_pem' => $this->certificateAuthorityKeyStore->storePrivateKeyPem($certificate['private_key_pem']),
             'certificate_pem' => $certificate['certificate_pem'],
             'fingerprint_sha256' => $certificate['fingerprint_sha256'],
             'valid_from' => $certificate['valid_from'],
@@ -178,22 +183,10 @@ class CertificateAuthorityService
         return (new DateTimeImmutable())->setTimestamp($timestamp);
     }
 
-    private function certificateSerialInteger(string $serialNumber): int
-    {
-        $prefix = substr($serialNumber, 0, 7);
-        $value = hexdec($prefix);
-
-        if (! is_int($value) || $value <= 0) {
-            return 1;
-        }
-
-        return $value;
-    }
-
     /**
      * @return array<string, int|string>
      */
-    private function opensslCertificateOptions(): array
+    private function opensslCertificateOptions(string $profile = self::PROFILE_DEFAULT): array
     {
         $options = [
             'digest_alg' => 'sha256',
@@ -204,8 +197,42 @@ class CertificateAuthorityService
         $configPath = (string) config('docutrust.pki.openssl_config_path', '');
         if ($configPath !== '' && is_file($configPath)) {
             $options['config'] = $configPath;
+
+            $extensionsSection = match ($profile) {
+                self::PROFILE_ROOT_CA => 'v3_ca',
+                self::PROFILE_SIGNER => 'usr_cert',
+                default => null,
+            };
+
+            if ($extensionsSection !== null) {
+                $options['x509_extensions'] = $extensionsSection;
+            }
         }
 
         return $options;
     }
+
+    /**
+     * @param  array<string, mixed>  $parsed
+     */
+    public function parsedSerialNumber(array $parsed): string
+    {
+        $serialNumberHex = $parsed['serialNumberHex'] ?? null;
+        if (is_string($serialNumberHex) && trim($serialNumberHex) !== '') {
+            return strtoupper(trim($serialNumberHex));
+        }
+
+        $serialNumber = $parsed['serialNumber'] ?? null;
+        if (is_scalar($serialNumber)) {
+            return (string) $serialNumber;
+        }
+
+        throw new RuntimeException('Certificate serial number missing.');
+    }
+
+    public const PROFILE_DEFAULT = 'default';
+
+    public const PROFILE_ROOT_CA = 'root_ca';
+
+    public const PROFILE_SIGNER = 'signer';
 }

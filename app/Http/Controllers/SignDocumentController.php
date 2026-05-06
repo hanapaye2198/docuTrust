@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\SignerKeyStore;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Events\DocumentCompleted;
@@ -13,7 +14,6 @@ use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
-use App\Services\DocumentHashService;
 use App\Services\PkiSignatureService;
 use App\Services\SignerCertificateService;
 use App\Services\SignatureAuditLogger;
@@ -29,6 +29,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SignDocumentController extends Controller
 {
+    public function __construct(
+        private readonly SignerKeyStore $signerKeyStore,
+    ) {}
+
     private function secureDiskName(): string
     {
         return (string) config('filesystems.docutrust_disk', 'local');
@@ -160,7 +164,6 @@ class SignDocumentController extends Controller
     public function storeSignature(
         StoreDocumentSignatureRequest $request,
         string $token,
-        DocumentHashService $documentHashService,
         PkiSignatureService $pkiSignatureService,
         SignerCertificateService $signerCertificateService,
     ): RedirectResponse|Response|JsonResponse
@@ -194,21 +197,7 @@ class SignDocumentController extends Controller
             $this->ensureSignerKeyPair($signer, $pkiSignatureService);
             $signerCertificate = $signerCertificateService->getOrIssueForSigner($signer->fresh());
 
-            if (! is_string($signer->signing_private_key) || $signer->signing_private_key === '') {
-                throw new \RuntimeException('Signer private key unavailable.');
-            }
-
-            if (! is_string($signer->signing_public_key) || $signer->signing_public_key === '') {
-                throw new \RuntimeException('Signer public key unavailable.');
-            }
-
-            $documentHash = $documentHashService->generateHashForDocument($document);
-            $signatureValue = $pkiSignatureService->signHash($documentHash, $signer->signing_private_key);
-            $signatureIsValid = $pkiSignatureService->verifySignature($documentHash, $signatureValue, $signer->signing_public_key);
-
-            if (! $signatureIsValid) {
-                throw new \RuntimeException('Digital signature verification failed after signing.');
-            }
+            $signerKeyPair = $this->signerKeyStore->keyPairFor($signer);
 
             $submittedValue = $this->resolveSubmittedFieldValue($field, $signer, $request->validated('submitted_value'));
             $signatureImagePath = $this->shouldPersistSignatureImage($field)
@@ -229,9 +218,9 @@ class SignDocumentController extends Controller
                 'signer_certificate_id' => $signerCertificate->id,
                 'signature_path' => $signatureImagePath,
                 'submitted_value' => $submittedValue,
-                'signature_value' => $signatureValue,
-                'signature_hash' => $documentHash,
-                'public_key_fingerprint' => $pkiSignatureService->fingerprint($signer->signing_public_key),
+                'signature_value' => null,
+                'signature_hash' => null,
+                'public_key_fingerprint' => $pkiSignatureService->fingerprint($signerKeyPair['public_key']),
                 'signature_algorithm' => 'RSA-SHA256',
                 'position_data' => null,
                 ]
@@ -442,19 +431,12 @@ class SignDocumentController extends Controller
 
     private function ensureSignerKeyPair(DocumentSigner $signer, PkiSignatureService $pkiSignatureService): void
     {
-        if (
-            is_string($signer->signing_public_key) && $signer->signing_public_key !== ''
-            && is_string($signer->signing_private_key) && $signer->signing_private_key !== ''
-        ) {
+        if ($this->signerKeyStore->hasKeyPair($signer)) {
             return;
         }
 
         $keys = $pkiSignatureService->generateKeyPair();
-        $signer->update([
-            'signing_public_key' => $keys['public_key'],
-            'signing_private_key' => $keys['private_key'],
-        ]);
-        $signer->refresh();
+        $this->signerKeyStore->storeKeyPair($signer, $keys['public_key'], $keys['private_key']);
     }
 
     private function shouldPersistSignatureImage(SignatureField $field): bool

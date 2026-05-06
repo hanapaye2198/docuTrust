@@ -40,6 +40,9 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
      *       certificate_fingerprint: string|null,
      *       issuer_dn: string|null,
      *       serial_number: string|null,
+     *       signing_provider: string|null,
+     *       signing_provider_reference: string|null,
+     *       signing_provider_payload: array<string, mixed>|null,
      *       revoked_at: string|null,
      *       revocation_reason: string|null,
      *       valid_from: string|null,
@@ -219,7 +222,7 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
                     @if ($verificationResult['certificate_verification']['status'] !== 'not_available')
                         <div class="mt-2 text-zinc-700 dark:text-zinc-200">
                             {{ __('Verified signatures:') }} {{ $verificationResult['certificate_verification']['verified_signatures'] }}
-                            <span class="mx-2 text-zinc-400">•</span>
+                            <span class="mx-2 text-zinc-400">&bull;</span>
                             {{ __('Failed signatures:') }} {{ $verificationResult['certificate_verification']['failed_signatures'] }}
                         </div>
                     @endif
@@ -230,12 +233,18 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
                         @foreach ($verificationResult['certificate_verification']['details'] as $certificateDetail)
                             <div class="rounded-lg border border-zinc-200/80 bg-white/80 px-3 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900/70">
                                 <div class="font-medium">{{ $certificateDetail['signer_name'] }}</div>
-                                <div class="mt-1">{{ ucfirst($certificateDetail['result']) }} <span class="mx-2 text-zinc-400">•</span> {{ $certificateDetail['reason'] }}</div>
+                                <div class="mt-1">{{ ucfirst($certificateDetail['result']) }} <span class="mx-2 text-zinc-400">&bull;</span> {{ $certificateDetail['reason'] }}</div>
                                 @if ($certificateDetail['serial_number'] !== null)
                                     <div class="mt-2 break-all text-zinc-600 dark:text-zinc-300">{{ __('Serial:') }} {{ $certificateDetail['serial_number'] }}</div>
                                 @endif
                                 @if ($certificateDetail['certificate_status'] !== null)
                                     <div class="mt-1 break-all text-zinc-600 dark:text-zinc-300">{{ __('Certificate status:') }} {{ ucfirst($certificateDetail['certificate_status']) }}</div>
+                                @endif
+                                @if ($certificateDetail['signing_provider'] !== null)
+                                    <div class="mt-1 break-all text-zinc-600 dark:text-zinc-300">{{ __('Signing provider:') }} {{ str_replace('_', ' ', ucfirst($certificateDetail['signing_provider'])) }}</div>
+                                @endif
+                                @if ($certificateDetail['signing_provider_reference'] !== null)
+                                    <div class="mt-1 break-all text-zinc-600 dark:text-zinc-300">{{ __('Provider reference:') }} {{ $certificateDetail['signing_provider_reference'] }}</div>
                                 @endif
                                 @if ($certificateDetail['revoked_at'] !== null)
                                     <div class="mt-1 break-all text-zinc-600 dark:text-zinc-300">{{ __('Revoked at:') }} {{ $certificateDetail['revoked_at'] }}</div>
@@ -249,6 +258,17 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
                                 @if ($certificateDetail['certificate_fingerprint'] !== null)
                                     <div class="mt-1 break-all text-zinc-600 dark:text-zinc-300">{{ __('Fingerprint:') }} {{ $certificateDetail['certificate_fingerprint'] }}</div>
                                 @endif
+                                @if (is_array($certificateDetail['signing_provider_payload']) && $certificateDetail['signing_provider_payload'] !== [])
+                                    <div class="mt-2 space-y-1 text-zinc-600 dark:text-zinc-300">
+                                        <div class="font-medium">{{ __('Provider evidence:') }}</div>
+                                        @foreach ($certificateDetail['signing_provider_payload'] as $evidenceKey => $evidenceValue)
+                                            <div class="break-all">
+                                                {{ \Illuminate\Support\Str::of((string) $evidenceKey)->replace('_', ' ')->title() }}:
+                                                {{ is_scalar($evidenceValue) ? (string) $evidenceValue : json_encode($evidenceValue) }}
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
                             </div>
                         @endforeach
                     </div>
@@ -261,9 +281,9 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
                     @foreach ($verificationResult['signers'] as $signer)
                         <div class="rounded-lg border border-zinc-200/80 bg-white/80 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/70">
                             <span class="font-medium">{{ $signer['name'] }}</span>
-                            <span class="mx-2 text-zinc-400">•</span>
+                            <span class="mx-2 text-zinc-400">&bull;</span>
                             <span>{{ ucfirst($signer['status']) }}</span>
-                            <span class="mx-2 text-zinc-400">•</span>
+                            <span class="mx-2 text-zinc-400">&bull;</span>
                             <span>{{ $signer['signed_at'] ?? '-' }}</span>
                         </div>
                     @endforeach
@@ -276,9 +296,9 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
                     @foreach ($verificationResult['timeline'] as $timelineItem)
                         <div class="rounded-lg border border-zinc-200/80 bg-white/80 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/70">
                             <span class="font-medium">{{ ucfirst($timelineItem['action']) }}</span>
-                            <span class="mx-2 text-zinc-400">•</span>
+                            <span class="mx-2 text-zinc-400">&bull;</span>
                             <span>{{ $timelineItem['actor'] }}</span>
-                            <span class="mx-2 text-zinc-400">•</span>
+                            <span class="mx-2 text-zinc-400">&bull;</span>
                             <span>{{ $timelineItem['occurred_at'] ?? '-' }}</span>
                         </div>
                     @endforeach

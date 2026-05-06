@@ -44,4 +44,21 @@ return [
         'key' => env('TXTBOX_API_KEY'),
     ],
 
+    'remote_signing' => [
+        'provider_name' => env('REMOTE_SIGNING_PROVIDER_NAME', 'remote_managed'),
+        'base_url' => env('REMOTE_SIGNING_BASE_URL', ''),
+        'timeout' => env('REMOTE_SIGNING_TIMEOUT', 10),
+        'api_key' => env('REMOTE_SIGNING_API_KEY', ''),
+        'api_mode' => env('REMOTE_SIGNING_API_MODE', 'csc'),
+        'default_credential_id' => env('REMOTE_SIGNING_DEFAULT_CREDENTIAL_ID', ''),
+        'csc' => [
+            'sign_hash_endpoint' => env('REMOTE_SIGNING_CSC_SIGN_HASH_ENDPOINT', '/csc/v1/signatures/signHash'),
+            'hash_algorithm' => env('REMOTE_SIGNING_CSC_HASH_ALGORITHM', '2.16.840.1.101.3.4.2.1'),
+            'sign_algorithm' => env('REMOTE_SIGNING_CSC_SIGN_ALGORITHM', '1.2.840.113549.1.1.11'),
+        ],
+        'legacy' => [
+            'sign_endpoint' => env('REMOTE_SIGNING_SIGN_ENDPOINT', '/sign'),
+        ],
+    ],
+
 ];

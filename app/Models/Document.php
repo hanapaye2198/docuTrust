@@ -152,6 +152,15 @@ class Document extends Model
         return $this->final_pdf_path ?: $this->prepared_pdf_path ?: $this->sourcePdfPath();
     }
 
+    public function verifiablePdfPath(): ?string
+    {
+        if (is_string($this->final_pdf_path) && $this->final_pdf_path !== '' && str_ends_with(strtolower($this->final_pdf_path), '.pdf')) {
+            return $this->final_pdf_path;
+        }
+
+        return null;
+    }
+
     public function hasDocumentSigners(): bool
     {
         if ($this->relationLoaded('documentSigners')) {

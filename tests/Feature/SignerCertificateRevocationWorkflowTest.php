@@ -11,6 +11,7 @@ use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
 use App\Models\User;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Volt\Volt as LivewireVolt;
@@ -21,6 +22,11 @@ class SignerCertificateRevocationWorkflowTest extends TestCase
     use RefreshDatabase;
 
     private const TINY_PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    private function putValidPdf(string $path): void
+    {
+        Storage::disk('local')->put($path, Pdf::loadHTML('<h1>PKI revocation source</h1>')->output());
+    }
 
     public function test_admin_can_revoke_signer_certificate_from_document_page(): void
     {
@@ -92,7 +98,7 @@ class SignerCertificateRevocationWorkflowTest extends TestCase
 
         $owner = User::factory()->create();
         $path = 'documents/pki-revocation.pdf';
-        Storage::disk('local')->put($path, '%PDF-1.4 pki-revocation-source');
+        $this->putValidPdf($path);
 
         $document = Document::factory()->for($owner)->create([
             'status' => DocumentStatus::Pending,
@@ -126,12 +132,7 @@ class SignerCertificateRevocationWorkflowTest extends TestCase
             ->where('signature_field_id', $field->id)
             ->firstOrFail();
 
-        DocumentHash::query()->create([
-            'document_id' => $document->id,
-            'hash' => (string) $signature->signature_hash,
-            'transaction_id' => null,
-            'created_at' => now(),
-        ]);
+        $this->assertNotNull($document->fresh('documentHash')->documentHash);
 
         return [$owner, $document, $signature->signerCertificate];
     }

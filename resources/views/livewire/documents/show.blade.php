@@ -14,8 +14,6 @@ use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
 use Livewire\Volt\Component;
-use Illuminate\Support\Str;
-
 new #[Layout('components.layouts.app')] class extends Component {
     public Document $document;
 
@@ -316,12 +314,27 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 <div class="space-y-1 text-sm text-zinc-600 dark:text-zinc-300">
                                     <div><span class="font-medium">{{ __('Serial:') }}</span> <span class="break-all">{{ $certificate->serial_number }}</span></div>
                                     <div><span class="font-medium">{{ __('Fingerprint:') }}</span> <span class="break-all">{{ $certificate->fingerprint_sha256 }}</span></div>
+                                    <div><span class="font-medium">{{ __('Source:') }}</span> {{ str_replace('_', ' ', ucfirst($certificate->certificate_source ?? 'app_managed')) }}</div>
+                                    @if ($signature->signing_provider)
+                                        <div><span class="font-medium">{{ __('Signing provider:') }}</span> {{ str_replace('_', ' ', ucfirst($signature->signing_provider)) }}</div>
+                                    @endif
+                                    @if ($signature->signing_provider_reference)
+                                        <div><span class="font-medium">{{ __('Provider reference:') }}</span> <span class="break-all">{{ $signature->signing_provider_reference }}</span></div>
+                                    @endif
                                     <div><span class="font-medium">{{ __('Valid until:') }}</span> {{ $certificate->valid_to?->toDateTimeString() ?? '-' }}</div>
                                     @if ($certificate->revoked_at !== null)
                                         <div><span class="font-medium">{{ __('Revoked at:') }}</span> {{ $certificate->revoked_at->toDateTimeString() }}</div>
                                     @endif
                                     @if ($certificate->revocation_reason)
                                         <div><span class="font-medium">{{ __('Revocation reason:') }}</span> {{ $certificate->revocation_reason }}</div>
+                                    @endif
+                                    @if (is_array($signature->signing_provider_payload) && $signature->signing_provider_payload !== [])
+                                        <div class="pt-2">
+                                            <div><span class="font-medium">{{ __('Provider evidence:') }}</span></div>
+                                            @foreach ($signature->signing_provider_payload as $evidenceKey => $evidenceValue)
+                                                <div class="break-all">{{ \Illuminate\Support\Str::of((string) $evidenceKey)->replace('_', ' ')->title() }}: {{ is_scalar($evidenceValue) ? (string) $evidenceValue : json_encode($evidenceValue) }}</div>
+                                            @endforeach
+                                        </div>
                                     @endif
                                 </div>
                             </div>
@@ -400,7 +413,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-teal-700 underline decoration-teal-500/30 underline-offset-4 transition hover:text-teal-800 hover:decoration-teal-500 dark:text-teal-300 dark:hover:text-teal-200"
         >
             {{ __('Open PDF in new tab') }}
-            <span aria-hidden="true">↗</span>
+            <span aria-hidden="true">&nearr;</span>
         </a>
     </div>
 </div>

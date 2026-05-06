@@ -25,6 +25,9 @@ class Signature extends Model
         'signature_hash',
         'public_key_fingerprint',
         'signature_algorithm',
+        'signing_provider',
+        'signing_provider_reference',
+        'signing_provider_payload',
         'position_data',
     ];
 
@@ -34,6 +37,7 @@ class Signature extends Model
     protected function casts(): array
     {
         return [
+            'signing_provider_payload' => 'array',
             'position_data' => 'array',
         ];
     }

@@ -22,6 +22,7 @@ class DocumentSignerFactory extends Factory
             'document_id' => Document::factory(),
             'name' => fake()->name(),
             'email' => fake()->safeEmail(),
+            'remote_credential_id' => 'credential-'.Str::lower((string) Str::uuid()),
             'access_token' => (string) Str::uuid(),
             'status' => DocumentSignerStatus::Pending,
             'signing_order' => 0,

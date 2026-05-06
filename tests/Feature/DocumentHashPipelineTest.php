@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\User;
 use App\Services\DocumentHashService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -16,6 +17,11 @@ use Tests\TestCase;
 class DocumentHashPipelineTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function putValidPdf(string $path, string $label): void
+    {
+        Storage::disk('local')->put($path, Pdf::loadHTML('<h1>'.$label.'</h1>')->output());
+    }
 
     public function test_hash_is_created_when_document_becomes_completed(): void
     {
@@ -27,8 +33,7 @@ class DocumentHashPipelineTest extends TestCase
         ]);
 
         $path = 'documents/completed-hash.pdf';
-        $contents = '%PDF-1.4 document-content-for-hash';
-        Storage::disk('local')->put($path, $contents);
+        $this->putValidPdf($path, 'Document hash pipeline');
 
         $user = User::factory()->create();
         $document = Document::factory()->for($user)->create([
@@ -43,10 +48,13 @@ class DocumentHashPipelineTest extends TestCase
 
         $document->refresh();
         $this->assertSame(DocumentStatus::Completed, $document->status);
+        $this->assertNotNull($document->final_pdf_path);
+
+        $expectedHash = app(DocumentHashService::class)->generateDocumentHash((string) $document->final_pdf_path);
 
         $this->assertDatabaseHas('document_hashes', [
             'document_id' => $document->id,
-            'hash' => hash('sha256', $contents),
+            'hash' => $expectedHash,
             'transaction_id' => '0xabc123',
         ]);
     }
@@ -61,12 +69,12 @@ class DocumentHashPipelineTest extends TestCase
         ]);
 
         $path = 'documents/idempotent-hash.pdf';
-        $contents = '%PDF-1.4 idempotent-content';
-        Storage::disk('local')->put($path, $contents);
+        $this->putValidPdf($path, 'Idempotent hash');
 
         $document = Document::factory()->for(User::factory())->create([
             'status' => DocumentStatus::Completed,
             'file_path' => $path,
+            'final_pdf_path' => $path,
         ]);
 
         $service = app(DocumentHashService::class);
