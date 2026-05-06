@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Http\Requests\StartTrustAuthorizationRequest;
 use App\Http\Requests\StoreDocumentSignatureRequest;

@@ -151,6 +151,8 @@ class RemoteSigningClient
             'transactionID' => 'timestamp_transaction_id',
             'transaction_id' => 'timestamp_transaction_id',
             'timestamp' => 'timestamp_token',
+            'timestampNonce' => 'timestamp_request_nonce',
+            'timestamp_nonce' => 'timestamp_request_nonce',
         ] as $sourceKey => $targetKey) {
             $value = $payload[$sourceKey] ?? null;
             if ($value !== null) {
