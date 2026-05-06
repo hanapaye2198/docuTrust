@@ -33,6 +33,48 @@ new #[Layout('components.layouts.app')] class extends Component {
                 <flux:error name="document_title" />
             </flux:field>
 
+            <div class="space-y-4 rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+                <div>
+                    <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{{ __('Document password') }}</h2>
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Optional shared password for all signers on this document.') }}</p>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <flux:field>
+                        <flux:label>{{ __('Password') }}</flux:label>
+                        <flux:input
+                            name="access_password"
+                            type="password"
+                            autocomplete="new-password"
+                            placeholder="{{ __('Leave blank for no password') }}"
+                        />
+                        <flux:error name="access_password" />
+                    </flux:field>
+
+                    <flux:field>
+                        <flux:label>{{ __('Confirm password') }}</flux:label>
+                        <flux:input
+                            name="access_password_confirmation"
+                            type="password"
+                            autocomplete="new-password"
+                            placeholder="{{ __('Repeat the password') }}"
+                        />
+                        <flux:error name="access_password_confirmation" />
+                    </flux:field>
+                </div>
+
+                <flux:field>
+                    <flux:label>{{ __('Password hint') }}</flux:label>
+                    <flux:input
+                        name="access_password_hint"
+                        type="text"
+                        value="{{ old('access_password_hint') }}"
+                        placeholder="{{ __('Optional hint for recipients') }}"
+                    />
+                    <flux:error name="access_password_hint" />
+                </flux:field>
+            </div>
+
             <div class="space-y-4">
                 <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signers') }}</h2>
 

@@ -12,6 +12,7 @@ use App\Models\TemplateSigner;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -91,6 +92,47 @@ class TemplateFlowTest extends TestCase
         $this->assertDatabaseHas('signature_fields', [
             'document_id' => $document->id,
         ]);
+    }
+
+    public function test_use_template_can_create_password_protected_document(): void
+    {
+        Storage::fake('public');
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $pdf = UploadedFile::fake()->create('base.pdf', 50, 'application/pdf');
+        $storedPath = $pdf->store('templates', 'public');
+
+        $template = Template::factory()->for($user)->create([
+            'name' => 'Protected standard contract',
+            'files' => [$storedPath],
+        ]);
+
+        TemplateSigner::query()->create([
+            'template_id' => $template->id,
+            'role_name' => 'Client',
+            'role_type' => TemplateRoleType::Signer,
+            'signing_order' => 0,
+        ]);
+
+        $this->actingAs($user)->post(route('templates.documents.store', $template), [
+            'document_title' => 'Protected template contract',
+            'access_password' => 'shared-secret',
+            'access_password_confirmation' => 'shared-secret',
+            'access_password_hint' => 'Shared in chat',
+            'assignees' => [
+                'Client' => [
+                    'name' => 'Jane Doe',
+                    'email' => 'jane@example.com',
+                ],
+            ],
+        ])->assertRedirect();
+
+        $document = Document::query()->where('title', 'Protected template contract')->first();
+        $this->assertNotNull($document);
+        $this->assertTrue($document->hasAccessPassword());
+        $this->assertTrue(Hash::check('shared-secret', (string) $document->access_password_hash));
+        $this->assertSame('Shared in chat', $document->access_password_hint);
     }
 
     public function test_use_template_aborts_when_template_field_role_has_no_matching_signer(): void

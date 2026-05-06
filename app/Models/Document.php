@@ -25,6 +25,8 @@ class Document extends Model
         'user_id',
         'title',
         'file_path',
+        'access_password_hash',
+        'access_password_hint',
         'prepared_pdf_path',
         'final_pdf_path',
         'files',
@@ -159,6 +161,11 @@ class Document extends Model
         }
 
         return null;
+    }
+
+    public function hasAccessPassword(): bool
+    {
+        return is_string($this->access_password_hash) && $this->access_password_hash !== '';
     }
 
     public function hasDocumentSigners(): bool

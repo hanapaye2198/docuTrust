@@ -5,6 +5,7 @@ use App\Http\Requests\StoreDocumentRequest;
 use App\Models\Document;
 use App\Models\Tag;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -22,6 +23,12 @@ new #[Layout('components.layouts.app')] class extends Component {
     public array $tagIds = [];
 
     public string $quickTagName = '';
+
+    public string $accessPassword = '';
+
+    public string $accessPasswordConfirmation = '';
+
+    public string $accessPasswordHint = '';
 
     public function with(): array
     {
@@ -53,12 +60,15 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->authorize('create', Document::class);
 
         $this->validate(array_merge(
-            StoreDocumentRequest::rulesForUpload(),
-            [
-                'tagIds' => ['array'],
-                'tagIds.*' => ['integer', Rule::exists('tags', 'id')->where('user_id', Auth::id())],
-            ]
-        ));
+                StoreDocumentRequest::rulesForLivewireUpload(),
+                [
+                    'tagIds' => ['array'],
+                    'tagIds.*' => ['integer', Rule::exists('tags', 'id')->where('user_id', Auth::id())],
+                    'accessPassword' => ['nullable', 'string', 'min:6', 'max:255', 'same:accessPasswordConfirmation'],
+                    'accessPasswordConfirmation' => ['nullable', 'string', 'max:255'],
+                    'accessPasswordHint' => ['nullable', 'string', 'max:255'],
+                ]
+            ));
 
         try {
             $path = $this->file->store('documents', (string) config('filesystems.docutrust_disk', 'local'));
@@ -66,6 +76,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             $document = Auth::user()->documents()->create([
                 'title' => $this->title,
                 'file_path' => $path,
+                'access_password_hash' => $this->accessPassword !== '' ? Hash::make($this->accessPassword) : null,
+                'access_password_hint' => $this->accessPasswordHint !== '' ? trim($this->accessPasswordHint) : null,
                 'status' => DocumentStatus::Draft,
             ]);
             $document->tags()->sync(array_map('intval', $this->tagIds));
@@ -231,6 +243,47 @@ new #[Layout('components.layouts.app')] class extends Component {
                             </flux:field>
                             <flux:button type="button" variant="outline" wire:click="quickAddTag">{{ __('Add') }}</flux:button>
                         </div>
+                    </section>
+
+                    <section class="space-y-4 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
+                        <div>
+                            <h2 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ __('Document password') }}</h2>
+                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Optional. If set, any signer must enter this shared password before opening the signing document.') }}</p>
+                        </div>
+
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <flux:field>
+                                <flux:label>{{ __('Password') }}</flux:label>
+                                <flux:input
+                                    wire:model="accessPassword"
+                                    type="password"
+                                    autocomplete="new-password"
+                                    placeholder="{{ __('Leave blank for no password') }}"
+                                />
+                                <flux:error name="accessPassword" />
+                            </flux:field>
+
+                            <flux:field>
+                                <flux:label>{{ __('Confirm password') }}</flux:label>
+                                <flux:input
+                                    wire:model="accessPasswordConfirmation"
+                                    type="password"
+                                    autocomplete="new-password"
+                                    placeholder="{{ __('Repeat the password') }}"
+                                />
+                                <flux:error name="accessPasswordConfirmation" />
+                            </flux:field>
+                        </div>
+
+                        <flux:field>
+                            <flux:label>{{ __('Password hint') }}</flux:label>
+                            <flux:input
+                                wire:model="accessPasswordHint"
+                                type="text"
+                                placeholder="{{ __('Optional hint for recipients') }}"
+                            />
+                            <flux:error name="accessPasswordHint" />
+                        </flux:field>
                     </section>
 
                     {{-- Actions --}}

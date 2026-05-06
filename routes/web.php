@@ -15,6 +15,7 @@ Route::get('/', function () {
 
 Route::middleware('throttle:signing-links')->group(function () {
     Route::get('/sign/{token}', [SignDocumentController::class, 'show'])->name('sign.show');
+    Route::post('/sign/{token}/unlock', [SignDocumentController::class, 'unlock'])->name('sign.unlock');
     Route::get('/sign/{token}/pdf', [SignDocumentController::class, 'streamPdf'])->name('sign.document.pdf');
     Route::get('/sign/{token}/signature-image/{signatureField}', [SignDocumentController::class, 'streamSignatureImage'])->name('sign.signature.image');
     Route::post('/sign/{token}', [SignDocumentController::class, 'sign'])->name('sign.store');

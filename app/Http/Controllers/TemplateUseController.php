@@ -13,6 +13,7 @@ use App\Models\Template;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -27,6 +28,8 @@ class TemplateUseController extends Controller
     {
         $assigneesByRole = $request->validatedAssigneesByRole($template);
         $documentTitle = $request->validated('document_title');
+        $accessPassword = trim((string) $request->validated('access_password', ''));
+        $accessPasswordHint = trim((string) $request->validated('access_password_hint', ''));
 
         $sourcePath = $template->primaryPdfPath() ?? ($template->files[0] ?? null);
         if ($sourcePath === null || ! Storage::disk('public')->exists($sourcePath)) {
@@ -36,7 +39,7 @@ class TemplateUseController extends Controller
         $extension = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'pdf';
         $newPath = 'documents/'.Str::uuid()->toString().'.'.$extension;
 
-        $document = DB::transaction(function () use ($template, $assigneesByRole, $documentTitle, $newPath, $sourcePath) {
+        $document = DB::transaction(function () use ($template, $assigneesByRole, $documentTitle, $newPath, $sourcePath, $accessPassword, $accessPasswordHint) {
             $sourceDisk = Storage::disk('public');
             $targetDisk = Storage::disk($this->secureDiskName());
 
@@ -51,6 +54,8 @@ class TemplateUseController extends Controller
             $document = Auth::user()->documents()->create([
                 'title' => $documentTitle,
                 'file_path' => $newPath,
+                'access_password_hash' => $accessPassword !== '' ? Hash::make($accessPassword) : null,
+                'access_password_hint' => $accessPasswordHint !== '' ? $accessPasswordHint : null,
                 'status' => DocumentStatus::Draft,
             ]);
 

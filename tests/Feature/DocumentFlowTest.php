@@ -9,6 +9,7 @@ use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Volt\Volt as LivewireVolt;
 use Tests\TestCase;
@@ -116,6 +117,31 @@ class DocumentFlowTest extends TestCase
         $document = Document::query()->where('title', 'Tagged contract')->first();
         $this->assertNotNull($document);
         $this->assertTrue($document->tags()->whereKey($tag->id)->exists());
+    }
+
+    public function test_user_can_upload_a_password_protected_document(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $file = UploadedFile::fake()->create('protected-contract.pdf', 120, 'application/pdf');
+
+        $this->actingAs($user);
+
+        LivewireVolt::test('documents.create')
+            ->set('title', 'Protected contract')
+            ->set('accessPassword', 'shared-secret')
+            ->set('accessPasswordConfirmation', 'shared-secret')
+            ->set('accessPasswordHint', 'Same password from the email thread')
+            ->set('file', $file)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $document = Document::query()->where('title', 'Protected contract')->first();
+        $this->assertNotNull($document);
+        $this->assertTrue($document->hasAccessPassword());
+        $this->assertTrue(Hash::check('shared-secret', (string) $document->access_password_hash));
+        $this->assertSame('Same password from the email thread', $document->access_password_hint);
     }
 
     public function test_documents_index_searches_by_filename_and_tag_name(): void

@@ -16,8 +16,10 @@ use App\Support\PublicPdfStream;
 use App\Trust\Authorization\TrustAuthorizationRequiredException;
 use App\Trust\Authorization\TrustAuthorizationWorkflowService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -26,6 +28,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SignDocumentController extends Controller
 {
+    private const DOCUMENT_UNLOCK_SESSION_PREFIX = 'document_access_unlocked:';
+
     public function __construct(
         private readonly DocumentSigningWorkflowService $documentSigningWorkflowService,
         private readonly FieldSignatureCaptureService $fieldSignatureCaptureService,
@@ -50,6 +54,8 @@ class SignDocumentController extends Controller
         }
 
         $document = $signer->document;
+        $documentAccessProtected = $document->hasAccessPassword();
+        $documentAccessLocked = $documentAccessProtected && ! $this->documentAccessUnlocked($document);
         $trustAuthorizationEnabled = (string) config('docutrust.pki.signing_backend', 'app_managed') === 'remote_managed';
         $trustAuthorizationSession = $trustAuthorizationEnabled
             ? $signer->trustAuthorizationSessions()
@@ -84,6 +90,9 @@ class SignDocumentController extends Controller
                 'position_data' => $f->position_data,
             ])->values()->all(),
             'signedByFieldId' => $signedByFieldId,
+            'documentAccessProtected' => $documentAccessProtected,
+            'documentAccessLocked' => $documentAccessLocked,
+            'documentAccessHint' => $document->access_password_hint,
             'trustAuthorizationEnabled' => $trustAuthorizationEnabled,
             'trustAuthorizationSession' => $trustAuthorizationSession !== null
                 ? $this->trustAuthorizationSessionPayload($trustAuthorizationSession)
@@ -99,6 +108,10 @@ class SignDocumentController extends Controller
             return $this->invalidLinkResponse();
         }
 
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return $this->documentPasswordRequiredResponse();
+        }
+
         $document = $signer->document;
 
         // Use the original source PDF for the live signing view so the interactive
@@ -112,6 +125,11 @@ class SignDocumentController extends Controller
             $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
             if ($signer === null) {
                 return $this->invalidLinkResponse();
+            }
+
+            if (! $this->documentAccessUnlocked($signer->document)) {
+                return redirect()->route('sign.show', $token)
+                    ->with('error', __('Enter the document password to continue.'));
             }
 
             $document = $signer->document;
@@ -171,6 +189,17 @@ class SignDocumentController extends Controller
             $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
             if ($signer === null) {
                 return $this->invalidLinkResponse();
+            }
+
+            if (! $this->documentAccessUnlocked($signer->document)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => __('Enter the document password to continue.'),
+                    ], 423);
+                }
+
+                return redirect()->route('sign.show', $token)
+                    ->with('error', __('Enter the document password to continue.'));
             }
 
             $document = $signer->document;
@@ -275,6 +304,10 @@ class SignDocumentController extends Controller
             return $this->invalidLinkResponse();
         }
 
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return $this->documentPasswordRequiredResponse();
+        }
+
         if ($signatureField->document_id !== $signer->document_id || $signatureField->signer_id !== $signer->id) {
             abort(404);
         }
@@ -305,6 +338,12 @@ class SignDocumentController extends Controller
         $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
         if ($signer === null) {
             return $this->invalidLinkResponse();
+        }
+
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return response()->json([
+                'message' => __('Enter the document password to continue.'),
+            ], 423);
         }
 
         $signingError = $this->canSignerModifyFields($signer->document, $signer);
@@ -346,6 +385,12 @@ class SignDocumentController extends Controller
             return $this->invalidLinkResponse();
         }
 
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return response()->json([
+                'message' => __('Enter the document password to continue.'),
+            ], 423);
+        }
+
         if ($session->document_signer_id !== $signer->id) {
             abort(404);
         }
@@ -371,6 +416,46 @@ class SignDocumentController extends Controller
                 'message' => __('Unable to check trust authorization right now. Please try again.'),
             ], 500);
         }
+    }
+
+    public function unlock(Request $request, string $token): JsonResponse|RedirectResponse|Response
+    {
+        $signer = $this->resolveAccessibleSigner($token, ['document']);
+        if ($signer === null) {
+            return $this->invalidLinkResponse();
+        }
+
+        $document = $signer->document;
+
+        if (! $document->hasAccessPassword()) {
+            return redirect()->route('sign.show', $token);
+        }
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'max:255'],
+        ]);
+
+        if (! Hash::check((string) $validated['password'], (string) $document->access_password_hash)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => __('The document password is incorrect.'),
+                ], 422);
+            }
+
+            return redirect()->route('sign.show', $token)
+                ->with('error', __('The document password is incorrect.'));
+        }
+
+        session()->put($this->documentPasswordSessionKey($document), (string) $document->access_password_hash);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => __('Document unlocked.'),
+            ]);
+        }
+
+        return redirect()->route('sign.show', $token)
+            ->with('status', __('Document unlocked.'));
     }
 
     /**
@@ -402,6 +487,30 @@ class SignDocumentController extends Controller
         return response()->view('sign.invalid', [
             'message' => __('Link expired or invalid'),
         ], 403);
+    }
+
+    private function documentAccessUnlocked(\App\Models\Document $document): bool
+    {
+        if (! $document->hasAccessPassword()) {
+            return true;
+        }
+
+        return hash_equals(
+            (string) $document->access_password_hash,
+            (string) session()->get($this->documentPasswordSessionKey($document), '')
+        );
+    }
+
+    private function documentPasswordSessionKey(\App\Models\Document $document): string
+    {
+        return self::DOCUMENT_UNLOCK_SESSION_PREFIX.$document->id;
+    }
+
+    private function documentPasswordRequiredResponse(): Response
+    {
+        return response()->view('sign.invalid', [
+            'message' => __('Enter the document password to continue.'),
+        ], 423);
     }
 
     private function canSignerModifyFields(\App\Models\Document $document, DocumentSigner $signer): ?string

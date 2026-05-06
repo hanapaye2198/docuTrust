@@ -35,6 +35,14 @@
         count($fieldsJson) > 0
         && $signedFieldCount > 0
         && ! $showFieldEditing;
+
+    if ($documentAccessLocked) {
+        $showFieldEditing = false;
+        $showFieldSigning = false;
+        $showLegacySign = false;
+        $showAwaitingAssignedFields = false;
+        $showCompletedFieldsNotice = false;
+    }
 @endphp
 
 <x-layouts.guest-simple>
@@ -87,7 +95,7 @@
                     </p>
                 @endif
 
-                @if ($trustAuthorizationEnabled && ($showFieldViewer || $showLegacySign))
+                @if (! $documentAccessLocked && $trustAuthorizationEnabled && ($showFieldViewer || $showLegacySign))
                     <section
                         id="trust-authorization-panel"
                         class="rounded-2xl border border-sky-200/90 bg-sky-50/80 p-5 dark:border-sky-900/50 dark:bg-sky-950/30"
@@ -173,7 +181,41 @@
             </div>
         </div>
 
-        @if ($showFieldViewer)
+        @if ($documentAccessLocked)
+            <div class="ui-signsurface p-8">
+                <div class="mx-auto flex max-w-md flex-col gap-5">
+                    <div>
+                        <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{{ __('Document password required') }}</h2>
+                        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                            {{ __('This sender protected the document with a shared password. Enter it to continue.') }}
+                        </p>
+                        @if (is_string($documentAccessHint) && $documentAccessHint !== '')
+                            <p class="mt-3 rounded-xl border border-zinc-200/90 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200">
+                                <span class="font-medium">{{ __('Hint:') }}</span> {{ $documentAccessHint }}
+                            </p>
+                        @endif
+                    </div>
+
+                    <form method="POST" action="{{ route('sign.unlock', $signer->access_token ?? $signer->id) }}" class="flex flex-col gap-4">
+                        @csrf
+                        <label class="flex flex-col gap-2">
+                            <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ __('Password') }}</span>
+                            <input
+                                type="password"
+                                name="password"
+                                required
+                                autocomplete="current-password"
+                                class="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                            />
+                        </label>
+
+                        <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-teal-900/20 transition hover:bg-teal-500 dark:shadow-none">
+                            {{ __('Unlock document') }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        @elseif ($showFieldViewer)
             <div class="grid gap-4 sm:grid-cols-3">
                 <div class="ui-signsurface p-5">
                     <p class="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">{{ __('Assigned fields') }}</p>

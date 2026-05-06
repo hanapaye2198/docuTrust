@@ -27,6 +27,9 @@ class UseTemplateRequest extends FormRequest
         return [
             'document_title' => ['required', 'string', 'max:255'],
             'assignees' => ['required', 'array'],
+            'access_password' => ['nullable', 'string', 'min:6', 'max:255', 'same:access_password_confirmation'],
+            'access_password_confirmation' => ['nullable', 'string', 'max:255'],
+            'access_password_hint' => ['nullable', 'string', 'max:255'],
         ];
     }
 

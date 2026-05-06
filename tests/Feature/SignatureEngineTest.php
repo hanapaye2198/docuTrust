@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Services\PkiSignatureService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -507,6 +508,100 @@ class SignatureEngineTest extends TestCase
             'signer_id' => $signer->id,
             'signature_field_id' => $field->id,
         ]);
+    }
+
+    public function test_password_protected_document_requires_unlock_before_signing(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/password-protected-signing.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+            'access_password_hash' => Hash::make('shared-secret'),
+            'access_password_hint' => 'Shared in chat',
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+        $field = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $this->get(route('sign.show', $signer->access_token))
+            ->assertOk()
+            ->assertSee('Document password required')
+            ->assertSee('Shared in chat');
+
+        $this->get(route('sign.document.pdf', $signer))
+            ->assertStatus(423)
+            ->assertSee('Enter the document password to continue.');
+
+        $this->postJson(route('sign.signature.store', $signer), [
+            'signature_field_id' => $field->id,
+            'signature_image' => self::TINY_PNG_DATA_URL,
+        ])
+            ->assertStatus(423)
+            ->assertJsonPath('message', 'Enter the document password to continue.');
+    }
+
+    public function test_password_protected_document_can_be_unlocked_and_signed(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/password-unlock-signing.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+            'access_password_hash' => Hash::make('shared-secret'),
+            'access_password_hint' => 'Shared in chat',
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+        $field = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $this->post(route('sign.unlock', $signer), [
+            'password' => 'shared-secret',
+        ])->assertRedirect(route('sign.show', $signer->access_token));
+
+        $this->get(route('sign.document.pdf', $signer))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $this->post(route('sign.signature.store', $signer), [
+            'signature_field_id' => $field->id,
+            'signature_image' => self::TINY_PNG_DATA_URL,
+        ])->assertRedirect(route('sign.show', $signer->access_token));
+
+        $this->runQueuedCompletionWork($document);
+
+        $signature = Signature::query()->where('signature_field_id', $field->id)->first();
+        $this->assertNotNull($signature);
+        $this->assertSame('app_managed', $signature->signing_provider);
+        $this->assertNotNull($signature->signature_hash);
     }
 
     public function test_legacy_sign_is_blocked_when_document_has_any_signature_fields(): void

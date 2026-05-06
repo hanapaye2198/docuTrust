@@ -42,4 +42,20 @@ class StoreDocumentRequest extends FormRequest
             'file' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf', 'extensions:pdf', 'max:51200'],
         ];
     }
+
+    /**
+     * Livewire already enforces the temporary upload size limit using
+     * `config/livewire.php`. Avoid a second `max` rule here because it forces
+     * a file_size metadata lookup on the temp file, which is brittle on some
+     * Windows/Flysystem combinations.
+     *
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public static function rulesForLivewireUpload(): array
+    {
+        return [
+            'title' => ['required', 'string', 'max:255'],
+            'file' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf', 'extensions:pdf'],
+        ];
+    }
 }
