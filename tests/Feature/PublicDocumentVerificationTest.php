@@ -16,6 +16,8 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
 class PublicDocumentVerificationTest extends TestCase
@@ -155,6 +157,9 @@ class PublicDocumentVerificationTest extends TestCase
 
         $chain = $this->makeProviderManagedCertificateChain();
         $hash = hash('sha256', Storage::disk('local')->get($path));
+        $timestamp = $this->makeTrustedTimestampToken($hash);
+        config()->set('services.remote_signing.csc.timestamp_openssl_binary', $this->resolveOpenSslBinary());
+        config()->set('services.remote_signing.csc.timestamp_trust_cert_path', $timestamp['trust_cert_path']);
         $signatureValue = app(PkiSignatureService::class)->signHash($hash, $chain['private_key_pem']);
         $parsed = openssl_x509_parse($chain['certificate_pem']);
 
@@ -189,6 +194,10 @@ class PublicDocumentVerificationTest extends TestCase
             'signing_provider_payload' => [
                 'transaction_id' => 'txn-public-001',
                 'authentication_method' => 'otp',
+                'timestamp_token' => $timestamp['timestamp_token'],
+                'timestamp_hash' => $hash,
+                'timestamp_hash_algorithm' => '2.16.840.1.101.3.4.2.1',
+                'timestamp_request_nonce' => $timestamp['nonce'],
             ],
         ]);
 
@@ -222,7 +231,9 @@ class PublicDocumentVerificationTest extends TestCase
             ->assertSee('Transaction Id:')
             ->assertSee('txn-public-001')
             ->assertSee('Authentication Method:')
-            ->assertSee('otp');
+            ->assertSee('otp')
+            ->assertSee('Timestamp verification:')
+            ->assertSee('RFC3161 timestamp token signature, trust chain, message imprint, and nonce were verified.');
     }
 
     /**
@@ -281,5 +292,128 @@ class PublicDocumentVerificationTest extends TestCase
             'public_key_pem' => (string) ($signerDetails['key'] ?? ''),
             'private_key_pem' => $signerPrivateKeyPem,
         ];
+    }
+
+    /**
+     * @return array{timestamp_token: string, trust_cert_path: string, nonce: string}
+     */
+    private function makeTrustedTimestampToken(string $hash): array
+    {
+        $openssl = $this->resolveOpenSslBinary();
+        if ($openssl === null) {
+            self::markTestSkipped('OpenSSL CLI is required for RFC3161 timestamp verification tests.');
+        }
+
+        $directory = storage_path('app/testing/public-timestamps/'.Str::uuid()->toString());
+        mkdir($directory, 0777, true);
+        $directoryPosix = str_replace('\\', '/', $directory);
+
+        $config = <<<CFG
+[ req ]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_tsa
+prompt = no
+
+[ req_distinguished_name ]
+CN = Test TSA
+O = DocuTrust
+C = PH
+
+[ v3_tsa ]
+basicConstraints = critical,CA:FALSE
+keyUsage = critical, digitalSignature, nonRepudiation
+extendedKeyUsage = critical,timeStamping
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+
+[ tsa ]
+default_tsa = tsa_config1
+
+[ tsa_config1 ]
+signer_cert = {$directoryPosix}/tsa.crt
+certs = {$directoryPosix}/tsa.crt
+signer_key = {$directoryPosix}/tsa.key
+signer_digest = sha256
+digests = sha256
+ess_cert_id_chain = no
+ess_cert_id_alg = sha256
+default_policy = 1.2.3.4.1
+other_policies = 1.2.3.4.5.6
+serial = {$directoryPosix}/tsa-serial
+crypto_device = builtin
+accuracy = secs:1
+ordering = no
+tsa_name = no
+CFG;
+
+        file_put_contents($directory.DIRECTORY_SEPARATOR.'tsa.cnf', $config);
+        file_put_contents($directory.DIRECTORY_SEPARATOR.'tsa-serial', "01\n");
+
+        $this->runOpenSsl($openssl, [
+            'req', '-x509', '-newkey', 'rsa:2048',
+            '-keyout', $directory.DIRECTORY_SEPARATOR.'tsa.key',
+            '-out', $directory.DIRECTORY_SEPARATOR.'tsa.crt',
+            '-days', '365',
+            '-nodes',
+            '-config', $directory.DIRECTORY_SEPARATOR.'tsa.cnf',
+        ]);
+
+        $this->runOpenSsl($openssl, [
+            'ts', '-query',
+            '-digest', $hash,
+            '-sha256',
+            '-cert',
+            '-out', $directory.DIRECTORY_SEPARATOR.'req.tsq',
+        ]);
+
+        $queryText = $this->runOpenSsl($openssl, [
+            'ts', '-query',
+            '-in', $directory.DIRECTORY_SEPARATOR.'req.tsq',
+            '-text',
+        ]);
+        preg_match('/Nonce:\s*0x([A-Fa-f0-9]+)/', $queryText, $matches);
+        $nonce = $matches[1] ?? null;
+        $this->assertIsString($nonce);
+
+        $this->runOpenSsl($openssl, [
+            'ts', '-reply',
+            '-config', $directory.DIRECTORY_SEPARATOR.'tsa.cnf',
+            '-section', 'tsa_config1',
+            '-queryfile', $directory.DIRECTORY_SEPARATOR.'req.tsq',
+            '-out', $directory.DIRECTORY_SEPARATOR.'resp.tsr',
+            '-token_out',
+        ]);
+
+        return [
+            'timestamp_token' => base64_encode((string) file_get_contents($directory.DIRECTORY_SEPARATOR.'resp.tsr')),
+            'trust_cert_path' => $directory.DIRECTORY_SEPARATOR.'tsa.crt',
+            'nonce' => $nonce,
+        ];
+    }
+
+    private function resolveOpenSslBinary(): ?string
+    {
+        foreach ([
+            'C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe',
+            'C:\\Program Files\\Git\\usr\\bin\\openssl.exe',
+        ] as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<string>  $arguments
+     */
+    private function runOpenSsl(string $binary, array $arguments): string
+    {
+        $process = new Process([$binary, ...$arguments]);
+        $process->run();
+        $this->assertTrue($process->isSuccessful(), $process->getErrorOutput());
+
+        return trim($process->getOutput()."\n".$process->getErrorOutput());
     }
 }

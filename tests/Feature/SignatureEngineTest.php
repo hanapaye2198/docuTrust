@@ -669,6 +669,8 @@ class SignatureEngineTest extends TestCase
         config()->set('services.remote_signing.provider_name', 'trust_service_provider');
         config()->set('services.remote_signing.api_mode', 'csc');
         config()->set('services.remote_signing.csc.sign_hash_endpoint', '/csc/v1/signatures/signHash');
+        config()->set('services.remote_signing.csc.timestamp_enabled', true);
+        config()->set('services.remote_signing.csc.timestamp_endpoint', '/csc/v1/signatures/timestamp');
         Storage::fake('local');
 
         $user = User::factory()->create();
@@ -748,6 +750,17 @@ class SignatureEngineTest extends TestCase
                     ],
                 ]);
             },
+            'https://remote-signing.test/csc/v1/signatures/timestamp' => function ($request) {
+                $payload = $request->data();
+                $this->assertSame('2.16.840.1.101.3.4.2.1', $payload['hashAlgo']);
+                $this->assertIsString($payload['hash']);
+                $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', (string) $payload['nonce']);
+
+                return Http::response([
+                    'timestamp' => base64_encode('rfc3161-token'),
+                    'transactionID' => 'remote-ts-ref-001',
+                ]);
+            },
             'http://127.0.0.1:3001/anchor' => Http::response([
                 'transactionHash' => '0xremoteproof123',
             ]),
@@ -776,6 +789,11 @@ class SignatureEngineTest extends TestCase
         $this->assertSame('explicit_otp', $signature->signing_provider_payload['authentication_mode'] ?? null);
         $this->assertSame('otp', $signature->signing_provider_payload['authentication_method'] ?? null);
         $this->assertSame('csc', $signature->signing_provider_payload['validation_info']['policy'] ?? null);
+        $this->assertSame(base64_encode('rfc3161-token'), $signature->signing_provider_payload['timestamp_token'] ?? null);
+        $this->assertSame('remote-ts-ref-001', $signature->signing_provider_payload['timestamp_transaction_id'] ?? null);
+        $this->assertSame((string) $signature->signature_hash, $signature->signing_provider_payload['timestamp_hash'] ?? null);
+        $this->assertSame('2.16.840.1.101.3.4.2.1', $signature->signing_provider_payload['timestamp_hash_algorithm'] ?? null);
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', (string) ($signature->signing_provider_payload['timestamp_request_nonce'] ?? ''));
 
         $signerCertificate = SignerCertificate::query()->find($signature->signer_certificate_id);
         $this->assertNotNull($signerCertificate);

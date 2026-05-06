@@ -33,7 +33,27 @@ class RemoteSigningClient
             throw new RuntimeException('Remote signing provider returned an invalid response body.');
         }
 
-        return app(RemoteSignatureResponseMapper::class)->map($payload);
+        $material = app(RemoteSignatureResponseMapper::class)->map($payload);
+        $timestampEvidence = $this->shouldRequestTimestamp()
+            ? $this->requestTimestampEvidence($signer, $hash)
+            : null;
+
+        if ($timestampEvidence === null) {
+            return $material;
+        }
+
+        return new RemoteSignatureMaterial(
+            signatureValue: $material->signatureValue,
+            certificatePem: $material->certificatePem,
+            issuerCertificatePem: $material->issuerCertificatePem,
+            providerReference: $material->providerReference,
+            signatureAlgorithm: $material->signatureAlgorithm,
+            publicKeyPem: $material->publicKeyPem,
+            evidence: [
+                ...($material->evidence ?? []),
+                ...$timestampEvidence,
+            ],
+        );
     }
 
     private function performCscSignHashRequest(DocumentSigner $signer, string $hash): Response
@@ -84,6 +104,63 @@ class RemoteSigningClient
         );
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function requestTimestampEvidence(DocumentSigner $signer, string $hash): ?array
+    {
+        $hashBinary = hex2bin($hash);
+        if ($hashBinary === false) {
+            throw new RuntimeException('Document hash could not be encoded for CSC timestamping.');
+        }
+
+        $nonce = bin2hex(random_bytes(16));
+        $encodedHash = base64_encode($hashBinary);
+        $response = $this->request()->post(
+            $this->endpoint((string) config('services.remote_signing.csc.timestamp_endpoint', '/csc/v1/signatures/timestamp')),
+            [
+                'hash' => $encodedHash,
+                'hashAlgo' => (string) config('services.remote_signing.csc.hash_algorithm', '2.16.840.1.101.3.4.2.1'),
+                'nonce' => $nonce,
+                'clientData' => $this->encodeTimestampClientData($signer, $hash, $nonce),
+            ]
+        );
+
+        if ($response->failed()) {
+            throw new RuntimeException('Remote signing provider timestamp request failed.');
+        }
+
+        $payload = $response->json();
+        if (! is_array($payload)) {
+            throw new RuntimeException('Remote signing provider returned an invalid timestamp response body.');
+        }
+
+        $token = $payload['timestamp'] ?? null;
+        if (! is_string($token) || trim($token) === '') {
+            throw new RuntimeException('Remote signing provider did not return an RFC3161 timestamp token.');
+        }
+
+        $evidence = [
+            'timestamp_token' => $token,
+            'timestamp_hash' => strtolower($hash),
+            'timestamp_hash_algorithm' => (string) config('services.remote_signing.csc.hash_algorithm', '2.16.840.1.101.3.4.2.1'),
+            'timestamp_request_nonce' => $nonce,
+        ];
+
+        foreach ([
+            'transactionID' => 'timestamp_transaction_id',
+            'transaction_id' => 'timestamp_transaction_id',
+            'timestamp' => 'timestamp_token',
+        ] as $sourceKey => $targetKey) {
+            $value = $payload[$sourceKey] ?? null;
+            if ($value !== null) {
+                $evidence[$targetKey] = $value;
+            }
+        }
+
+        return $evidence;
+    }
+
     private function request(): PendingRequest
     {
         $request = Http::timeout((int) config('services.remote_signing.timeout', 10))->acceptJson();
@@ -100,6 +177,12 @@ class RemoteSigningClient
         }
 
         return $baseUrl.'/'.ltrim($endpoint, '/');
+    }
+
+    private function shouldRequestTimestamp(): bool
+    {
+        return (string) config('services.remote_signing.api_mode', 'csc') === 'csc'
+            && (bool) config('services.remote_signing.csc.timestamp_enabled', false);
     }
 
     private function resolveCredentialId(DocumentSigner $signer, ?string $authorizedCredentialId = null): string
@@ -132,6 +215,23 @@ class RemoteSigningClient
             return base64_encode(json_encode($payload, JSON_THROW_ON_ERROR));
         } catch (JsonException $exception) {
             throw new RuntimeException('Remote signing client data could not be encoded.', previous: $exception);
+        }
+    }
+
+    private function encodeTimestampClientData(DocumentSigner $signer, string $hash, string $nonce): string
+    {
+        try {
+            return base64_encode(json_encode([
+                'document_hash' => $hash,
+                'timestamp_nonce' => $nonce,
+                'signer' => [
+                    'id' => $signer->id,
+                    'name' => $signer->name,
+                    'email' => $signer->email,
+                ],
+            ], JSON_THROW_ON_ERROR));
+        } catch (JsonException $exception) {
+            throw new RuntimeException('Remote signing timestamp client data could not be encoded.', previous: $exception);
         }
     }
 }

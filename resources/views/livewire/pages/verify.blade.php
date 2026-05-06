@@ -43,6 +43,8 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
      *       signing_provider: string|null,
      *       signing_provider_reference: string|null,
      *       signing_provider_payload: array<string, mixed>|null,
+     *       timestamp_verification_status: 'verified'|'failed'|'not_available',
+     *       timestamp_verification_reason: string,
      *       revoked_at: string|null,
      *       revocation_reason: string|null,
      *       valid_from: string|null,
@@ -245,6 +247,14 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
                                 @endif
                                 @if ($certificateDetail['signing_provider_reference'] !== null)
                                     <div class="mt-1 break-all text-zinc-600 dark:text-zinc-300">{{ __('Provider reference:') }} {{ $certificateDetail['signing_provider_reference'] }}</div>
+                                @endif
+                                @if (($certificateDetail['timestamp_verification_status'] ?? 'not_available') !== 'not_available')
+                                    <div class="mt-1 break-all text-zinc-600 dark:text-zinc-300">
+                                        {{ __('Timestamp verification:') }}
+                                        {{ ucfirst((string) $certificateDetail['timestamp_verification_status']) }}
+                                        <span class="mx-2 text-zinc-400">&bull;</span>
+                                        {{ $certificateDetail['timestamp_verification_reason'] }}
+                                    </div>
                                 @endif
                                 @if ($certificateDetail['revoked_at'] !== null)
                                     <div class="mt-1 break-all text-zinc-600 dark:text-zinc-300">{{ __('Revoked at:') }} {{ $certificateDetail['revoked_at'] }}</div>

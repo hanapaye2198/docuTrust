@@ -11,6 +11,7 @@ class CertificateVerificationService
     public function __construct(
         private readonly PkiSignatureService $pkiSignatureService,
         private readonly CertificateChainValidator $certificateChainValidator,
+        private readonly TimestampEvidenceValidator $timestampEvidenceValidator,
     ) {}
 
     /**
@@ -31,6 +32,8 @@ class CertificateVerificationService
      *     signing_provider: string|null,
      *     signing_provider_reference: string|null,
      *     signing_provider_payload: array<string, mixed>|null,
+     *     timestamp_verification_status: 'verified'|'failed'|'not_available',
+     *     timestamp_verification_reason: string,
      *     revoked_at: string|null,
      *     revocation_reason: string|null,
      *     valid_from: string|null,
@@ -98,6 +101,8 @@ class CertificateVerificationService
      *   signing_provider: string|null,
      *   signing_provider_reference: string|null,
      *   signing_provider_payload: array<string, mixed>|null,
+     *   timestamp_verification_status: 'verified'|'failed'|'not_available',
+     *   timestamp_verification_reason: string,
      *   revoked_at: string|null,
      *   revocation_reason: string|null,
      *   valid_from: string|null,
@@ -108,6 +113,10 @@ class CertificateVerificationService
     {
         $certificate = $signature->signerCertificate;
         $signerName = $signature->signer?->name ?? 'Unknown signer';
+        $timestampValidation = $this->timestampEvidenceValidator->validate(
+            is_array($signature->signing_provider_payload) ? $signature->signing_provider_payload : null,
+            $expectedHash
+        );
 
         if ($certificate === null) {
             return $this->failureResult($signerName, 'Missing signer certificate.', null, $signature);
@@ -178,6 +187,8 @@ class CertificateVerificationService
             'signing_provider' => $signature->signing_provider,
             'signing_provider_reference' => $signature->signing_provider_reference,
             'signing_provider_payload' => is_array($signature->signing_provider_payload) ? $signature->signing_provider_payload : null,
+            'timestamp_verification_status' => $timestampValidation['status'],
+            'timestamp_verification_reason' => $timestampValidation['reason'],
             'revoked_at' => $certificate->revoked_at?->toDateTimeString(),
             'revocation_reason' => $certificate->revocation_reason,
             'valid_from' => $certificate->valid_from?->toDateTimeString(),
@@ -197,6 +208,8 @@ class CertificateVerificationService
      *   signing_provider: string|null,
      *   signing_provider_reference: string|null,
      *   signing_provider_payload: array<string, mixed>|null,
+     *   timestamp_verification_status: 'verified'|'failed'|'not_available',
+     *   timestamp_verification_reason: string,
      *   revoked_at: string|null,
      *   revocation_reason: string|null,
      *   valid_from: string|null,
@@ -205,6 +218,11 @@ class CertificateVerificationService
      */
     private function failureResult(string $signerName, string $reason, mixed $certificate = null, ?Signature $signature = null): array
     {
+        $timestampValidation = $this->timestampEvidenceValidator->validate(
+            is_array($signature?->signing_provider_payload) ? $signature->signing_provider_payload : null,
+            is_string($signature?->signature_hash) ? $signature->signature_hash : ''
+        );
+
         return [
             'signer_name' => $signerName,
             'result' => 'failed',
@@ -216,6 +234,8 @@ class CertificateVerificationService
             'signing_provider' => $signature?->signing_provider,
             'signing_provider_reference' => $signature?->signing_provider_reference,
             'signing_provider_payload' => is_array($signature?->signing_provider_payload) ? $signature->signing_provider_payload : null,
+            'timestamp_verification_status' => $timestampValidation['status'],
+            'timestamp_verification_reason' => $timestampValidation['reason'],
             'revoked_at' => $certificate?->revoked_at?->toDateTimeString(),
             'revocation_reason' => $certificate?->revocation_reason,
             'valid_from' => $certificate?->valid_from?->toDateTimeString(),
