@@ -104,24 +104,27 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 }; ?>
 
 <x-auth.onboarding-wizard-shell :active-step="2">
-    <h1 class="text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Mobile Verification') }}</h1>
-    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Enter your mobile number to receive a one-time verification code via SMS.') }}</p>
+    <h1 class="text-2xl font-semibold tracking-tight text-[#1F2937] dark:text-zinc-100 sm:text-3xl">{{ __('Mobile Verification') }}</h1>
+    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">{{ __('Secure your account with a one-time SMS code. We only use your number for account protection.') }}</p>
 
-    <x-auth-session-status class="mt-4 rounded-lg bg-[#2EC4B6]/10 px-3 py-2 text-center text-sm text-[#1B5E20] dark:text-teal-300" :status="session('status')" />
+    <x-auth-session-status class="mt-4 rounded-xl border border-[#2EC4B6]/25 bg-[#2EC4B6]/10 px-4 py-3 text-center text-sm text-[#1B5E20] dark:border-teal-500/30 dark:text-teal-300" :status="session('status')" />
 
     <form wire:submit="sendOtp" class="mt-6 flex flex-col gap-6">
-        <flux:input
-            wire:model="mobile_number"
-            type="tel"
-            label="{{ __('Mobile Number') }}"
-            placeholder="{{ __('+1 555 000 0000') }}"
-            autocomplete="tel"
-            autofocus
-            class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition dark:border-zinc-600"
-        />
+        <div class="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-700 dark:bg-zinc-800/40 sm:p-5">
+            <flux:input
+                wire:model="mobile_number"
+                type="tel"
+                label="{{ __('Mobile Number') }}"
+                placeholder="{{ __('+1 555 000 0000') }}"
+                autocomplete="tel"
+                autofocus
+                class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition dark:border-zinc-600"
+            />
+            <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Use international format to ensure SMS delivery.') }}</p>
+        </div>
 
         <div x-data="{ seconds: @entangle('resendAvailableIn') }" x-init="setInterval(() => { if (seconds > 0) { seconds--; } }, 1000)">
-            <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="sendOtp" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white" x-bind:disabled="seconds > 0">
+            <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="sendOtp" class="w-full bg-[#2EC4B6] text-white shadow-md shadow-[#2EC4B6]/25 transition hover:bg-[#1B5E20] hover:text-white" x-bind:disabled="seconds > 0">
                 <span wire:loading.remove wire:target="sendOtp">
                     <span x-show="seconds === 0">{{ __('Send OTP') }}</span>
                     <span x-show="seconds > 0">{{ __('Resend OTP in ') }}<span x-text="seconds"></span>{{ __('s') }}</span>
@@ -131,17 +134,13 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
         </div>
 
         @if ($otpSent)
-            <flux:input
-                wire:model="otp"
-                type="text"
-                inputmode="numeric"
-                maxlength="6"
-                label="{{ __('One-Time Password') }}"
-                placeholder="{{ __('Enter 6-digit code') }}"
-                class="border-gray-300 focus:border-[#2EC4B6] focus:ring-[#2EC4B6] transition dark:border-zinc-600"
-            />
+            <div class="rounded-2xl border border-[#2EC4B6]/25 bg-[#2EC4B6]/5 p-4 dark:border-teal-500/25 dark:bg-teal-500/5 sm:p-5">
+                <p class="text-sm font-medium text-[#1F2937] dark:text-zinc-200">{{ __('Enter verification code') }}</p>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Each box accepts one digit and moves to the next automatically.') }}</p>
+                <x-auth.otp-inputs model="otp" :auto-submit="false" />
+            </div>
 
-            <flux:button type="button" variant="primary" wire:click="verifyOtp" wire:loading.attr="disabled" wire:target="verifyOtp" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white">
+            <flux:button type="button" variant="primary" wire:click="verifyOtp" wire:loading.attr="disabled" wire:target="verifyOtp" class="w-full bg-[#2EC4B6] text-white shadow-md shadow-[#2EC4B6]/25 transition hover:bg-[#1B5E20] hover:text-white">
                 <span wire:loading.remove wire:target="verifyOtp">{{ __('Verify OTP') }}</span>
                 <span wire:loading wire:target="verifyOtp">{{ __('Verifying…') }}</span>
             </flux:button>

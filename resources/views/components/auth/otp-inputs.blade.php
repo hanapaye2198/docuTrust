@@ -134,9 +134,11 @@
                 type="text"
                 maxlength="1"
                 inputmode="numeric"
+                pattern="[0-9]*"
                 autocomplete="one-time-code"
-                class="otp-input h-12 rounded-lg border-2 border-gray-300 bg-white text-center text-lg font-semibold text-[#1F2937] outline-none transition duration-200 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/30 motion-safe:focus:scale-[1.03] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:border-teal-400 dark:focus:ring-teal-500/30 sm:h-14 sm:text-xl"
+                class="otp-input h-12 rounded-xl border-2 border-gray-300 bg-white text-center text-lg font-semibold text-[#1F2937] outline-none shadow-sm shadow-zinc-200/60 transition duration-200 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/30 motion-safe:focus:scale-[1.03] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-none dark:focus:border-teal-400 dark:focus:ring-teal-500/30 sm:h-14 sm:text-xl"
                 :class="digits[index] !== '' ? 'border-[#2EC4B6] shadow-sm dark:border-teal-500/80' : ''"
+                :aria-label="`OTP digit ${index + 1}`"
                 required
             />
         </template>

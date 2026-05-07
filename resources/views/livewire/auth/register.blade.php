@@ -106,10 +106,8 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
                 <div>
                     <div class="flex items-center gap-3">
-                        <div
-                            class="rounded-xl border border-white/20 bg-white/10 p-2.5 backdrop-blur-md [&_.docutrust-logo-tile]:bg-transparent [&_.docutrust-logo-tile]:shadow-none [&_.docutrust-logo-tile]:ring-0 [&_.docutrust-logo-tile]:p-0 [&_.docutrust-logo-tile_img]:!filter-none"
-                        >
-                            <x-app-logo-icon class="size-8 fill-current text-white" />
+                        <div class="grid size-[3.25rem] shrink-0 place-items-stretch rounded-xl border border-white/20 bg-white/10 p-2.5 backdrop-blur-md">
+                            <x-app-logo-icon class="size-full fill-current text-white" />
                         </div>
                         <div>
                             <p class="text-lg font-semibold text-white">{{ config('app.name', 'DocuTrust') }}</p>
@@ -124,8 +122,8 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             <div class="mx-auto w-full max-w-2xl">
                 <div class="mb-4 rounded-2xl border border-[#2EC4B6]/30 bg-white/80 p-4 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/80 lg:hidden">
                     <div class="flex items-center gap-3">
-                        <div class="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#2EC4B6]/30 bg-[#2EC4B6]/10 p-2 dark:border-teal-400/30 dark:bg-teal-400/10">
-                            <x-app-logo-icon class="size-5 fill-current text-[#1B5E20] dark:text-teal-300" />
+                        <div class="grid size-11 shrink-0 place-items-stretch rounded-xl border border-[#2EC4B6]/30 bg-[#2EC4B6]/10 p-2 dark:border-teal-400/30 dark:bg-teal-400/10">
+                            <x-app-logo-icon class="size-full fill-current text-[#1B5E20] dark:text-teal-300" />
                         </div>
                         <div>
                             <p class="text-sm font-semibold text-[#1F2937] dark:text-zinc-100">{{ config('app.name', 'DocuTrust') }}</p>

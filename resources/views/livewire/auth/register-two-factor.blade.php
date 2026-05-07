@@ -287,8 +287,8 @@ new #[Layout('components.layouts.auth.register')] class extends Component
 
                 <div>
                     <div class="flex items-center gap-3">
-                        <div class="rounded-xl border border-white/20 bg-white/10 p-2.5 backdrop-blur-md">
-                            <x-app-logo-icon class="size-8 fill-current text-white" />
+                        <div class="grid size-[3.25rem] shrink-0 place-items-stretch rounded-xl border border-white/20 bg-white/10 p-2.5 backdrop-blur-md">
+                            <x-app-logo-icon class="size-full fill-current text-white" />
                         </div>
                         <div>
                             <p class="text-lg font-semibold text-white">{{ config('app.name', 'DocuTrust') }}</p>

@@ -23,7 +23,7 @@
                     class="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-zinc-50 in-data-flux-sidebar-collapsed-desktop:justify-center in-data-flux-sidebar-collapsed-desktop:gap-0 in-data-flux-sidebar-collapsed-desktop:px-0 dark:hover:bg-white/5"
                 >
                     <div class="flex aspect-square size-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-transparent dark:border-zinc-700">
-                        <x-app-logo-icon class="size-5 fill-zinc-700 text-zinc-700 dark:fill-zinc-200 dark:text-zinc-200" />
+                        <x-app-logo-icon class="size-full fill-zinc-700 text-zinc-700 dark:fill-zinc-200 dark:text-zinc-200" />
                     </div>
                     <span class="truncate text-[15px] font-bold tracking-tight text-zinc-900 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-zinc-100">
                         {{ config('app.name') }}

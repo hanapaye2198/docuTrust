@@ -259,16 +259,22 @@ header{
   text-decoration:none;
   flex-shrink:0;
 }
-/* PNG mark includes a black artboard; tile uses theme vars (+ .light-scheme fallback). */
+/* Square tile + equal padding so the mark is centered with even inset (width:auto PNGs no longer widen the box). */
 .logo-mark{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
+  display:grid;
+  justify-items:stretch;
+  align-items:stretch;
   line-height:0;
   background:var(--logo-tile-bg);
   border-radius:10px;
-  padding:2px;
+  padding:6px;
+  box-sizing:border-box;
+  width:52px;
+  height:52px;
   box-shadow:var(--logo-tile-shadow);
+}
+.logo-mark picture{
+  display:contents;
 }
 /* JS adds .light-scheme on <html> so tile + wordmark track system light mode reliably */
 html.light-scheme{
@@ -316,9 +322,10 @@ html.light-scheme .badge-float-icon svg{
   color: var(--teal-dark);
 }
 .logo-img{
-  height:40px;
-  width:auto;
-  max-width:200px;
+  width:100%;
+  height:100%;
+  max-width:100%;
+  max-height:100%;
   object-fit:contain;
   display:block;
   border-radius:8px;
@@ -370,9 +377,9 @@ html.light-scheme .footer-logo > .logo-text{
 }
 .footer-logo .logo-mark{
   box-shadow:none;
-}
-.footer-logo .logo-img{
-  height:36px;
+  width:46px;
+  height:46px;
+  padding:5px;
 }
 
 nav{display:flex;align-items:center;gap:28px}

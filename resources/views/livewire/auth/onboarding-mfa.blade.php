@@ -91,12 +91,12 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 }; ?>
 
 <x-auth.onboarding-wizard-shell :active-step="4">
-    <h1 class="text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Set up multi-factor authentication') }}</h1>
-    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Use your authenticator app to scan the QR code or enter the secret manually. Then enter the 6-digit code to confirm.') }}</p>
+    <h1 class="text-2xl font-semibold tracking-tight text-[#1F2937] dark:text-zinc-100 sm:text-3xl">{{ __('Set up multi-factor authentication') }}</h1>
+    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">{{ __('Scan the QR code with your authenticator app, then confirm with a 6-digit code to finish onboarding.') }}</p>
 
-    <x-auth-session-status class="mt-4 rounded-lg bg-[#2EC4B6]/10 px-3 py-2 text-center text-sm text-[#1B5E20] dark:text-teal-300" :status="session('status')" />
+    <x-auth-session-status class="mt-4 rounded-xl border border-[#2EC4B6]/25 bg-[#2EC4B6]/10 px-4 py-3 text-center text-sm text-[#1B5E20] dark:border-teal-500/30 dark:text-teal-300" :status="session('status')" />
 
-    <div class="mt-6 flex justify-center rounded-2xl border border-gray-200 bg-gray-50/80 p-4 transition duration-300 dark:border-zinc-700 dark:bg-zinc-800/50">
+    <div class="mt-6 flex justify-center rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4 transition duration-300 dark:border-zinc-700 dark:bg-zinc-800/50">
         <img
             src="{{ $qrInlineUrl }}"
             data-fallback-src="{{ $qrFallbackUrl }}"
@@ -104,26 +104,27 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             alt="{{ __('Authenticator QR code') }}"
             width="280"
             height="280"
-            class="rounded-xl border border-gray-200 bg-white p-2 shadow-sm transition duration-300 dark:border-zinc-600"
+            class="rounded-xl border border-gray-200 bg-white p-2 shadow-md shadow-zinc-300/40 transition duration-300 dark:border-zinc-600 dark:shadow-none"
         />
     </div>
 
-    <div class="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/80">
+    <div class="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/80 sm:p-5">
         <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-zinc-400">{{ __('Manual secret key') }}</p>
         <p class="mt-2 select-all break-all font-mono text-sm leading-relaxed text-[#1F2937] dark:text-zinc-200">{{ $manualSecret }}</p>
         <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-500">{{ __('Keep this private. Only enter it in a trusted authenticator app.') }}</p>
     </div>
 
     <form wire:submit="verify" class="mt-6 flex flex-col gap-6">
-        <div>
+        <div class="rounded-2xl border border-[#2EC4B6]/20 bg-[#2EC4B6]/5 p-4 dark:border-teal-500/25 dark:bg-teal-500/5 sm:p-5">
             <p class="text-sm font-medium text-[#1F2937] dark:text-zinc-200">{{ __('Authentication code') }}</p>
+            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Single-digit OTP fields with auto-focus and instant progression.') }}</p>
             <x-auth.otp-inputs model="code" :auto-submit="true" />
             <div class="mt-2">
                 <flux:error name="code" />
             </div>
         </div>
 
-        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="verify" class="w-full bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white">
+        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="verify" class="w-full bg-[#2EC4B6] text-white shadow-md shadow-[#2EC4B6]/25 transition hover:bg-[#1B5E20] hover:text-white">
             <span wire:loading.remove wire:target="verify">{{ __('Verify and continue') }}</span>
             <span wire:loading wire:target="verify">{{ __('Verifying…') }}</span>
         </flux:button>

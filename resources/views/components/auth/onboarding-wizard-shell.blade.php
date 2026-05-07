@@ -11,8 +11,9 @@
     ];
 @endphp
 
-<div class="min-h-screen overflow-x-clip">
-    <div class="grid min-h-screen lg:grid-cols-12">
+<div class="relative min-h-screen overflow-x-clip bg-[#F4F8FB] dark:bg-zinc-950">
+    <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_70%_at_50%_-10%,rgba(46,196,182,0.15),transparent_58%),radial-gradient(80%_45%_at_100%_0%,rgba(99,102,241,0.08),transparent_48%)] dark:bg-[radial-gradient(100%_55%_at_50%_-10%,rgba(45,212,191,0.16),transparent_56%),radial-gradient(70%_40%_at_100%_0%,rgba(99,102,241,0.12),transparent_48%)]"></div>
+    <div class="relative grid min-h-screen lg:grid-cols-12">
         <aside
             class="relative hidden overflow-hidden lg:col-span-5 lg:flex lg:flex-col lg:justify-end"
             style="background-image: linear-gradient(180deg, rgba(9, 9, 11, 0.35) 0%, rgba(9, 9, 11, 0.85) 100%), url('https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80'); background-size: cover; background-position: center;"
@@ -34,8 +35,8 @@
 
                 <div>
                     <div class="flex items-center gap-3">
-                        <div class="rounded-xl border border-white/20 bg-white/10 p-2.5 backdrop-blur-md">
-                            <x-app-logo-icon class="size-8 fill-current text-white" />
+                        <div class="grid size-[3.25rem] shrink-0 place-items-stretch rounded-xl border border-white/20 bg-white/10 p-2.5 backdrop-blur-md">
+                            <x-app-logo-icon class="size-full fill-current text-white" />
                         </div>
                         <div>
                             <p class="text-lg font-semibold text-white">{{ config('app.name', 'DocuTrust') }}</p>
@@ -46,12 +47,12 @@
             </div>
         </aside>
 
-        <main class="col-span-12 flex items-center bg-[#F8FAFC] px-4 py-6 transition-colors duration-300 dark:bg-zinc-950 sm:px-6 sm:py-8 lg:col-span-7 lg:px-10">
-            <div class="mx-auto w-full max-w-2xl">
-                <div class="mb-4 rounded-2xl border border-[#2EC4B6]/30 bg-white/80 p-4 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/80 lg:hidden">
+        <main class="col-span-12 flex items-center px-4 py-5 transition-colors duration-300 sm:px-6 sm:py-8 lg:col-span-7 lg:px-10">
+            <div class="mx-auto w-full max-w-3xl">
+                <div class="mb-4 rounded-2xl border border-[#2EC4B6]/25 bg-white/85 p-4 shadow-md shadow-teal-100/40 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/80 dark:shadow-none lg:hidden">
                     <div class="flex items-center gap-3">
-                        <div class="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#2EC4B6]/30 bg-[#2EC4B6]/10 p-2 dark:border-teal-400/30 dark:bg-teal-400/10">
-                            <x-app-logo-icon class="size-5 fill-current text-[#1B5E20] dark:text-teal-300" />
+                        <div class="grid size-11 shrink-0 place-items-stretch rounded-xl border border-[#2EC4B6]/30 bg-[#2EC4B6]/10 p-2 dark:border-teal-400/30 dark:bg-teal-400/10">
+                            <x-app-logo-icon class="size-full fill-current text-[#1B5E20] dark:text-teal-300" />
                         </div>
                         <div>
                             <p class="text-sm font-semibold text-[#1F2937] dark:text-zinc-100">{{ config('app.name', 'DocuTrust') }}</p>
@@ -60,9 +61,23 @@
                             </p>
                         </div>
                     </div>
+                    <div class="mt-3 grid grid-cols-4 gap-2">
+                        @foreach ($labels as $num => $label)
+                            @php
+                                $isCurrent = (int) $activeStep === $num;
+                                $isDone = (int) $activeStep > $num;
+                            @endphp
+                            <div @class([
+                                'h-1.5 rounded-full transition-all duration-300',
+                                'bg-[#2EC4B6]' => $isCurrent,
+                                'bg-emerald-400 dark:bg-emerald-500' => $isDone,
+                                'bg-zinc-200 dark:bg-zinc-700' => ! $isCurrent && ! $isDone,
+                            ])></div>
+                        @endforeach
+                    </div>
                 </div>
 
-                <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-xl shadow-gray-200/60 backdrop-blur transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/30 sm:p-7">
+                <div class="rounded-3xl border border-white/70 bg-white/92 p-4 shadow-[0_16px_50px_rgb(15_23_42/0.08)] ring-1 ring-zinc-950/[0.03] backdrop-blur-xl transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-900/92 dark:ring-white/[0.04] sm:p-7">
                     <nav class="mb-6 grid grid-cols-2 gap-2 text-[11px] leading-tight sm:grid-cols-4 sm:gap-3 sm:text-xs" aria-label="{{ __('Onboarding progress') }}">
                         @foreach ($labels as $num => $label)
                             @php
@@ -71,10 +86,10 @@
                             @endphp
                             <div
                                 @class([
-                                    'flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-lg border px-2.5 py-2.5 text-center transition-all duration-300 ease-out',
-                                    'border-[#2EC4B6] bg-[#2EC4B6] text-white shadow-md ring-2 ring-[#2EC4B6]/40 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900 motion-safe:scale-[1.02]' => $isCurrent,
-                                    'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/50 dark:text-emerald-200' => $isDone && ! $isCurrent,
-                                    'border-gray-200 bg-gray-100 text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' => ! $isCurrent && ! $isDone,
+                                    'flex min-h-[3.35rem] flex-col items-center justify-center gap-1 rounded-xl border px-2.5 py-2.5 text-center transition-all duration-300 ease-out',
+                                    'border-[#2EC4B6] bg-gradient-to-br from-[#2EC4B6] to-[#2AA596] text-white shadow-lg shadow-[#2EC4B6]/30 ring-2 ring-[#2EC4B6]/35 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900 motion-safe:scale-[1.02]' => $isCurrent,
+                                    'border-emerald-300/80 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/50 dark:text-emerald-200' => $isDone && ! $isCurrent,
+                                    'border-gray-200 bg-gray-50 text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' => ! $isCurrent && ! $isDone,
                                 ])
                             >
                                 @if ($isDone && ! $isCurrent)
