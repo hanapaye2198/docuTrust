@@ -9,11 +9,21 @@ use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
-
+use Illuminate\Support\Facades\Mail;
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+
+Route::get('/test-email', function () {
+
+    Mail::raw('DocuTrust email test successful!', function ($message) {
+        $message->to('hannah18.panaligan@gmail.com')
+                ->subject('DocuTrust Test');
+    });
+
+    return 'Email sent!';
+});
 Route::middleware('throttle:signing-links')->group(function () {
     Route::get('/sign/{token}', [SignDocumentController::class, 'show'])->name('sign.show');
     Route::post('/sign/{token}/unlock', [SignDocumentController::class, 'unlock'])->name('sign.unlock');

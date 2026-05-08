@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "compile": "hardhat compile",
-    "deploy:amoy": "hardhat run scripts/deploy-document-notary.js --network amoy"
+    "deploy:amoy": "hardhat run scripts/deploy.js --network amoy"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.8",
     "dotenv": "^16.4.5",
     "hardhat": "^2.24.3"

@@ -1,0 +1,77 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "E:\\GitHub\\docuTrust\\blockchain\\contracts\\DocumentNotary.sol": {
+      "lastModificationDate": 1777713384821,
+      "contentHash": "f7fee58cc9ee4cd55f1947b3f2f37e9a",
+      "sourceName": "contracts/DocumentNotary.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "DocumentNotary"
+      ]
+    },
+    "E:\\GitHub\\docuTrust\\blockchain\\contracts\\DocuTrustRegistry.sol": {
+      "lastModificationDate": 1778256919323,
+      "contentHash": "bdd91a81da3a2bd9c517deabbb4fe746",
+      "sourceName": "contracts/DocuTrustRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "DocuTrustRegistry"
+      ]
+    }
+  }
+}

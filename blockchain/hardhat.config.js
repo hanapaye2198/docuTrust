@@ -1,18 +1,17 @@
-import "dotenv/config";
-import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-toolbox";
+import dotenv from "dotenv";
 
-const privateKey = process.env.POLYGON_PRIVATE_KEY ?? "";
-const amoyRpcUrl = process.env.POLYGON_RPC_URL ?? "";
+dotenv.config();
 
-/** @type {import('hardhat/config').HardhatUserConfig} */
-const config = {
-  solidity: "0.8.20",
-  networks: {
-    amoy: {
-      url: amoyRpcUrl,
-      accounts: privateKey !== "" ? [privateKey] : [],
+const accounts = process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [];
+
+export default {
+    solidity: "0.8.20",
+    networks: {
+        amoy: {
+            url: process.env.POLYGON_RPC_URL || "https://rpc-amoy.polygon.technology",
+            accounts,
+            chainId: Number(process.env.CHAIN_ID || 80002),
+        },
     },
-  },
 };
-
-export default config;

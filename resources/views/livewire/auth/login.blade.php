@@ -158,7 +158,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                         $authInputClasses = 'rounded-xl border-gray-300 bg-white/95 text-base text-[#1F2937] placeholder:text-gray-400 transition duration-200 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/25 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-400';
                     @endphp
 
-                    <form wire:submit="login" class="mt-6 flex flex-col gap-5 sm:gap-6">
+                    <form wire:submit="login" class="mt-6 flex flex-col gap-5 sm:gap-6" x-data="{ showPassword: false }">
                         <flux:input
                             wire:model="email"
                             label="{{ __('Email address') }}"
@@ -175,16 +175,37 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                         />
 
                         <div class="space-y-2">
-                            <flux:input
-                                wire:model="password"
-                                label="{{ __('Password') }}"
-                                type="password"
-                                name="password"
-                                required
-                                autocomplete="current-password"
-                                placeholder="{{ __('Password') }}"
-                                class="{{ $authInputClasses }}"
-                            />
+                            <div>
+                                <label for="password" class="mb-1.5 block text-sm text-[#1F2937] dark:text-zinc-100">{{ __('Password') }}</label>
+                                <div class="relative">
+                                    <input
+                                        wire:model="password"
+                                        id="password"
+                                        name="password"
+                                        x-bind:type="showPassword ? 'text' : 'password'"
+                                        required
+                                        autocomplete="current-password"
+                                        placeholder="{{ __('Password') }}"
+                                        class="w-full rounded-xl border border-gray-300 bg-white/95 px-3 py-3 pr-12 text-base text-[#1F2937] outline-none transition duration-200 placeholder:text-gray-400 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/25 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                                    />
+                                    <button
+                                        type="button"
+                                        x-on:click="showPassword = !showPassword"
+                                        x-bind:aria-label="showPassword ? 'Hide password' : 'Show password'"
+                                        class="absolute inset-y-0 right-0 inline-flex min-h-11 items-center px-3 text-gray-500 transition hover:text-[#1B5E20] dark:text-zinc-400 dark:hover:text-teal-300"
+                                    >
+                                        <svg x-show="!showPassword" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5" aria-hidden="true">
+                                            <path d="M12 4.5c4.78 0 8.86 2.9 10.5 7.5-1.64 4.6-5.72 7.5-10.5 7.5S3.14 16.6 1.5 12C3.14 7.4 7.22 4.5 12 4.5Zm0 3a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" />
+                                        </svg>
+                                        <svg x-show="showPassword" x-cloak xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5" aria-hidden="true">
+                                            <path d="m3.53 2.47 18 18-1.06 1.06-2.49-2.5A12.27 12.27 0 0 1 12 20c-4.78 0-8.86-2.9-10.5-7.5a11.75 11.75 0 0 1 3.82-5.29L2.47 3.53 3.53 2.47Zm4.27 4.27A8.9 8.9 0 0 0 3.14 12c1.45 3.86 4.86 6 8.86 6 1.48 0 2.89-.3 4.17-.85l-1.9-1.9A4.5 4.5 0 0 1 8.75 9.7L7.8 8.74Zm12.32 5.26a8.88 8.88 0 0 0-4.84-5.3l1.5-1.5A10.57 10.57 0 0 1 22.5 12c-.44 1.23-1.07 2.34-1.85 3.3L19.12 12Z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                @error('password')
+                                    <p class="mt-1 text-xs text-red-400">{{ $message }}</p>
+                                @enderror
+                            </div>
 
                             @if (Route::has('password.request'))
                                 <x-text-link class="inline-flex min-h-10 items-center text-sm text-[#1B5E20] hover:text-[#2EC4B6] dark:text-teal-300 dark:hover:text-teal-200" href="{{ route('password.request') }}">
@@ -196,7 +217,11 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                         <flux:checkbox wire:model="remember" label="{{ __('Remember me') }}" class="accent-[#2EC4B6]" />
 
                         <div class="flex items-center justify-end">
-                            <flux:button type="submit" variant="primary" class="w-full rounded-lg bg-[#2EC4B6] text-white transition hover:bg-[#1B5E20] hover:text-white">
+                            <flux:button
+                                type="submit"
+                                variant="primary"
+                                class="w-full rounded-xl bg-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-teal-600 hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:bg-teal-300 disabled:text-white/80 dark:bg-teal-400 dark:text-zinc-900 dark:hover:bg-teal-300 dark:focus-visible:ring-teal-300 dark:focus-visible:ring-offset-zinc-950 dark:disabled:bg-teal-800 dark:disabled:text-zinc-400"
+                            >
                                 {{ __('Sign in') }}
                             </flux:button>
                         </div>
