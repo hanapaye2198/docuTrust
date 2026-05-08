@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\TrustedDeviceService;
 use App\Support\AuthSession;
 use Closure;
 use Illuminate\Http\Request;
@@ -33,7 +34,13 @@ class EnsureTwoFactorIsVerified
             return $next($request);
         }
 
-        if (! $user->two_factor_enabled) {
+        if (! $user->two_factor_enabled || $user->two_factor_confirmed_at === null) {
+            $request->session()->put(AuthSession::TWO_FACTOR_PASSED, true);
+
+            return $next($request);
+        }
+
+        if (app(TrustedDeviceService::class)->isTrusted($user, $request)) {
             $request->session()->put(AuthSession::TWO_FACTOR_PASSED, true);
 
             return $next($request);
@@ -42,6 +49,12 @@ class EnsureTwoFactorIsVerified
         if ((bool) $request->session()->get(AuthSession::TWO_FACTOR_PASSED, false)) {
             return $next($request);
         }
+
+        $request->session()->put([
+            AuthSession::PENDING_TWO_FACTOR_USER_ID => (int) $user->id,
+            AuthSession::PENDING_TWO_FACTOR_STARTED_AT => now()->timestamp,
+            AuthSession::TWO_FACTOR_PASSED => false,
+        ]);
 
         return redirect()->route('two-factor.challenge');
     }

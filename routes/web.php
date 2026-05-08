@@ -1,25 +1,26 @@
 <?php
 
-use App\Http\Controllers\DocumentPrepareController;
 use App\Http\Controllers\DocumentCertificateController;
 use App\Http\Controllers\DocumentDownloadController;
+use App\Http\Controllers\DocumentPrepareController;
 use App\Http\Controllers\DocumentStreamController;
+use App\Http\Controllers\EmailInfrastructureExampleController;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
-use Illuminate\Support\Facades\Mail;
+
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
-
 
 Route::get('/test-email', function () {
 
     Mail::raw('DocuTrust email test successful!', function ($message) {
         $message->to('hannah18.panaligan@gmail.com')
-                ->subject('DocuTrust Test');
+            ->subject('DocuTrust Test');
     });
 
     return 'Email sent!';
@@ -80,3 +81,12 @@ Route::middleware(['auth'])->group(function () {
 });
 
 require __DIR__.'/auth.php';
+
+if (app()->environment(['local', 'testing'])) {
+    Route::middleware('auth')->prefix('_examples/email')->group(function () {
+        Route::post('/otp', [EmailInfrastructureExampleController::class, 'sendOtp'])->name('examples.email.otp');
+        Route::post('/signer-invitation/{signer}', [EmailInfrastructureExampleController::class, 'sendSignerInvitation'])->name('examples.email.signer-invitation');
+        Route::post('/reminder/{signer}', [EmailInfrastructureExampleController::class, 'sendReminder'])->name('examples.email.reminder');
+        Route::post('/document-completed/{document}', [EmailInfrastructureExampleController::class, 'sendCompleted'])->name('examples.email.document-completed');
+    });
+}

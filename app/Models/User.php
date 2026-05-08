@@ -69,7 +69,9 @@ class User extends Authenticatable implements MustVerifyEmail
         'kyc_verified_at',
         'mfa_enabled',
         'two_factor_secret',
+        'two_factor_recovery_codes',
         'two_factor_enabled',
+        'two_factor_confirmed_at',
         'two_factor_onboarding_completed_at',
     ];
 
@@ -82,6 +84,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'remember_token',
         'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     /**
@@ -100,6 +103,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'role' => UserRole::class,
             'two_factor_enabled' => 'boolean',
             'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
             'two_factor_onboarding_completed_at' => 'datetime',
             'email_otp_expires_at' => 'datetime',
             'mobile_verified_at' => 'datetime',
@@ -225,6 +230,14 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * @return HasMany<Otp, $this>
+     */
+    public function otps(): HasMany
+    {
+        return $this->hasMany(Otp::class)->latest('created_at');
+    }
+
+    /**
      * @return HasMany<MobileOtp, $this>
      */
     public function mobileOtps(): HasMany
@@ -238,5 +251,13 @@ class User extends Authenticatable implements MustVerifyEmail
     public function ekycRecord(): HasOne
     {
         return $this->hasOne(EkycRecord::class)->latestOfMany();
+    }
+
+    /**
+     * @return HasMany<TrustedDevice, $this>
+     */
+    public function trustedDevices(): HasMany
+    {
+        return $this->hasMany(TrustedDevice::class)->latest('last_used_at');
     }
 }

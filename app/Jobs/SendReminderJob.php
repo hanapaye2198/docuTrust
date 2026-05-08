@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Mail\PendingSignatureReminderMail;
+use App\Mail\ReminderMail;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,11 +37,11 @@ class SendReminderJob implements ShouldQueue
                 return;
             }
 
-            Mail::to($signer->email)->send(
-                new PendingSignatureReminderMail(
-                    $document,
-                    $signer,
-                    route('sign.show', $token),
+            Mail::to($signer->email)->queue(
+                new ReminderMail(
+                    recipientName: $signer->name,
+                    documentTitle: $document->title,
+                    signUrl: route('sign.show', $token),
                 )
             );
         } catch (Throwable $throwable) {

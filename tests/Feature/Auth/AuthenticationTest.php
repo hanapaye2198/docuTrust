@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Services\TwoFactorAuthenticationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt as LivewireVolt;
 use Tests\TestCase;
@@ -29,7 +30,7 @@ class AuthenticationTest extends TestCase
 
         $response
             ->assertHasNoErrors()
-            ->assertRedirect(route('documents.index', absolute: false));
+            ->assertRedirect(route($user->homeRouteName(), absolute: false));
 
         $this->assertAuthenticated();
     }
@@ -44,6 +45,24 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertGuest();
+    }
+
+    public function test_users_with_confirmed_two_factor_are_redirected_to_challenge_after_password_login(): void
+    {
+        $user = User::factory()->create([
+            'two_factor_enabled' => true,
+            'two_factor_confirmed_at' => now(),
+            'two_factor_secret' => app(TwoFactorAuthenticationService::class)->generateSecretKey(),
+        ]);
+
+        $response = LivewireVolt::test('auth.login')
+            ->set('email', $user->email)
+            ->set('password', 'password')
+            ->call('login');
+
+        $response
+            ->assertHasNoErrors()
+            ->assertRedirect(route('two-factor.challenge', absolute: false));
     }
 
     public function test_users_can_logout(): void

@@ -19,4 +19,6 @@ final class AuthSession
     public const REGISTER_TWO_FACTOR_SECRET = 'auth.register_two_factor.pending_secret';
 
     public const REGISTER_TWO_FACTOR_USER_ID = 'auth.register_two_factor.pending_user_id';
+
+    public const TRUSTED_DEVICE_UNTIL = 'auth.two_factor.trusted_device_until';
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\MoveRootCaKeyToExternalStore;
 use App\Http\Middleware\AddSecurityHeaders;
 use App\Http\Middleware\EnsureOnboardingProgress;
 use App\Http\Middleware\EnsurePendingTwoFactorChallenge;
@@ -19,7 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
-        \App\Console\Commands\MoveRootCaKeyToExternalStore::class,
+        MoveRootCaKeyToExternalStore::class,
     ])
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->authenticateSessions();
@@ -34,6 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('web', [
             AddSecurityHeaders::class,
             EnsureOnboardingProgress::class,
+            EnsureTwoFactorIsVerified::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => route('login'));

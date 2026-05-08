@@ -111,9 +111,26 @@
                         />
                     </template>
                 </div>
-                <input x-ref="codeInput" id="code" name="code" type="hidden" value="{{ old('code') }}" required />
+                <input x-ref="codeInput" id="code" name="code" type="hidden" value="{{ old('code') }}" />
             </div>
+            <flux:input
+                name="recovery_code"
+                label="{{ __('Recovery code (optional)') }}"
+                type="text"
+                autocomplete="one-time-code"
+                placeholder="{{ __('xxxx-xxxx') }}"
+            />
+            <flux:checkbox
+                name="remember_device"
+                value="1"
+                label="{{ __('Trust this device for 30 days') }}"
+            />
             @error('code')
+                <p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                    {{ $message }}
+                </p>
+            @enderror
+            @error('recovery_code')
                 <p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
                     {{ $message }}
                 </p>
@@ -124,7 +141,7 @@
                 variant="primary"
                 type="submit"
                 class="w-full disabled:cursor-not-allowed disabled:opacity-50"
-                x-bind:disabled="! isComplete || submitted"
+                x-bind:disabled="submitted"
             >
                 {{ __('Verify and continue') }}
             </flux:button>

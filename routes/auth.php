@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\RecoveryCodesDownloadController;
 use App\Http\Controllers\Auth\ResetSessionController;
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\Auth\VerifyEmailController;
@@ -36,6 +37,7 @@ Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
     ->name('verification.verify');
 
 Route::middleware('auth')->group(function () {
+    Route::get('two-factor/recovery-codes/download', RecoveryCodesDownloadController::class)->name('two-factor.recovery-codes.download');
     Route::post('mobile/send-otp', [MobileVerificationController::class, 'sendOtp'])->name('mobile.send-otp');
     Route::post('mobile/verify-otp', [MobileVerificationController::class, 'verifyOtp'])->name('mobile.verify-otp');
 

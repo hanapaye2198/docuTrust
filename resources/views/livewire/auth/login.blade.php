@@ -59,18 +59,33 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
         Auth::login($user, $this->remember);
         Session::regenerate();
+
+        if ($user->two_factor_enabled && $user->two_factor_confirmed_at !== null) {
+            Session::put([
+                AuthSession::TWO_FACTOR_PASSED => false,
+                AuthSession::PENDING_TWO_FACTOR_USER_ID => (int) $user->id,
+                AuthSession::PENDING_TWO_FACTOR_REMEMBER => $this->remember,
+                AuthSession::PENDING_TWO_FACTOR_STARTED_AT => now()->timestamp,
+            ]);
+
+            $this->redirect(route('two-factor.challenge', absolute: false), navigate: true);
+
+            return;
+        }
+
+        Session::put(AuthSession::TWO_FACTOR_PASSED, true);
         Session::forget([
-            AuthSession::TWO_FACTOR_PASSED,
             AuthSession::PENDING_TWO_FACTOR_USER_ID,
             AuthSession::PENDING_TWO_FACTOR_REMEMBER,
             AuthSession::PENDING_TWO_FACTOR_STARTED_AT,
+            AuthSession::TRUSTED_DEVICE_UNTIL,
             AuthSession::REGISTER_PENDING_DATA,
             AuthSession::REGISTER_TWO_FACTOR_SECRET,
             AuthSession::REGISTER_TWO_FACTOR_USER_ID,
             AuthSession::SETUP_SECRET,
         ]);
 
-        $this->redirectIntended(default: route('documents.index', absolute: false), navigate: true);
+        $this->redirectIntended(default: route($user->homeRouteName(), absolute: false), navigate: true);
     }
 
     /**

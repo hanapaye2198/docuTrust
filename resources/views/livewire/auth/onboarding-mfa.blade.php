@@ -19,6 +19,11 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
     public string $manualSecret = '';
 
+    /**
+     * @var list<string>
+     */
+    public array $recoveryCodes = [];
+
     public function mount(TwoFactorAuthenticationService $twoFactor): void
     {
         $user = Auth::user();
@@ -73,9 +78,8 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             ]);
         }
 
+        $recoveryCodes = $twoFactor->enableForUser($user, $secret);
         $user->forceFill([
-            'two_factor_secret' => $secret,
-            'two_factor_enabled' => true,
             'mfa_enabled' => true,
             'two_factor_onboarding_completed_at' => now(),
             'onboarding_step' => OnboardingStep::Completed,
@@ -85,6 +89,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
         Session::put(AuthSession::TWO_FACTOR_PASSED, true);
         Session::forget(AuthSession::SETUP_SECRET);
+        $this->recoveryCodes = $recoveryCodes;
 
         $this->redirect(route('documents.index', absolute: false), navigate: true);
     }
@@ -129,4 +134,22 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             <span wire:loading wire:target="verify">{{ __('Verifying…') }}</span>
         </flux:button>
     </form>
+
+    @if ($recoveryCodes !== [])
+        <div class="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-700/40 dark:bg-amber-900/20 sm:p-5">
+            <p class="text-sm font-semibold text-amber-900 dark:text-amber-200">{{ __('Store your recovery codes securely') }}</p>
+            <p class="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">{{ __('Each code can be used once if you lose your authenticator device.') }}</p>
+            <div class="mt-3 grid grid-cols-2 gap-2 text-sm font-mono">
+                @foreach ($recoveryCodes as $recoveryCode)
+                    <span class="rounded-md bg-white px-2 py-1 text-amber-900 dark:bg-zinc-900 dark:text-amber-200">{{ $recoveryCode }}</span>
+                @endforeach
+            </div>
+            <a
+                href="{{ route('two-factor.recovery-codes.download') }}"
+                class="mt-4 inline-flex items-center rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-700"
+            >
+                {{ __('Download .txt') }}
+            </a>
+        </div>
+    @endif
 </x-auth.onboarding-wizard-shell>

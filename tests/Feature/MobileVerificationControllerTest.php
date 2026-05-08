@@ -21,7 +21,12 @@ class MobileVerificationControllerTest extends TestCase
         ]);
 
         $otpService = \Mockery::mock(OtpService::class);
-        $otpService->shouldReceive('generate')->once()->andReturn('123456');
+        $otpService->shouldReceive('generateOtp')->once()->andReturn([
+            'success' => true,
+            'code' => 'otp_generated',
+            'message' => 'OTP generated successfully.',
+            'data' => ['otp' => '123456'],
+        ]);
         app()->instance(OtpService::class, $otpService);
 
         $smsService = \Mockery::mock(SmsService::class);
@@ -49,7 +54,20 @@ class MobileVerificationControllerTest extends TestCase
         ]);
 
         $otpService = \Mockery::mock(OtpService::class);
-        $otpService->shouldReceive('verify')->once()->with($user, '123456')->andReturn(true);
+        $otpService->shouldReceive('verifyOtp')->once()->withArgs(function (...$args) use ($user): bool {
+            if (count($args) < 2) {
+                return false;
+            }
+
+            return $args[0] === '123456'
+                && $args[1] instanceof User
+                && $args[1]->is($user);
+        })->andReturn([
+            'success' => true,
+            'code' => 'otp_verified',
+            'message' => 'OTP verified successfully.',
+            'data' => [],
+        ]);
         app()->instance(OtpService::class, $otpService);
 
         $response = $this->actingAs($user)->postJson(route('mobile.verify-otp'), [
@@ -75,7 +93,12 @@ class MobileVerificationControllerTest extends TestCase
         ]);
 
         $otpService = \Mockery::mock(OtpService::class);
-        $otpService->shouldReceive('generate')->once()->andReturn('123456');
+        $otpService->shouldReceive('generateOtp')->once()->andReturn([
+            'success' => true,
+            'code' => 'otp_generated',
+            'message' => 'OTP generated successfully.',
+            'data' => ['otp' => '123456'],
+        ]);
         app()->instance(OtpService::class, $otpService);
 
         $smsService = \Mockery::mock(SmsService::class);

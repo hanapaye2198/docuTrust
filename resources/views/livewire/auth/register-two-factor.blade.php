@@ -118,9 +118,9 @@ new #[Layout('components.layouts.auth.register')] class extends Component
         RateLimiter::clear($this->verifyThrottleKey($actorId));
 
         if ($user !== null) {
+            $recoveryCodes = $twoFactor->enableForUser($user, $secret);
             $user->update([
-                'two_factor_secret' => $secret,
-                'two_factor_enabled' => true,
+                'two_factor_recovery_codes' => $recoveryCodes,
                 'two_factor_onboarding_completed_at' => now(),
             ]);
 
@@ -150,7 +150,9 @@ new #[Layout('components.layouts.auth.register')] class extends Component
             'role' => $role,
             'organization_role' => OrganizationRole::Admin,
             'two_factor_secret' => $secret,
+            'two_factor_recovery_codes' => $twoFactor->generateRecoveryCodes(),
             'two_factor_enabled' => true,
+            'two_factor_confirmed_at' => now(),
             'two_factor_onboarding_completed_at' => now(),
         ]);
 

@@ -3,14 +3,14 @@
 namespace App\Jobs;
 
 use App\Mail\DocumentCompletedMail;
-use App\Mail\DocumentSentToSignerMail;
 use App\Mail\DocumentSignedMail;
+use App\Mail\SignerInvitationMail;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 class SendDocumentEmailJob implements ShouldQueue
@@ -48,8 +48,13 @@ class SendDocumentEmailJob implements ShouldQueue
                     return;
                 }
 
-                Mail::to($this->recipientEmail)->send(
-                    new DocumentSentToSignerMail($document, $signer, $this->signUrl)
+                Mail::to($this->recipientEmail)->queue(
+                    new SignerInvitationMail(
+                        documentTitle: $document->title,
+                        senderName: $document->user?->name ?? config('app.name'),
+                        signUrl: $this->signUrl,
+                        expiresAt: $signer->expires_at?->toDateTimeString(),
+                    )
                 );
 
                 return;
@@ -61,13 +66,13 @@ class SendDocumentEmailJob implements ShouldQueue
                     return;
                 }
 
-                Mail::to($this->recipientEmail)->send(new DocumentSignedMail($document, $signer));
+                Mail::to($this->recipientEmail)->queue(new DocumentSignedMail($document, $signer));
 
                 return;
             }
 
             if ($this->type === self::TYPE_COMPLETED) {
-                Mail::to($this->recipientEmail)->send(new DocumentCompletedMail($document));
+                Mail::to($this->recipientEmail)->queue(new DocumentCompletedMail($document));
             }
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Queued document email failed', [

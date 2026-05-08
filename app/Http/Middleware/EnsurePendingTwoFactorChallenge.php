@@ -24,7 +24,7 @@ class EnsurePendingTwoFactorChallenge
             return redirect()->route('login');
         }
 
-        if (! $user->two_factor_enabled) {
+        if (! $user->two_factor_enabled || $user->two_factor_confirmed_at === null) {
             $request->session()->put(AuthSession::TWO_FACTOR_PASSED, true);
 
             return redirect()->route($user->homeRouteName());

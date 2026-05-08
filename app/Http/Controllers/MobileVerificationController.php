@@ -37,11 +37,27 @@ class MobileVerificationController extends Controller
         ])->save();
 
         try {
-            $otp = $otpService->generate($user);
+            $result = $otpService->generateOtp(
+                user: $user,
+                email: null,
+                mobileNumber: (string) $user->mobile_number,
+                purpose: 'mobile_verification',
+                channel: 'sms',
+            );
+
+            if (! $result['success']) {
+                $status = $result['code'] === 'cooldown_active' ? 429 : 422;
+
+                return response()->json([
+                    'message' => __($result['message']),
+                    'code' => $result['code'],
+                    'meta' => $result['data'],
+                ], $status);
+            }
 
             $smsService->send(
                 (string) $user->mobile_number,
-                __('Your DocuTrust verification code is :otp. It expires in 5 minutes.', ['otp' => $otp]),
+                __('Your DocuTrust verification code is :otp. It expires in 5 minutes.', ['otp' => (string) ($result['data']['otp'] ?? '')]),
             );
         } catch (Throwable $throwable) {
             report($throwable);
@@ -67,10 +83,18 @@ class MobileVerificationController extends Controller
             return response()->json(['message' => __('Unauthorized.')], 401);
         }
 
-        $isValid = $otpService->verify($user, $request->string('otp')->toString());
-        if (! $isValid) {
+        $result = $otpService->verifyOtp(
+            inputOtp: $request->string('otp')->toString(),
+            user: $user,
+            email: null,
+            mobileNumber: (string) $user->mobile_number,
+        );
+
+        if (! $result['success']) {
             return response()->json([
                 'message' => __('Invalid or expired OTP.'),
+                'code' => $result['code'],
+                'meta' => $result['data'],
             ], 422);
         }
 
