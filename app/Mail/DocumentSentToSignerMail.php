@@ -18,6 +18,8 @@ class DocumentSentToSignerMail extends Mailable
         public Document $document,
         public DocumentSigner $signer,
         public string $signUrl,
+        public bool $requiresDocumentPassword = false,
+        public ?string $documentPasswordHint = null,
     ) {}
 
     /**

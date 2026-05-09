@@ -4,8 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\SigningMethod;
 use App\Enums\SignatureFieldType;
-use Barryvdh\DomPDF\Facade\Pdf;
 use App\Livewire\DocumentSignersManager;
 use App\Models\Contact;
 use App\Models\Document;
@@ -13,6 +13,8 @@ use App\Models\DocumentSigner;
 use App\Models\SignatureField;
 use App\Models\TrustAuthorizationSession;
 use App\Models\User;
+use App\Support\AuthSession;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -49,6 +51,7 @@ class DocumentSignerWorkflowTest extends TestCase
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
             'remote_credential_id' => 'credential-ui-001',
         ]);
 
@@ -89,6 +92,7 @@ class DocumentSignerWorkflowTest extends TestCase
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
             'remote_credential_id' => 'credential-legacy-ui-001',
         ]);
 
@@ -126,6 +130,7 @@ class DocumentSignerWorkflowTest extends TestCase
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
             'remote_credential_id' => 'credential-legacy-001',
         ]);
 
@@ -148,6 +153,7 @@ class DocumentSignerWorkflowTest extends TestCase
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
             'remote_credential_id' => 'credential-legacy-002',
         ]);
 
@@ -352,6 +358,7 @@ class DocumentSignerWorkflowTest extends TestCase
         Livewire::test(DocumentSignersManager::class, ['documentId' => $document->id])
             ->set('name', 'Jane Doe')
             ->set('email', 'jane@example.com')
+            ->set('signingMethod', SigningMethod::EmailLink->value)
             ->call('addSigner')
             ->assertHasNoErrors();
 
@@ -383,6 +390,7 @@ class DocumentSignerWorkflowTest extends TestCase
             ->call('startEditingSigner', $signer->id)
             ->set('editingName', 'Jane Updated')
             ->set('editingEmail', 'updated@example.com')
+            ->set('editingSigningMethod', SigningMethod::EmailLink->value)
             ->call('saveSignerEdits')
             ->assertHasNoErrors();
 
@@ -433,6 +441,7 @@ class DocumentSignerWorkflowTest extends TestCase
         Livewire::test(DocumentSignersManager::class, ['documentId' => $document->id])
             ->set('name', 'Jane Doe')
             ->set('email', 'jane@example.com')
+            ->set('signingMethod', SigningMethod::EmailLink->value)
             ->call('addSigner')
             ->assertHasNoErrors();
 
@@ -454,6 +463,47 @@ class DocumentSignerWorkflowTest extends TestCase
             ->set('name', 'Ali');
 
         $this->assertCount(1, $component->get('contactSuggestions'));
+    }
+
+    public function test_owner_can_add_account_verified_signer_when_matching_user_exists(): void
+    {
+        $owner = User::factory()->create();
+        $linkedUser = User::factory()->signer()->create([
+            'organization_id' => $owner->organization_id,
+            'email' => 'member@example.com',
+        ]);
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Draft]);
+
+        $this->actingAs($owner);
+
+        Livewire::test(DocumentSignersManager::class, ['documentId' => $document->id])
+            ->set('name', 'Member User')
+            ->set('email', 'member@example.com')
+            ->set('signingMethod', SigningMethod::AccountVerified->value)
+            ->call('addSigner')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('document_signers', [
+            'document_id' => $document->id,
+            'email' => 'member@example.com',
+            'signing_method' => SigningMethod::AccountVerified->value,
+            'user_id' => $linkedUser->id,
+        ]);
+    }
+
+    public function test_owner_cannot_add_account_verified_signer_without_matching_user(): void
+    {
+        $owner = User::factory()->create();
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Draft]);
+
+        $this->actingAs($owner);
+
+        Livewire::test(DocumentSignersManager::class, ['documentId' => $document->id])
+            ->set('name', 'Missing User')
+            ->set('email', 'missing@example.com')
+            ->set('signingMethod', SigningMethod::AccountVerified->value)
+            ->call('addSigner')
+            ->assertHasErrors(['signingMethod']);
     }
 
     public function test_owner_can_send_for_signature_from_document_page(): void
@@ -571,6 +621,7 @@ class DocumentSignerWorkflowTest extends TestCase
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
             'remote_credential_id' => 'credential-start-001',
         ]);
 
@@ -606,6 +657,7 @@ class DocumentSignerWorkflowTest extends TestCase
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
         ]);
         $session = TrustAuthorizationSession::factory()->for($signer, 'signer')->create([
             'provider_name' => 'trust_service_provider',
@@ -633,5 +685,151 @@ class DocumentSignerWorkflowTest extends TestCase
         $this->assertSame('authorized', $session->status);
         $this->assertSame('sad-token-002', $session->sad);
         $this->assertNotNull($session->completed_at);
+    }
+
+    public function test_account_verified_signer_public_link_redirects_guest_to_login(): void
+    {
+        $owner = User::factory()->create();
+        $linkedUser = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'email' => $linkedUser->email,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+        ]);
+
+        $this->get(route('sign.show', $signer->access_token))
+            ->assertRedirect(route('login'));
+    }
+
+    public function test_account_verified_signer_public_link_rejects_wrong_authenticated_user(): void
+    {
+        $owner = User::factory()->create();
+        $linkedUser = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+        $wrongUser = User::factory()->signer()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'email' => $linkedUser->email,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+        ]);
+
+        $this->actingAs($wrongUser)
+            ->get(route('sign.show', $signer->access_token))
+            ->assertForbidden()
+            ->assertSee('Sign in with the assigned DocuTrust account to access this document.');
+    }
+
+    public function test_account_verified_signer_can_open_authenticated_signing_route(): void
+    {
+        $owner = User::factory()->create();
+        $linkedUser = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'name' => $linkedUser->name,
+            'email' => $linkedUser->email,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+        ]);
+
+        $this->actingAs($linkedUser)
+            ->withSession([AuthSession::TWO_FACTOR_PASSED => true])
+            ->get(route('sign.account.show', ['signerId' => $signer->id]))
+            ->assertOk()
+            ->assertSee($document->title);
+    }
+
+    public function test_account_verified_signer_can_complete_signing_through_authenticated_route(): void
+    {
+        $owner = User::factory()->create();
+        $linkedUser = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'name' => $linkedUser->name,
+            'email' => $linkedUser->email,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        $this->actingAs($linkedUser)
+            ->withSession([AuthSession::TWO_FACTOR_PASSED => true])
+            ->post(route('sign.account.store', ['signerId' => $signer->id]))
+            ->assertRedirect(route('sign.account.show', ['signerId' => $signer->id]));
+
+        $signer->refresh();
+        $document->refresh();
+        $this->assertSame(DocumentSignerStatus::Signed, $signer->status);
+        $this->assertSame(DocumentStatus::Completed, $document->status);
+    }
+
+    public function test_signer_documents_index_shows_assigned_documents(): void
+    {
+        $owner = User::factory()->create();
+        $linkedUser = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+        $assignedDocument = Document::factory()->for($owner)->create([
+            'title' => 'Assigned Contract',
+            'status' => DocumentStatus::Pending,
+        ]);
+        $otherDocument = Document::factory()->for($owner)->create([
+            'title' => 'Unassigned Contract',
+            'status' => DocumentStatus::Pending,
+        ]);
+
+        DocumentSigner::factory()->for($assignedDocument)->create([
+            'email' => $linkedUser->email,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+        ]);
+        DocumentSigner::factory()->for($otherDocument)->create();
+
+        $this->actingAs($linkedUser)
+            ->withSession([AuthSession::TWO_FACTOR_PASSED => true])
+            ->get(route('documents.index'))
+            ->assertOk()
+            ->assertSee('Assigned Contract')
+            ->assertDontSee('Unassigned Contract')
+            ->assertSee('Sign');
+    }
+
+    public function test_document_cannot_be_sent_when_account_verified_signer_is_not_linked(): void
+    {
+        Storage::fake('local');
+        $owner = User::factory()->create();
+        $path = 'documents/account-verified-source.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Draft, 'file_path' => $path]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => null,
+        ]);
+        SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $this->actingAs($owner)
+            ->post(route('documents.send', $document))
+            ->assertRedirect(route('documents.prepare', $document))
+            ->assertSessionHas('error', 'Signer '.$signer->name.' must be linked to a verified DocuTrust account before sending.');
     }
 }

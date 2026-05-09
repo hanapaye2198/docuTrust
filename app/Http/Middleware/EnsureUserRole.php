@@ -10,16 +10,19 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureUserRole
 {
-    public function handle(Request $request, Closure $next, string $roles): Response
+    public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         $user = $request->user();
         if (! $user instanceof User) {
             return redirect()->route('login');
         }
 
-        $allowed = collect(explode(',', $roles))
+        $allowed = collect($roles)
+            ->flatMap(fn (string $group) => explode(',', $group))
             ->map(fn (string $r): string => trim($r))
             ->map(fn (string $r): string => UserRole::from($r)->value)
+            ->filter()
+            ->unique()
             ->all();
 
         if (in_array($user->role->value, $allowed, true)) {

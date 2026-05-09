@@ -4,9 +4,11 @@ namespace App\Livewire;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\SigningMethod;
 use App\Models\Contact;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
@@ -23,6 +25,8 @@ class DocumentSignersManager extends Component
 
     public string $email = '';
 
+    public string $signingMethod = SigningMethod::EmailLink->value;
+
     public string $signingWorkflow = Document::SIGNING_WORKFLOW_SEQUENTIAL;
 
     public ?int $editingSignerId = null;
@@ -30,6 +34,8 @@ class DocumentSignersManager extends Component
     public string $editingName = '';
 
     public string $editingEmail = '';
+
+    public string $editingSigningMethod = SigningMethod::EmailLink->value;
 
     /**
      * @var array<int, array{id: int, name: string, email: string}>
@@ -58,9 +64,11 @@ class DocumentSignersManager extends Component
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
+            'signingMethod' => ['required', 'in:'.$this->allowedSigningMethods()],
         ]);
 
         $normalizedEmail = strtolower($validated['email']);
+        $signingMethod = SigningMethod::from((string) $validated['signingMethod']);
 
         $exists = $document->documentSigners()
             ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
@@ -73,10 +81,18 @@ class DocumentSignersManager extends Component
         }
 
         $nextOrder = (int) $document->documentSigners()->max('signing_order') + 1;
+        $linkedUserId = $this->resolveSignerUserId($document, $normalizedEmail, $signingMethod);
+        if ($signingMethod === SigningMethod::AccountVerified && $linkedUserId === null) {
+            $this->addError('signingMethod', __('This signer method requires an existing verified DocuTrust account in your organization.'));
+
+            return;
+        }
 
         $document->documentSigners()->create([
             'name' => $validated['name'],
             'email' => $normalizedEmail,
+            'signing_method' => $signingMethod,
+            'user_id' => $linkedUserId,
             'access_token' => (string) Str::uuid(),
             'status' => DocumentSignerStatus::Pending,
             'signing_order' => $this->signingWorkflow === Document::SIGNING_WORKFLOW_SEQUENTIAL
@@ -89,6 +105,7 @@ class DocumentSignersManager extends Component
         $this->forgetResolvedDocument();
 
         $this->reset('name', 'email');
+        $this->signingMethod = SigningMethod::EmailLink->value;
         $this->contactSuggestions = [];
         $this->dispatch('document-updated');
     }
@@ -139,11 +156,12 @@ class DocumentSignersManager extends Component
         $this->editingSignerId = $signer->id;
         $this->editingName = $signer->name;
         $this->editingEmail = $signer->email;
+        $this->editingSigningMethod = $signer->signingMethod()->value;
     }
 
     public function cancelEditingSigner(): void
     {
-        $this->reset('editingSignerId', 'editingName', 'editingEmail');
+        $this->reset('editingSignerId', 'editingName', 'editingEmail', 'editingSigningMethod');
     }
 
     public function saveSignerEdits(): void
@@ -158,9 +176,11 @@ class DocumentSignersManager extends Component
         $validated = $this->validate([
             'editingName' => ['required', 'string', 'max:255'],
             'editingEmail' => ['required', 'email', 'max:255'],
+            'editingSigningMethod' => ['required', 'in:'.$this->allowedSigningMethods()],
         ]);
 
         $normalizedEmail = strtolower($validated['editingEmail']);
+        $signingMethod = SigningMethod::from((string) $validated['editingSigningMethod']);
 
         $exists = $document->documentSigners()
             ->whereKeyNot($this->editingSignerId)
@@ -174,14 +194,23 @@ class DocumentSignersManager extends Component
         }
 
         $signer = $document->documentSigners()->whereKey($this->editingSignerId)->firstOrFail();
+        $linkedUserId = $this->resolveSignerUserId($document, $normalizedEmail, $signingMethod);
+        if ($signingMethod === SigningMethod::AccountVerified && $linkedUserId === null) {
+            $this->addError('editingSigningMethod', __('This signer method requires an existing verified DocuTrust account in your organization.'));
+
+            return;
+        }
+
         $signer->update([
             'name' => $validated['editingName'],
             'email' => $normalizedEmail,
+            'signing_method' => $signingMethod,
+            'user_id' => $linkedUserId,
         ]);
 
         $this->ensureContactForSigner($document->user_id, $validated['editingName'], $normalizedEmail);
         $this->forgetResolvedDocument();
-        $this->reset('editingSignerId', 'editingName', 'editingEmail');
+        $this->reset('editingSignerId', 'editingName', 'editingEmail', 'editingSigningMethod');
         $this->dispatch('document-updated');
     }
 
@@ -384,5 +413,23 @@ class DocumentSignersManager extends Component
             ->each(function (DocumentSigner $signer, int $index): void {
                 $signer->update(['signing_order' => $index + 1]);
             });
+    }
+
+    private function allowedSigningMethods(): string
+    {
+        return collect(SigningMethod::cases())->pluck('value')->implode(',');
+    }
+
+    private function resolveSignerUserId(Document $document, string $email, SigningMethod $signingMethod): ?int
+    {
+        if ($signingMethod !== SigningMethod::AccountVerified) {
+            return null;
+        }
+
+        return User::query()
+            ->where('organization_id', $document->organization_id)
+            ->whereRaw('LOWER(email) = ?', [strtolower($email)])
+            ->whereNotNull('email_verified_at')
+            ->value('id');
     }
 }

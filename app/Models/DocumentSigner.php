@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\DocumentSignerStatus;
+use App\Enums\SigningMethod;
+use Database\Factories\DocumentSignerFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DocumentSigner extends Model
 {
-    /** @use HasFactory<\Database\Factories\DocumentSignerFactory> */
+    /** @use HasFactory<DocumentSignerFactory> */
     use HasFactory;
 
     /**
@@ -21,6 +23,8 @@ class DocumentSigner extends Model
         'role_name',
         'name',
         'email',
+        'signing_method',
+        'user_id',
         'remote_credential_id',
         'access_token',
         'status',
@@ -50,6 +54,7 @@ class DocumentSigner extends Model
     {
         return [
             'status' => DocumentSignerStatus::class,
+            'signing_method' => SigningMethod::class,
             'signed_at' => 'datetime',
             'expires_at' => 'datetime',
             'signing_private_key' => 'encrypted',
@@ -62,6 +67,14 @@ class DocumentSigner extends Model
     public function document(): BelongsTo
     {
         return $this->belongsTo(Document::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     /**
@@ -94,5 +107,12 @@ class DocumentSigner extends Model
     public function trustAuthorizationSessions(): HasMany
     {
         return $this->hasMany(TrustAuthorizationSession::class, 'document_signer_id');
+    }
+
+    public function signingMethod(): SigningMethod
+    {
+        return $this->signing_method instanceof SigningMethod
+            ? $this->signing_method
+            : SigningMethod::EmailLink;
     }
 }

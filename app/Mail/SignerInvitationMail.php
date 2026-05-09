@@ -18,6 +18,8 @@ class SignerInvitationMail extends Mailable implements ShouldQueue
         public string $senderName,
         public string $signUrl,
         public ?string $expiresAt = null,
+        public bool $requiresDocumentPassword = false,
+        public ?string $documentPasswordHint = null,
     ) {}
 
     public function envelope(): Envelope

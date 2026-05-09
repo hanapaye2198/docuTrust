@@ -54,6 +54,8 @@ class SendDocumentEmailJob implements ShouldQueue
                         senderName: $document->user?->name ?? config('app.name'),
                         signUrl: $this->signUrl,
                         expiresAt: $signer->expires_at?->toDateTimeString(),
+                        requiresDocumentPassword: $document->hasAccessPassword(),
+                        documentPasswordHint: $document->access_password_hint,
                     )
                 );
 

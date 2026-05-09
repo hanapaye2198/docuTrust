@@ -50,7 +50,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($template !== null) {
             $this->authorize('update', $template);
             $this->templateId = $template->id;
-            $this->tagIds = $template->tags()->pluck('id')->all();
+            $this->tagIds = $template->tags()->pluck('tags.id')->all();
             $this->name = $template->name;
             $this->storedFilePaths = $template->files ?? [];
             $this->documentWorkflow = $template->document_workflow;

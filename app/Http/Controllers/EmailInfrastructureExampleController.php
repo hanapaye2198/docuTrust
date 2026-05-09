@@ -8,12 +8,17 @@ use App\Mail\SignerInvitationMail;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Services\OtpService;
+use App\Services\SigningMethodService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
 class EmailInfrastructureExampleController extends Controller
 {
+    public function __construct(
+        private readonly SigningMethodService $signingMethodService,
+    ) {}
+
     public function sendOtp(Request $request, OtpService $otpService): JsonResponse
     {
         $result = $otpService->generateForEmail(
@@ -34,8 +39,10 @@ class EmailInfrastructureExampleController extends Controller
         Mail::to($signer->email)->queue(new SignerInvitationMail(
             documentTitle: $document->title,
             senderName: $document->user?->name ?? config('app.name'),
-            signUrl: route('sign.show', $signer->access_token ?? (string) $signer->id),
+            signUrl: $this->signingMethodService->signerEntryUrl($signer),
             expiresAt: $signer->expires_at?->toDateTimeString(),
+            requiresDocumentPassword: $document->hasAccessPassword(),
+            documentPasswordHint: $document->access_password_hint,
         ));
 
         return response()->json(['message' => __('Signer invitation queued.')]);
@@ -51,7 +58,9 @@ class EmailInfrastructureExampleController extends Controller
         Mail::to($signer->email)->queue(new ReminderMail(
             recipientName: $signer->name,
             documentTitle: $document->title,
-            signUrl: route('sign.show', $signer->access_token ?? (string) $signer->id),
+            signUrl: $this->signingMethodService->signerEntryUrl($signer),
+            requiresDocumentPassword: $document->hasAccessPassword(),
+            documentPasswordHint: $document->access_password_hint,
         ));
 
         return response()->json(['message' => __('Reminder email queued.')]);

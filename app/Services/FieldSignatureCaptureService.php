@@ -10,6 +10,7 @@ use App\Models\SignatureField;
 use App\Trust\Authorization\TrustAuthorizationRequiredException;
 use App\Trust\Authorization\TrustAuthorizationSessionService;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class FieldSignatureCaptureService
@@ -19,6 +20,7 @@ class FieldSignatureCaptureService
         private readonly PkiSignatureService $pkiSignatureService,
         private readonly SignerCertificateService $signerCertificateService,
         private readonly TrustAuthorizationSessionService $trustAuthorizationSessionService,
+        private readonly SigningMethodService $signingMethodService,
     ) {}
 
     public function capture(
@@ -100,7 +102,7 @@ class FieldSignatureCaptureService
 
     private function ensureActiveTrustAuthorizationIfRequired(DocumentSigner $signer): void
     {
-        if ((string) config('docutrust.pki.signing_backend', 'app_managed') !== 'remote_managed') {
+        if (! $this->signingMethodService->requiresTrustAuthorization($signer)) {
             return;
         }
 
@@ -159,7 +161,7 @@ class FieldSignatureCaptureService
         }
 
         $extension = $matches['type'] === 'jpeg' ? 'jpg' : (string) $matches['type'];
-        $path = 'signatures/'.\Illuminate\Support\Str::uuid()->toString().'.'.$extension;
+        $path = 'signatures/'.Str::uuid()->toString().'.'.$extension;
         Storage::disk($this->secureDiskName())->put($path, $binary);
 
         return $path;

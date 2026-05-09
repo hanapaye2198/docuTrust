@@ -21,6 +21,16 @@
                         <p style="margin:0 0 20px 0;">
                             <a href="{{ $signUrl }}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:700;">{{ __('Review and Sign Securely') }}</a>
                         </p>
+                        @if ($requiresDocumentPassword)
+                            <div style="margin:0 0 20px 0;padding:14px 16px;border-radius:10px;background:#fff7ed;border:1px solid #fdba74;">
+                                <p style="margin:0 0 8px 0;font-size:13px;font-weight:700;color:#9a3412;">{{ __('This document requires a password before you can view or sign it.') }}</p>
+                                @if (is_string($documentPasswordHint) && $documentPasswordHint !== '')
+                                    <p style="margin:0;font-size:13px;color:#7c2d12;">{{ __('Password hint: :hint', ['hint' => $documentPasswordHint]) }}</p>
+                                @else
+                                    <p style="margin:0;font-size:13px;color:#7c2d12;">{{ __('Ask the sender for the document password if it was not shared with you separately.') }}</p>
+                                @endif
+                            </div>
+                        @endif
                         <p style="margin:0 0 8px 0;font-size:13px;color:#4b5563;">{{ __('Expiration notice: this secure signing link may expire based on sender settings.') }}</p>
                         @if ($expiresAt)
                             <p style="margin:0 0 8px 0;font-size:13px;color:#4b5563;">{{ __('Link expiration: :date', ['date' => $expiresAt]) }}</p>

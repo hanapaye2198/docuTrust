@@ -22,7 +22,13 @@ class DocumentPolicy
             return false;
         }
 
-        return $user->id === $document->user_id || $user->isOrganizationAdmin();
+        if ($user->id === $document->user_id || $user->isOrganizationAdmin()) {
+            return true;
+        }
+
+        return $document->documentSigners()
+            ->where('user_id', $user->id)
+            ->exists();
     }
 
     public function create(User $user): bool

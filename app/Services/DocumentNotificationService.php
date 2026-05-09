@@ -13,6 +13,10 @@ use App\Models\DocumentSigner;
 
 class DocumentNotificationService
 {
+    public function __construct(
+        private readonly SigningMethodService $signingMethodService,
+    ) {}
+
     public function handleDocumentSent(DocumentSent $event): void
     {
         $document = $event->document->loadMissing('documentSigners', 'user');
@@ -23,7 +27,7 @@ class DocumentNotificationService
                 signerId: $signer->id,
                 recipientEmail: $signer->email,
                 type: SendDocumentEmailJob::TYPE_SENT_TO_SIGNER,
-                signUrl: route('sign.show', $signer->access_token ?? (string) $signer->id),
+                signUrl: $this->signingMethodService->signerEntryUrl($signer),
             );
         }
 

@@ -17,6 +17,7 @@ class DocumentSigningWorkflowService
 {
     public function __construct(
         private readonly TrustAuthorizationSessionService $trustAuthorizationSessionService,
+        private readonly SigningMethodService $signingMethodService,
     ) {}
 
     public function canSignerModifyFields(Document $document, DocumentSigner $signer): ?string
@@ -145,7 +146,7 @@ class DocumentSigningWorkflowService
 
     private function ensureActiveTrustAuthorizationIfRequired(DocumentSigner $signer): void
     {
-        if ((string) config('docutrust.pki.signing_backend', 'app_managed') !== 'remote_managed') {
+        if (! $this->signingMethodService->requiresTrustAuthorization($signer)) {
             return;
         }
 

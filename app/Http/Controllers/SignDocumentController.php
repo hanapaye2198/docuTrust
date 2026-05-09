@@ -6,25 +6,28 @@ use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Http\Requests\StartTrustAuthorizationRequest;
 use App\Http\Requests\StoreDocumentSignatureRequest;
+use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
 use App\Models\TrustAuthorizationSession;
 use App\Services\DocumentSigningWorkflowService;
 use App\Services\FieldSignatureCaptureService;
+use App\Services\SigningMethodService;
 use App\Support\PublicPdfStream;
 use App\Trust\Authorization\TrustAuthorizationRequiredException;
 use App\Trust\Authorization\TrustAuthorizationWorkflowService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Throwable;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class SignDocumentController extends Controller
 {
@@ -34,6 +37,7 @@ class SignDocumentController extends Controller
         private readonly DocumentSigningWorkflowService $documentSigningWorkflowService,
         private readonly FieldSignatureCaptureService $fieldSignatureCaptureService,
         private readonly TrustAuthorizationWorkflowService $trustAuthorizationWorkflowService,
+        private readonly SigningMethodService $signingMethodService,
     ) {}
 
     private function secureDiskName(): string
@@ -41,75 +45,38 @@ class SignDocumentController extends Controller
         return (string) config('filesystems.docutrust_disk', 'local');
     }
 
-    public function show(string $token): View|Response
+    public function show(string $token): View|Response|RedirectResponse
     {
-        $signer = $this->resolveAccessibleSigner($token, [
-            'document' => fn ($q) => $q->withCount('signatureFields'),
-            'document.signatureFields',
-            'signatures' => fn ($q) => $q->whereNotNull('signature_field_id'),
-        ]);
-
+        $signer = $this->resolveAccessibleSigner($token, $this->signerDetailRelations());
         if ($signer === null) {
             return $this->invalidLinkResponse();
         }
 
-        $document = $signer->document;
-        $documentAccessProtected = $document->hasAccessPassword();
-        $documentAccessLocked = $documentAccessProtected && ! $this->documentAccessUnlocked($document);
-        $signingAvailabilityMessage = ! $documentAccessLocked
-            ? $this->documentSigningWorkflowService->canSignerModifyFields($document->loadMissing('documentSigners'), $signer)
-            : null;
-        $trustAuthorizationEnabled = (string) config('docutrust.pki.signing_backend', 'app_managed') === 'remote_managed';
-        $trustAuthorizationSession = $trustAuthorizationEnabled
-            ? $signer->trustAuthorizationSessions()
-                ->latest('id')
-                ->first()
-            : null;
-        $trustAuthorizationSessionActive = $trustAuthorizationSession !== null
-            && $trustAuthorizationSession->status === 'authorized'
-            && ($trustAuthorizationSession->expires_at === null || $trustAuthorizationSession->expires_at->isFuture());
-
-        $fieldsForSigner = $document->signatureFields
-            ->where('signer_id', $signer->id)
-            ->values();
-
-        $signedByFieldId = [];
-        foreach ($signer->signatures as $signature) {
-            if ($signature->signature_field_id === null) {
-                continue;
-            }
-
-            $signedByFieldId[$signature->signature_field_id] = $this->signatureFieldResponsePayload($signature, $signer);
+        $accessResponse = $this->authorizeSigningMethodAccess($signer);
+        if ($accessResponse !== null) {
+            return $accessResponse;
         }
 
-        return view('sign.show', [
-            'signer' => $signer,
-            'pdfUrl' => route('sign.document.pdf', $this->signerRouteToken($signer)),
-            'documentHasSignatureFields' => ($document->signature_fields_count > 0),
-            'fieldsJson' => $fieldsForSigner->map(fn (SignatureField $f) => [
-                'id' => $f->id,
-                'type' => $f->type->value,
-                'page_number' => $f->page_number ?? 1,
-                'position_data' => $f->position_data,
-            ])->values()->all(),
-            'signedByFieldId' => $signedByFieldId,
-            'documentAccessProtected' => $documentAccessProtected,
-            'documentAccessLocked' => $documentAccessLocked,
-            'documentAccessHint' => $document->access_password_hint,
-            'signingAvailabilityMessage' => $signingAvailabilityMessage,
-            'trustAuthorizationEnabled' => $trustAuthorizationEnabled,
-            'trustAuthorizationSession' => $trustAuthorizationSession !== null
-                ? $this->trustAuthorizationSessionPayload($trustAuthorizationSession)
-                : null,
-            'trustAuthorizationSessionActive' => $trustAuthorizationSessionActive,
-        ]);
+        return $this->renderSignView($signer, false);
     }
 
-    public function streamPdf(string $token): StreamedResponse|Response
+    public function showAuthenticated(int $signerId): View|Response|RedirectResponse
+    {
+        $signer = $this->resolveAuthenticatedSigner($signerId, $this->signerDetailRelations());
+
+        return $this->renderSignView($signer, true);
+    }
+
+    public function streamPdf(string $token): StreamedResponse|Response|RedirectResponse
     {
         $signer = $this->resolveAccessibleSigner($token, ['document']);
         if ($signer === null) {
             return $this->invalidLinkResponse();
+        }
+
+        $accessResponse = $this->authorizeSigningMethodAccess($signer);
+        if ($accessResponse !== null) {
+            return $accessResponse;
         }
 
         if (! $this->documentAccessUnlocked($signer->document)) {
@@ -123,12 +90,31 @@ class SignDocumentController extends Controller
         return PublicPdfStream::inlineResponse($document->sourcePdfPath() ?: $document->activeSigningPdfPath());
     }
 
+    public function streamAuthenticatedPdf(int $signerId): StreamedResponse|Response|RedirectResponse
+    {
+        $signer = $this->resolveAuthenticatedSigner($signerId, ['document']);
+
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                ->with('error', __('Enter the document password to continue.'));
+        }
+
+        $document = $signer->document;
+
+        return PublicPdfStream::inlineResponse($document->sourcePdfPath() ?: $document->activeSigningPdfPath());
+    }
+
     public function sign(string $token): RedirectResponse|Response
     {
         try {
             $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
             if ($signer === null) {
                 return $this->invalidLinkResponse();
+            }
+
+            $accessResponse = $this->authorizeSigningMethodAccess($signer);
+            if ($accessResponse !== null) {
+                return $accessResponse;
             }
 
             if (! $this->documentAccessUnlocked($signer->document)) {
@@ -184,15 +170,77 @@ class SignDocumentController extends Controller
         }
     }
 
+    public function signAuthenticated(int $signerId): RedirectResponse|Response
+    {
+        try {
+            $signer = $this->resolveAuthenticatedSigner($signerId, ['document.documentSigners']);
+
+            if (! $this->documentAccessUnlocked($signer->document)) {
+                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                    ->with('error', __('Enter the document password to continue.'));
+            }
+
+            $document = $signer->document;
+            $signingError = $this->canSignerModifyFields($document, $signer);
+            if ($signingError !== null) {
+                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                    ->with('error', $signingError);
+            }
+
+            if ($document->signatureFields()->exists()) {
+                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                    ->with('error', __('This document must be signed using the signature fields on the document.'));
+            }
+
+            $hasFieldsForSigner = $document->signatureFields()
+                ->where('signer_id', $signer->id)
+                ->exists();
+
+            if ($hasFieldsForSigner) {
+                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                    ->with('error', __('Please complete each signature field on the document.'));
+            }
+
+            $this->documentSigningWorkflowService->completeLegacySigning($signer, (string) request()->ip());
+
+            Log::channel('audit')->info('Document signed (authenticated flow)', [
+                'document_id' => $document->id,
+                'signer_id' => $signer->id,
+                'user_id' => Auth::id(),
+                'ip_address' => (string) request()->ip(),
+            ]);
+
+            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                ->with('status', __('Thank you. Your signature has been recorded.'));
+        } catch (TrustAuthorizationRequiredException $exception) {
+            return redirect()->route('sign.account.show', ['signerId' => $signerId])
+                ->with('error', $exception->getMessage());
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->error('Authenticated document signing failed', [
+                'signer_id' => $signerId,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+                'ip_address' => (string) request()->ip(),
+            ]);
+
+            return redirect()->route('sign.account.show', ['signerId' => $signerId])
+                ->with('error', __('Unable to complete signing right now. Please try again.'));
+        }
+    }
+
     public function storeSignature(
         StoreDocumentSignatureRequest $request,
         string $token,
-    ): RedirectResponse|Response|JsonResponse
-    {
+    ): RedirectResponse|Response|JsonResponse {
         try {
             $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
             if ($signer === null) {
                 return $this->invalidLinkResponse();
+            }
+
+            $accessResponse = $this->authorizeSigningMethodAccess($signer, $request->expectsJson());
+            if ($accessResponse !== null) {
+                return $accessResponse;
             }
 
             if (! $this->documentAccessUnlocked($signer->document)) {
@@ -301,6 +349,119 @@ class SignDocumentController extends Controller
         }
     }
 
+    public function storeAuthenticatedSignature(
+        StoreDocumentSignatureRequest $request,
+        int $signerId,
+    ): RedirectResponse|Response|JsonResponse {
+        try {
+            $signer = $this->resolveAuthenticatedSigner($signerId, ['document.documentSigners']);
+
+            if (! $this->documentAccessUnlocked($signer->document)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => __('Enter the document password to continue.'),
+                    ], 423);
+                }
+
+                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                    ->with('error', __('Enter the document password to continue.'));
+            }
+
+            $document = $signer->document;
+
+            $signingError = $this->canSignerModifyFields($document, $signer);
+            if ($signingError !== null) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => $signingError,
+                    ], 422);
+                }
+
+                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                    ->with('error', $signingError);
+            }
+
+            $field = SignatureField::query()->findOrFail($request->validated('signature_field_id'));
+            $captureResult = $this->fieldSignatureCaptureService->capture(
+                $signer,
+                $field,
+                $request->validated('submitted_value'),
+                $request->validated('signature_image'),
+                (string) $request->ip(),
+            );
+            $this->documentSigningWorkflowService->completeSignerIfAllFieldsSigned(
+                $captureResult->signer,
+                $captureResult->document,
+                (string) $request->ip(),
+            );
+
+            if ($request->expectsJson()) {
+                $document = $captureResult->document->fresh();
+                $signer = $captureResult->signer->fresh();
+                $signature = $captureResult->signature->fresh();
+
+                $signedCount = Signature::query()
+                    ->where('document_id', $document->id)
+                    ->where('signer_id', $signer->id)
+                    ->whereNotNull('signature_field_id')
+                    ->count();
+
+                $assignedCount = $document->signatureFields()
+                    ->where('signer_id', $signer->id)
+                    ->count();
+
+                return response()->json([
+                    'message' => $captureResult->message,
+                    'field' => [
+                        'id' => $field->id,
+                        ...$this->signatureFieldResponsePayload($signature, $signer, true),
+                    ],
+                    'summary' => [
+                        'assigned' => $assignedCount,
+                        'completed' => $signedCount,
+                        'remaining' => max(0, $assignedCount - $signedCount),
+                        'progress_percent' => $assignedCount > 0
+                            ? (int) round(($signedCount / $assignedCount) * 100)
+                            : 0,
+                        'can_edit_fields' => $signer->status === DocumentSignerStatus::Pending
+                            && $document->status === DocumentStatus::Pending,
+                        'signer_status' => $signer->status->value,
+                        'document_status' => $document->status->value,
+                    ],
+                ]);
+            }
+
+            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                ->with('status', $captureResult->message);
+        } catch (TrustAuthorizationRequiredException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
+
+            return redirect()->route('sign.account.show', ['signerId' => $signerId])
+                ->with('error', $exception->getMessage());
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->error('Authenticated field signature submission failed', [
+                'signer_id' => $signerId,
+                'signature_field_id' => $request->input('signature_field_id'),
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+                'ip_address' => (string) $request->ip(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => __('Unable to save your signature right now. Please try again.'),
+                ], 500);
+            }
+
+            return redirect()->route('sign.account.show', ['signerId' => $signerId])
+                ->with('error', __('Unable to save your signature right now. Please try again.'));
+        }
+    }
+
     public function streamSignatureImage(string $token, SignatureField $signatureField): StreamedResponse|Response
     {
         $signer = $this->resolveAccessibleSigner($token);
@@ -337,11 +498,50 @@ class SignDocumentController extends Controller
         ]);
     }
 
+    public function streamAuthenticatedSignatureImage(int $signerId, SignatureField $signatureField): StreamedResponse|Response|RedirectResponse
+    {
+        $signer = $this->resolveAuthenticatedSigner($signerId);
+
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                ->with('error', __('Enter the document password to continue.'));
+        }
+
+        if ($signatureField->document_id !== $signer->document_id || $signatureField->signer_id !== $signer->id) {
+            abort(404);
+        }
+
+        $signature = Signature::query()
+            ->where('signature_field_id', $signatureField->id)
+            ->first();
+
+        if ($signature === null || ! is_string($signature->signature_path) || $signature->signature_path === '') {
+            abort(404);
+        }
+
+        $disk = Storage::disk($this->secureDiskName());
+        if (! $disk->exists($signature->signature_path)) {
+            abort(404);
+        }
+
+        $content = $disk->get($signature->signature_path);
+
+        return response($content, 200, [
+            'Content-Type' => $disk->mimeType($signature->signature_path) ?: 'application/octet-stream',
+            'Cache-Control' => 'private, max-age=600, stale-while-revalidate=3600',
+        ]);
+    }
+
     public function startTrustAuthorization(StartTrustAuthorizationRequest $request, string $token): JsonResponse|Response
     {
         $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
         if ($signer === null) {
             return $this->invalidLinkResponse();
+        }
+
+        $accessResponse = $this->authorizeSigningMethodAccess($signer, true);
+        if ($accessResponse !== null) {
+            return $accessResponse;
         }
 
         if (! $this->documentAccessUnlocked($signer->document)) {
@@ -382,11 +582,58 @@ class SignDocumentController extends Controller
         }
     }
 
+    public function startAuthenticatedTrustAuthorization(StartTrustAuthorizationRequest $request, int $signerId): JsonResponse|Response
+    {
+        $signer = $this->resolveAuthenticatedSigner($signerId, ['document.documentSigners']);
+
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return response()->json([
+                'message' => __('Enter the document password to continue.'),
+            ], 423);
+        }
+
+        $signingError = $this->canSignerModifyFields($signer->document, $signer);
+        if ($signingError !== null) {
+            return response()->json([
+                'message' => $signingError,
+            ], 422);
+        }
+
+        try {
+            $session = $this->trustAuthorizationWorkflowService->startForSigner(
+                $signer,
+                (int) ($request->validated('num_signatures') ?? 1),
+            );
+
+            return response()->json([
+                'message' => $session->status === 'pending'
+                    ? __('Trust authorization started and is awaiting completion.')
+                    : __('Trust authorization completed.'),
+                'session' => $this->trustAuthorizationSessionPayload($session),
+            ]);
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->error('Authenticated trust authorization start failed', [
+                'signer_id' => $signerId,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => __('Unable to start trust authorization right now. Please try again.'),
+            ], 500);
+        }
+    }
+
     public function pollTrustAuthorization(string $token, TrustAuthorizationSession $session): JsonResponse|Response
     {
         $signer = $this->resolveAccessibleSigner($token, ['document.documentSigners']);
         if ($signer === null) {
             return $this->invalidLinkResponse();
+        }
+
+        $accessResponse = $this->authorizeSigningMethodAccess($signer, true);
+        if ($accessResponse !== null) {
+            return $accessResponse;
         }
 
         if (! $this->documentAccessUnlocked($signer->document)) {
@@ -422,11 +669,53 @@ class SignDocumentController extends Controller
         }
     }
 
+    public function pollAuthenticatedTrustAuthorization(int $signerId, TrustAuthorizationSession $session): JsonResponse|Response
+    {
+        $signer = $this->resolveAuthenticatedSigner($signerId, ['document.documentSigners']);
+
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return response()->json([
+                'message' => __('Enter the document password to continue.'),
+            ], 423);
+        }
+
+        if ($session->document_signer_id !== $signer->id) {
+            abort(404);
+        }
+
+        try {
+            $session = $this->trustAuthorizationWorkflowService->pollSession($session);
+
+            return response()->json([
+                'message' => $session->status === 'pending'
+                    ? __('Trust authorization is still pending.')
+                    : __('Trust authorization completed.'),
+                'session' => $this->trustAuthorizationSessionPayload($session),
+            ]);
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->error('Authenticated trust authorization poll failed', [
+                'signer_id' => $signerId,
+                'session_id' => $session->id,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => __('Unable to check trust authorization right now. Please try again.'),
+            ], 500);
+        }
+    }
+
     public function unlock(Request $request, string $token): JsonResponse|RedirectResponse|Response
     {
         $signer = $this->resolveAccessibleSigner($token, ['document']);
         if ($signer === null) {
             return $this->invalidLinkResponse();
+        }
+
+        $accessResponse = $this->authorizeSigningMethodAccess($signer, $request->expectsJson());
+        if ($accessResponse !== null) {
+            return $accessResponse;
         }
 
         $document = $signer->document;
@@ -462,6 +751,42 @@ class SignDocumentController extends Controller
             ->with('status', __('Document unlocked.'));
     }
 
+    public function unlockAuthenticated(Request $request, int $signerId): JsonResponse|RedirectResponse|Response
+    {
+        $signer = $this->resolveAuthenticatedSigner($signerId, ['document']);
+        $document = $signer->document;
+
+        if (! $document->hasAccessPassword()) {
+            return redirect()->route('sign.account.show', ['signerId' => $signer->id]);
+        }
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'max:255'],
+        ]);
+
+        if (! Hash::check((string) $validated['password'], (string) $document->access_password_hash)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => __('The document password is incorrect.'),
+                ], 422);
+            }
+
+            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                ->with('error', __('The document password is incorrect.'));
+        }
+
+        session()->put($this->documentPasswordSessionKey($document), (string) $document->access_password_hash);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => __('Document unlocked.'),
+            ]);
+        }
+
+        return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+            ->with('status', __('Document unlocked.'));
+    }
+
     /**
      * @param  array<int|string, mixed>  $with
      */
@@ -486,6 +811,34 @@ class SignDocumentController extends Controller
         return $signer->access_token ?? (string) $signer->id;
     }
 
+    /**
+     * @return array<int|string, mixed>
+     */
+    private function signerDetailRelations(): array
+    {
+        return [
+            'document' => fn ($q) => $q->withCount('signatureFields'),
+            'document.signatureFields',
+            'signatures' => fn ($q) => $q->whereNotNull('signature_field_id'),
+        ];
+    }
+
+    private function resolveAuthenticatedSigner(int $signerId, array $with = []): DocumentSigner
+    {
+        $userId = Auth::id();
+
+        abort_if($userId === null, 401);
+
+        return DocumentSigner::query()
+            ->when($with !== [], fn ($query) => $query->with($with))
+            ->whereKey($signerId)
+            ->where('user_id', $userId)
+            ->whereHas('document', function ($query): void {
+                $query->whereIn('status', [DocumentStatus::Pending, DocumentStatus::Completed]);
+            })
+            ->firstOrFail();
+    }
+
     private function invalidLinkResponse(): Response
     {
         return response()->view('sign.invalid', [
@@ -493,7 +846,7 @@ class SignDocumentController extends Controller
         ], 403);
     }
 
-    private function documentAccessUnlocked(\App\Models\Document $document): bool
+    private function documentAccessUnlocked(Document $document): bool
     {
         if (! $document->hasAccessPassword()) {
             return true;
@@ -505,7 +858,7 @@ class SignDocumentController extends Controller
         );
     }
 
-    private function documentPasswordSessionKey(\App\Models\Document $document): string
+    private function documentPasswordSessionKey(Document $document): string
     {
         return self::DOCUMENT_UNLOCK_SESSION_PREFIX.$document->id;
     }
@@ -517,9 +870,46 @@ class SignDocumentController extends Controller
         ], 423);
     }
 
-    private function canSignerModifyFields(\App\Models\Document $document, DocumentSigner $signer): ?string
+    private function canSignerModifyFields(Document $document, DocumentSigner $signer): ?string
     {
         return $this->documentSigningWorkflowService->canSignerModifyFields($document, $signer);
+    }
+
+    private function authorizeSigningMethodAccess(DocumentSigner $signer, bool $expectsJson = false): Response|RedirectResponse|JsonResponse|null
+    {
+        if (! $this->signingMethodService->requiresAuthenticatedAccount($signer)) {
+            return null;
+        }
+
+        if ($signer->user_id === null) {
+            return $expectsJson
+                ? response()->json([
+                    'message' => __('This signer is not linked to a verified DocuTrust account.'),
+                ], 422)
+                : response()->view('sign.invalid', [
+                    'message' => __('This signer is not linked to a verified DocuTrust account.'),
+                ], 422);
+        }
+
+        if (auth()->guest()) {
+            return $expectsJson
+                ? response()->json([
+                    'message' => __('Sign in with the assigned DocuTrust account to access this document.'),
+                ], 401)
+                : redirect()->guest(route('login'));
+        }
+
+        if ($this->signingMethodService->canAuthenticatedUserAccessSigner($signer, auth()->user())) {
+            return null;
+        }
+
+        return $expectsJson
+            ? response()->json([
+                'message' => __('Sign in with the assigned DocuTrust account to access this document.'),
+            ], 403)
+            : response()->view('sign.invalid', [
+                'message' => __('Sign in with the assigned DocuTrust account to access this document.'),
+            ], 403);
     }
 
     /**
@@ -543,20 +933,80 @@ class SignDocumentController extends Controller
     /**
      * @return array{image_url: ?string, submitted_value: ?string}
      */
-    private function signatureFieldResponsePayload(Signature $signature, DocumentSigner $signer): array
+    private function signatureFieldResponsePayload(Signature $signature, DocumentSigner $signer, bool $authenticated = false): array
     {
         $imageUrl = null;
 
         if (is_string($signature->signature_path) && $signature->signature_path !== '' && $signature->signature_field_id !== null) {
-            $imageUrl = route('sign.signature.image', [
-                'token' => $this->signerRouteToken($signer),
-                'signatureField' => $signature->signature_field_id,
-            ]).'?v='.$signature->updated_at?->timestamp;
+            $imageUrl = $authenticated
+                ? route('sign.account.signature.image', [
+                    'signerId' => $signer->id,
+                    'signatureField' => $signature->signature_field_id,
+                ]).'?v='.$signature->updated_at?->timestamp
+                : route('sign.signature.image', [
+                    'token' => $this->signerRouteToken($signer),
+                    'signatureField' => $signature->signature_field_id,
+                ]).'?v='.$signature->updated_at?->timestamp;
         }
 
         return [
             'image_url' => $imageUrl,
             'submitted_value' => is_string($signature->submitted_value) ? $signature->submitted_value : null,
         ];
+    }
+
+    private function renderSignView(DocumentSigner $signer, bool $authenticated): View
+    {
+        $document = $signer->document;
+        $documentAccessProtected = $document->hasAccessPassword();
+        $documentAccessLocked = $documentAccessProtected && ! $this->documentAccessUnlocked($document);
+        $signingAvailabilityMessage = ! $documentAccessLocked
+            ? $this->documentSigningWorkflowService->canSignerModifyFields($document->loadMissing('documentSigners'), $signer)
+            : null;
+        $trustAuthorizationEnabled = $this->signingMethodService->requiresTrustAuthorization($signer);
+        $trustAuthorizationSession = $trustAuthorizationEnabled
+            ? $signer->trustAuthorizationSessions()->latest('id')->first()
+            : null;
+        $trustAuthorizationSessionActive = $trustAuthorizationSession !== null
+            && $trustAuthorizationSession->status === 'authorized'
+            && ($trustAuthorizationSession->expires_at === null || $trustAuthorizationSession->expires_at->isFuture());
+
+        $fieldsForSigner = $document->signatureFields
+            ->where('signer_id', $signer->id)
+            ->values();
+
+        $signedByFieldId = [];
+        foreach ($signer->signatures as $signature) {
+            if ($signature->signature_field_id === null) {
+                continue;
+            }
+
+            $signedByFieldId[$signature->signature_field_id] = $this->signatureFieldResponsePayload($signature, $signer, $authenticated);
+        }
+
+        return view('sign.show', [
+            'signer' => $signer,
+            'pdfUrl' => $authenticated
+                ? route('sign.account.document.pdf', ['signerId' => $signer->id])
+                : route('sign.document.pdf', $this->signerRouteToken($signer)),
+            'documentHasSignatureFields' => ($document->signature_fields_count > 0),
+            'fieldsJson' => $fieldsForSigner->map(fn (SignatureField $f) => [
+                'id' => $f->id,
+                'type' => $f->type->value,
+                'page_number' => $f->page_number ?? 1,
+                'position_data' => $f->position_data,
+            ])->values()->all(),
+            'signedByFieldId' => $signedByFieldId,
+            'documentAccessProtected' => $documentAccessProtected,
+            'documentAccessLocked' => $documentAccessLocked,
+            'documentAccessHint' => $document->access_password_hint,
+            'signingAvailabilityMessage' => $signingAvailabilityMessage,
+            'trustAuthorizationEnabled' => $trustAuthorizationEnabled,
+            'trustAuthorizationSession' => $trustAuthorizationSession !== null
+                ? $this->trustAuthorizationSessionPayload($trustAuthorizationSession)
+                : null,
+            'trustAuthorizationSessionActive' => $trustAuthorizationSessionActive,
+            'authenticatedSigning' => $authenticated,
+        ]);
     }
 }

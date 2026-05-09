@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\SigningMethod;
 use App\Enums\DocumentStatus;
 use App\Events\DocumentSent;
 use App\Jobs\GenerateDocumentPdfJob;
@@ -46,6 +47,15 @@ class SendDocumentForSignatureService
 
         if (! $document->workflowConfigurationIsValid()) {
             throw new RuntimeException(__('Sequential signing requires every signer to have a unique signing order.'));
+        }
+
+        $accountLinkedSignerMissingUser = $document->documentSigners
+            ->first(fn (DocumentSigner $signer): bool => $signer->signingMethod() === SigningMethod::AccountVerified && $signer->user_id === null);
+
+        if ($accountLinkedSignerMissingUser !== null) {
+            throw new RuntimeException(__('Signer :name must be linked to a verified DocuTrust account before sending.', [
+                'name' => $accountLinkedSignerMissingUser->name,
+            ]));
         }
 
         $document->update([

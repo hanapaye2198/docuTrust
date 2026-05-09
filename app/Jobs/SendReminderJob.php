@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Mail\ReminderMail;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Services\SigningMethodService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -41,7 +42,9 @@ class SendReminderJob implements ShouldQueue
                 new ReminderMail(
                     recipientName: $signer->name,
                     documentTitle: $document->title,
-                    signUrl: route('sign.show', $token),
+                    signUrl: app(SigningMethodService::class)->signerEntryUrl($signer),
+                    requiresDocumentPassword: $document->hasAccessPassword(),
+                    documentPasswordHint: $document->access_password_hint,
                 )
             );
         } catch (Throwable $throwable) {

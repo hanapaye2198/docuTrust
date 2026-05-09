@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\DocumentSignerStatus;
+use App\Enums\SigningMethod;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -22,6 +23,8 @@ class DocumentSignerFactory extends Factory
             'document_id' => Document::factory(),
             'name' => fake()->name(),
             'email' => fake()->safeEmail(),
+            'signing_method' => SigningMethod::EmailLink,
+            'user_id' => null,
             'remote_credential_id' => 'credential-'.Str::lower((string) Str::uuid()),
             'access_token' => (string) Str::uuid(),
             'status' => DocumentSignerStatus::Pending,

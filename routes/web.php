@@ -36,6 +36,17 @@ Route::middleware('throttle:signing-links')->group(function () {
     Route::get('/sign/{token}/trust/authorize/{session}', [SignDocumentController::class, 'pollTrustAuthorization'])->name('sign.trust.authorize.poll');
     Route::post('/sign/{token}/complete', [SignDocumentController::class, 'complete'])->name('sign.complete');
 });
+
+Route::middleware(['auth', 'role:admin,signer'])->group(function () {
+    Route::get('/account-sign/{signerId}', [SignDocumentController::class, 'showAuthenticated'])->name('sign.account.show');
+    Route::post('/account-sign/{signerId}/unlock', [SignDocumentController::class, 'unlockAuthenticated'])->name('sign.account.unlock');
+    Route::get('/account-sign/{signerId}/pdf', [SignDocumentController::class, 'streamAuthenticatedPdf'])->name('sign.account.document.pdf');
+    Route::get('/account-sign/{signerId}/signature-image/{signatureField}', [SignDocumentController::class, 'streamAuthenticatedSignatureImage'])->name('sign.account.signature.image');
+    Route::post('/account-sign/{signerId}', [SignDocumentController::class, 'signAuthenticated'])->name('sign.account.store');
+    Route::post('/account-sign/{signerId}/signature', [SignDocumentController::class, 'storeAuthenticatedSignature'])->name('sign.account.signature.store');
+    Route::post('/account-sign/{signerId}/trust/authorize', [SignDocumentController::class, 'startAuthenticatedTrustAuthorization'])->name('sign.account.trust.authorize');
+    Route::get('/account-sign/{signerId}/trust/authorize/{session}', [SignDocumentController::class, 'pollAuthenticatedTrustAuthorization'])->name('sign.account.trust.authorize.poll');
+});
 Volt::route('verify', 'pages.verify')->name('verify.index');
 
 Route::middleware(['auth', 'role:admin'])->group(function () {

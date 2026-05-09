@@ -17,6 +17,8 @@ class ReminderMail extends Mailable implements ShouldQueue
         public string $recipientName,
         public string $documentTitle,
         public string $signUrl,
+        public bool $requiresDocumentPassword = false,
+        public ?string $documentPasswordHint = null,
     ) {}
 
     public function envelope(): Envelope

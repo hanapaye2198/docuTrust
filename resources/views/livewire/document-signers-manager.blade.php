@@ -1,6 +1,10 @@
 @php
     use App\Enums\DocumentSignerStatus;
     use App\Enums\DocumentStatus;
+    use App\Enums\SigningMethod;
+    use App\Services\SigningMethodService;
+
+    $signingMethodService = app(SigningMethodService::class);
 @endphp
 
 <div class="space-y-8">
@@ -43,6 +47,15 @@
                         <flux:error name="email" />
                     </flux:field>
                 </div>
+                <flux:field>
+                    <flux:label>{{ __('Signing method') }}</flux:label>
+                    <flux:select wire:model="signingMethod">
+                        <option value="{{ SigningMethod::EmailLink->value }}">{{ __('Via Email Link') }}</option>
+                        <option value="{{ SigningMethod::AccountVerified->value }}">{{ __('Via DocuTrust Account') }}</option>
+                        <option value="{{ SigningMethod::PkiCertificate->value }}">{{ __('Via PKI Certificate') }}</option>
+                    </flux:select>
+                    <flux:error name="signingMethod" />
+                </flux:field>
 
                 @if (count($contactSuggestions) > 0)
                     <ul
@@ -87,6 +100,15 @@
                             <flux:error name="editingEmail" />
                         </flux:field>
                     </div>
+                    <flux:field>
+                        <flux:label>{{ __('Signing method') }}</flux:label>
+                        <flux:select wire:model="editingSigningMethod">
+                            <option value="{{ SigningMethod::EmailLink->value }}">{{ __('Via Email Link') }}</option>
+                            <option value="{{ SigningMethod::AccountVerified->value }}">{{ __('Via DocuTrust Account') }}</option>
+                            <option value="{{ SigningMethod::PkiCertificate->value }}">{{ __('Via PKI Certificate') }}</option>
+                        </flux:select>
+                        <flux:error name="editingSigningMethod" />
+                    </flux:field>
 
                     <div class="flex items-center gap-2">
                         <flux:button variant="primary" type="submit">{{ __('Save signer') }}</flux:button>
@@ -109,6 +131,7 @@
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Name') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Email') }}</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Method') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Status') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Order') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signed') }}</th>
@@ -123,6 +146,18 @@
                             <tr class="transition-colors hover:bg-teal-500/[0.04] dark:hover:bg-white/[0.03]">
                                 <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{{ $signer->name }}</td>
                                 <td class="px-4 py-3 text-zinc-600 dark:text-zinc-300">{{ $signer->email }}</td>
+                                <td class="px-4 py-3 text-zinc-600 dark:text-zinc-300">
+                                    @switch($signer->signingMethod())
+                                        @case(SigningMethod::AccountVerified)
+                                            {{ __('DocuTrust account') }}
+                                            @break
+                                        @case(SigningMethod::PkiCertificate)
+                                            {{ __('PKI certificate') }}
+                                            @break
+                                        @default
+                                            {{ __('Email link') }}
+                                    @endswitch
+                                </td>
                                 <td class="px-4 py-3 capitalize text-zinc-600 dark:text-zinc-300">{{ $signer->status->value }}</td>
                                 <td class="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">{{ $document->usesSequentialSigningWorkflow() ? $signer->signing_order : '—' }}</td>
                                 <td class="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">
@@ -131,12 +166,12 @@
                                 <td class="px-4 py-3">
                                     @if ($signer->status === DocumentSignerStatus::Pending && $document->status === DocumentStatus::Pending)
                                         <a
-                                            href="{{ route('sign.show', $signer->access_token ?? $signer->id) }}"
+                                            href="{{ $signingMethodService->signerEntryUrl($signer) }}"
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="font-medium text-teal-700 underline decoration-teal-500/30 underline-offset-2 hover:text-teal-800 hover:decoration-teal-500 dark:text-teal-300 dark:hover:text-teal-200"
                                         >
-                                            {{ __('Open') }}
+                                            {{ $signer->signingMethod() === SigningMethod::AccountVerified ? __('Open account signing') : __('Open') }}
                                         </a>
                                     @else
                                         <span class="text-zinc-400">—</span>

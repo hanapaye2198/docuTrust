@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\UserRole;
 use App\Models\Document;
 use App\Models\Tag;
+use App\Services\SigningMethodService;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -53,9 +55,12 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function with(): array
     {
+        $user = auth()->user();
+        $isSignerView = $user?->role === UserRole::Signer && ! $user?->isOrganizationAdmin();
         $cacheScope = implode('|', [
             'documents-index',
-            (string) auth()->user()?->organization_id,
+            (string) $user?->id,
+            (string) $user?->organization_id,
             $this->search,
             $this->statusFilter,
             $this->tagFilter,
@@ -64,7 +69,14 @@ new #[Layout('components.layouts.app')] class extends Component {
         ]);
 
         $documentsQuery = Document::query()
-            ->where('organization_id', auth()->user()?->organization_id)
+            ->where('organization_id', $user?->organization_id)
+            ->when($isSignerView, function ($query) use ($user): void {
+                $query->where(function ($scopedQuery) use ($user): void {
+                    $scopedQuery
+                        ->where('user_id', $user?->id)
+                        ->orWhereHas('documentSigners', fn ($signerQuery) => $signerQuery->where('user_id', $user?->id));
+                });
+            })
             ->when($this->search !== '', function ($query) {
                 $query->where(function ($searchQuery) {
                     $searchQuery
@@ -104,20 +116,26 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         return [
             'documents' => $documentsQuery
-                ->with(['tags'])
+                ->with([
+                    'tags',
+                    'documentSigners' => fn ($query) => $query
+                        ->when($isSignerView, fn ($signerQuery) => $signerQuery->where('user_id', $user?->id))
+                        ->orderBy('id'),
+                ])
                 ->withCount('documentSigners')
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')
                 ->paginate(10)
                 ->withQueryString(),
             'availableTags' => Tag::query()
-                ->where('organization_id', auth()->user()?->organization_id)
+                ->where('organization_id', $user?->organization_id)
                 ->orderBy('name')
                 ->get(),
             'totalDocuments' => $cachedCounts['total'],
             'pendingDocuments' => $cachedCounts['pending'],
             'completedDocuments' => $cachedCounts['completed'],
             'draftDocuments' => $cachedCounts['draft'],
+            'isSignerView' => $isSignerView,
         ];
     }
 }; ?>
@@ -131,13 +149,17 @@ new #[Layout('components.layouts.app')] class extends Component {
                 {{ __('Documents') }}
             </h1>
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400 max-w-xl">
-                {{ __('Manage your uploaded PDFs and track signing progress in one view.') }}
+                {{ $isSignerView
+                    ? __('Review documents assigned to you and complete pending signatures.')
+                    : __('Manage your uploaded PDFs and track signing progress in one view.') }}
             </p>
         </div>
-        <flux:button variant="primary" :href="route('documents.create')" wire:navigate>
-            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
-            {{ __('Upload document') }}
-        </flux:button>
+        @unless ($isSignerView)
+            <flux:button variant="primary" :href="route('documents.create')" wire:navigate>
+                <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
+                {{ __('Upload document') }}
+            </flux:button>
+        @endunless
     </div>
 
     {{-- ── Stat counters ── --}}
@@ -297,6 +319,13 @@ new #[Layout('components.layouts.app')] class extends Component {
 
                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                     @forelse ($documents as $document)
+                        @php
+                            $assignedSigner = $isSignerView ? $document->documentSigners->first() : null;
+                            $signingMethodService = app(SigningMethodService::class);
+                            $documentUrl = $assignedSigner !== null
+                                ? $signingMethodService->signerEntryUrl($assignedSigner)
+                                : route('documents.show', $document);
+                        @endphp
                         <tr class="group transition-colors duration-100 hover:bg-teal-50/40 dark:hover:bg-teal-900/10">
 
                             {{-- Title --}}
@@ -305,7 +334,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 transition group-hover:bg-teal-100 dark:bg-zinc-800 dark:group-hover:bg-teal-900/40">
                                         <svg class="h-4 w-4 text-zinc-400 transition group-hover:text-teal-600 dark:text-zinc-500 dark:group-hover:text-teal-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
                                     </div>
-                                    <a href="{{ route('documents.show', $document) }}"
+                                    <a href="{{ $documentUrl }}"
                                        wire:navigate
                                        class="truncate text-sm font-semibold text-zinc-800 transition hover:text-teal-700 dark:text-zinc-200 dark:hover:text-teal-300">
                                         {{ $document->title }}
@@ -342,10 +371,10 @@ new #[Layout('components.layouts.app')] class extends Component {
 
                             {{-- Action --}}
                             <td class="px-5 py-4 text-right text-sm">
-                                <a href="{{ route('documents.show', $document) }}"
+                                <a href="{{ $documentUrl }}"
                                    wire:navigate
                                    class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:border-teal-700 dark:hover:bg-teal-900/20 dark:hover:text-teal-300">
-                                    {{ __('Open') }}
+                                    {{ $assignedSigner !== null ? __('Sign') : __('Open') }}
                                     <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/></svg>
                                 </a>
                             </td>
@@ -370,14 +399,16 @@ new #[Layout('components.layouts.app')] class extends Component {
                                             @if ($search !== '' || $statusFilter !== 'all' || $tagFilter !== 'all' || $dateFrom !== '' || $dateTo !== '')
                                                 {{ __('Try adjusting your search or filter.') }}
                                             @else
-                                                {{ __('Upload a PDF to create your first document.') }}
+                                                {{ $isSignerView ? __('No documents are currently assigned to you.') : __('Upload a PDF to create your first document.') }}
                                             @endif
                                         </p>
                                     </div>
                                     @if ($search === '' && $statusFilter === 'all' && $tagFilter === 'all' && $dateFrom === '' && $dateTo === '')
-                                        <flux:button variant="primary" size="sm" :href="route('documents.create')" wire:navigate>
-                                            {{ __('Upload document') }}
-                                        </flux:button>
+                                        @unless ($isSignerView)
+                                            <flux:button variant="primary" size="sm" :href="route('documents.create')" wire:navigate>
+                                                {{ __('Upload document') }}
+                                            </flux:button>
+                                        @endunless
                                     @endif
                                 </div>
                             </td>

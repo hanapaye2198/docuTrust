@@ -4,22 +4,24 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\SigningMethod;
 use App\Enums\SignatureFieldType;
 use App\Jobs\GenerateCertificateJob;
 use App\Jobs\GenerateDocumentPdfJob;
-use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Document;
 use App\Models\DocumentSigner;
-use App\Models\SignerCertificate;
 use App\Models\Signature;
 use App\Models\SignatureAuditEvent;
 use App\Models\SignatureField;
+use App\Models\SignerCertificate;
 use App\Models\TrustAuthorizationSession;
 use App\Models\User;
 use App\Services\PkiSignatureService;
+use App\Services\SignerCertificateService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -53,7 +55,7 @@ class SignatureEngineTest extends TestCase
             'signing_private_key' => $keys['private_key'],
         ]);
 
-        app(\App\Services\SignerCertificateService::class)->getOrIssueForSigner($signer->fresh());
+        app(SignerCertificateService::class)->getOrIssueForSigner($signer->fresh());
     }
 
     private function runQueuedCompletionWork(Document $document): void
@@ -503,6 +505,7 @@ class SignatureEngineTest extends TestCase
         ]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
             'remote_credential_id' => 'credential-required-001',
         ]);
         $field = SignatureField::query()->create([
@@ -974,6 +977,7 @@ class SignatureEngineTest extends TestCase
         ]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
             'remote_credential_id' => 'credential-signer-001',
         ]);
         $field = SignatureField::query()->create([
@@ -1114,6 +1118,7 @@ class SignatureEngineTest extends TestCase
         ]);
         $signer = DocumentSigner::factory()->for($document)->create([
             'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
             'remote_credential_id' => 'credential-signer-002',
         ]);
         $field = SignatureField::query()->create([
