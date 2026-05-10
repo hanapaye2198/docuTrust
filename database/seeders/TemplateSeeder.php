@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\SignatureFieldType;
 use App\Enums\TemplateRoleType;
+use App\Enums\TemplateSigningMethod;
 use App\Models\Tag;
 use App\Models\Template;
 use App\Models\TemplateField;
@@ -63,7 +64,7 @@ class TemplateSeeder extends Seeder
                 'document_workflow' => true,
                 'email_subject' => $payload['subject'],
                 'email_message' => $payload['message'],
-                'signing_method' => 'docutrust_sign',
+                'signing_method' => TemplateSigningMethod::AccountVerified,
                 'audit_enabled' => true,
                 'audit_settings' => Template::defaultAuditSettings(),
             ]);
@@ -104,7 +105,7 @@ class TemplateSeeder extends Seeder
             return;
         }
 
-        $content = <<<PDF
+        $content = <<<'PDF'
 %PDF-1.1
 1 0 obj
 << /Type /Catalog /Pages 2 0 R >>

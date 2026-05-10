@@ -19,14 +19,12 @@ class AddSecurityHeaders
         $response = $next($request);
         $isLocal = app()->environment('local');
 
-        $scriptSrc = "'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com";
+        $scriptSrc = "'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com";
         $styleSrc = "'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.bunny.net";
         $connectSrc = "'self'";
         $fontSrc = "'self' data: https://fonts.gstatic.com https://fonts.bunny.net";
 
         if ($isLocal) {
-            $scriptSrc .= " 'unsafe-eval'";
-
             foreach ($this->viteDevOrigins() as $origin) {
                 $scriptSrc .= " {$origin}";
                 $styleSrc .= " {$origin}";

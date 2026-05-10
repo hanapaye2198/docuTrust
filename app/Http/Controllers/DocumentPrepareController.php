@@ -25,13 +25,14 @@ class DocumentPrepareController extends Controller
 
         $document->loadMissing(['documentSigners' => fn ($q) => $q->orderBy('signing_order')]);
 
-        if (! $document->hasDocumentSigners()) {
+        if (! $document->documentSigners->contains(fn ($signer) => $signer->isSigner())) {
             return redirect()
                 ->route('documents.show', $document)
                 ->with('error', __('Add at least one signer before preparing fields.'));
         }
 
         $signers = $document->documentSigners
+            ->filter(fn ($signer) => $signer->isSigner())
             ->map(function ($signer): array {
                 return [
                     'id' => (int) $signer->id,

@@ -2,9 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Contracts\CertificateAuthorityKeyStore;
 use App\Services\CertificateAuthorityService;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
@@ -27,7 +28,7 @@ class CertificateAuthorityKeyStoreTest extends TestCase
         $reloadedAuthority = $authority->fresh();
         $this->assertNotNull($reloadedAuthority);
 
-        $privateKeyPem = app(\App\Contracts\CertificateAuthorityKeyStore::class)->privateKeyPemFor($reloadedAuthority);
+        $privateKeyPem = app(CertificateAuthorityKeyStore::class)->privateKeyPemFor($reloadedAuthority);
         $this->assertStringContainsString('BEGIN PRIVATE KEY', $privateKeyPem);
 
         File::delete($path);

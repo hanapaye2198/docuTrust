@@ -1,6 +1,8 @@
-import { ethers } from "hardhat";
+import hre from "hardhat";
 
 async function main() {
+    const { ethers } = hre;
+
     const factory = await ethers.getContractFactory("DocuTrustRegistry");
     const contract = await factory.deploy();
 

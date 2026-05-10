@@ -57,7 +57,7 @@ class StoreTemplateFieldsRequest extends FormRequest
         $validated = $this->validated();
 
         $allowedRoles = $template->templateSigners()
-            ->where('role_type', TemplateRoleType::Signer)
+            ->whereIn('role_type', TemplateRoleType::activeValues())
             ->pluck('role_name')
             ->all();
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\DocumentHash;
+use App\Models\Document;
 use App\Models\SignatureAuditEvent;
 use App\Services\CertificateVerificationService;
 use App\Services\DocumentHashService;
@@ -51,7 +52,19 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
      *       valid_to: string|null
      *     }>
      *   },
-     *   signers: array<int, array{name: string, status: string, signed_at: string|null}>,
+     *   audit: array{
+     *     enabled: bool,
+     *     settings: array<string, bool>,
+     *     author: string|null
+     *   },
+     *   signers: array<int, array{
+     *     name: string,
+     *     status: string,
+     *     signed_at: string|null,
+     *     email: string|null,
+     *     mobile_number: string|null,
+     *     id_details: string|null
+     *   }>,
      *   timeline: array<int, array{action: string, actor: string, occurred_at: string|null}>
      * }|null
      */
@@ -82,10 +95,12 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
         $documentHash = DocumentHash::query()
             ->with([
                 'document.documentSigners' => fn ($query) => $query->orderBy('signing_order')->orderBy('id'),
+                'document.documentSigners.user',
                 'document.signatureAuditEvents' => fn ($query) => $query->orderBy('created_at'),
                 'document.signatureAuditEvents.signer',
                 'document.signatures.signerCertificate',
                 'document.signatures.signer',
+                'document.user',
             ])
             ->when(
                 ctype_digit($identifier),
@@ -102,6 +117,8 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
         }
 
         $document = $documentHash->document;
+        $auditSettings = $document->resolvedAuditSettings();
+        $auditEnabled = $document->isAuditTrailEnabled();
         $completedAt = $document->signatureAuditEvents
             ->firstWhere('action', SignatureAuditEvent::ACTION_COMPLETED)?->created_at?->toDateTimeString() ?? $documentHash->created_at?->toDateTimeString();
         $blockchainVerification = app(DocumentHashService::class)
@@ -116,21 +133,50 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
             'completed_at' => $completedAt,
             'blockchain_verification' => $blockchainVerification,
             'certificate_verification' => $certificateVerification,
+            'audit' => [
+                'enabled' => $auditEnabled,
+                'settings' => $auditSettings,
+                'author' => $auditEnabled && ($auditSettings['show_author'] ?? false)
+                    ? $document->user?->name
+                    : null,
+            ],
             'signers' => $document->documentSigners
                 ->map(fn ($signer) => [
                     'name' => $signer->name,
                     'status' => $signer->status->value,
                     'signed_at' => $signer->signed_at?->toDateTimeString(),
+                    'email' => $auditEnabled && ($auditSettings['show_email'] ?? false)
+                        ? $signer->email
+                        : null,
+                    'mobile_number' => $auditEnabled && ($auditSettings['show_mobile'] ?? false)
+                        ? $signer->user?->mobile_number
+                        : null,
+                    'id_details' => $auditEnabled && ($auditSettings['show_id_details'] ?? false)
+                        ? $this->resolvedSignerIdDetails($signer->user)
+                        : null,
                 ])
                 ->all(),
-            'timeline' => $document->signatureAuditEvents
+            'timeline' => $auditEnabled
+                ? $document->signatureAuditEvents
                 ->map(fn ($event) => [
                     'action' => $event->action,
                     'actor' => $event->signer?->name ?? __('System'),
                     'occurred_at' => $event->created_at?->toDateTimeString(),
                 ])
-                ->all(),
+                ->all()
+                : [],
         ];
+    }
+
+    private function resolvedSignerIdDetails(?\App\Models\User $user): ?string
+    {
+        if ($user === null || $user->kyc_verified_at === null || $user->kyc_id_type === null || $user->kyc_id_type === '') {
+            return null;
+        }
+
+        return __('Verified :type', [
+            'type' => str_replace('_', ' ', $user->kyc_id_type),
+        ]);
     }
 }; ?>
 
@@ -167,9 +213,14 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
 
             <div class="grid gap-3 text-sm text-zinc-800 dark:text-zinc-200">
                 <div><span class="font-semibold">{{ __('Hash:') }}</span> <span class="break-all">{{ $verificationResult['hash'] }}</span></div>
-                <div><span class="font-semibold">{{ __('Document ID:') }}</span> {{ $verificationResult['document_id'] }}</div>
+                @if ($verificationResult['audit']['enabled'] && ($verificationResult['audit']['settings']['show_document_id'] ?? false))
+                    <div><span class="font-semibold">{{ __('Document ID:') }}</span> {{ $verificationResult['document_id'] }}</div>
+                @endif
                 <div><span class="font-semibold">{{ __('Status:') }}</span> {{ ucfirst($verificationResult['status']) }}</div>
                 <div><span class="font-semibold">{{ __('Date completed:') }}</span> {{ $verificationResult['completed_at'] ?? '-' }}</div>
+                @if ($verificationResult['audit']['author'] !== null)
+                    <div><span class="font-semibold">{{ __('Document author:') }}</span> {{ $verificationResult['audit']['author'] }}</div>
+                @endif
             </div>
 
             <div>
@@ -286,33 +337,51 @@ new #[Layout('components.layouts.guest-simple')] class extends Component {
             </div>
 
             <div>
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">{{ __('Signer list') }}</h2>
-                <div class="mt-2 space-y-2">
-                    @foreach ($verificationResult['signers'] as $signer)
-                        <div class="rounded-lg border border-zinc-200/80 bg-white/80 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/70">
-                            <span class="font-medium">{{ $signer['name'] }}</span>
-                            <span class="mx-2 text-zinc-400">&bull;</span>
-                            <span>{{ ucfirst($signer['status']) }}</span>
-                            <span class="mx-2 text-zinc-400">&bull;</span>
-                            <span>{{ $signer['signed_at'] ?? '-' }}</span>
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">{{ __('Audit trail') }}</h2>
+                @if (! $verificationResult['audit']['enabled'])
+                    <div class="mt-2 rounded-lg border border-zinc-200/80 bg-white/80 px-3 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-200">
+                        {{ __('This document was completed with a restricted public verification record. Signer and timeline details are hidden.') }}
+                    </div>
+                @else
+                    <div class="mt-2">
+                        <h3 class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{{ __('Signer list') }}</h3>
+                        <div class="mt-2 space-y-2">
+                            @foreach ($verificationResult['signers'] as $signer)
+                                <div class="rounded-lg border border-zinc-200/80 bg-white/80 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/70">
+                                    <span class="font-medium">{{ $signer['name'] }}</span>
+                                    <span class="mx-2 text-zinc-400">&bull;</span>
+                                    <span>{{ ucfirst($signer['status']) }}</span>
+                                    <span class="mx-2 text-zinc-400">&bull;</span>
+                                    <span>{{ $signer['signed_at'] ?? '-' }}</span>
+                                    @if ($signer['email'] !== null)
+                                        <div class="mt-2 text-zinc-600 dark:text-zinc-300">{{ __('Email:') }} {{ $signer['email'] }}</div>
+                                    @endif
+                                    @if ($signer['mobile_number'] !== null)
+                                        <div class="mt-1 text-zinc-600 dark:text-zinc-300">{{ __('Verified mobile:') }} {{ $signer['mobile_number'] }}</div>
+                                    @endif
+                                    @if ($signer['id_details'] !== null)
+                                        <div class="mt-1 text-zinc-600 dark:text-zinc-300">{{ __('Verified ID:') }} {{ $signer['id_details'] }}</div>
+                                    @endif
+                                </div>
+                            @endforeach
                         </div>
-                    @endforeach
-                </div>
-            </div>
+                    </div>
 
-            <div>
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">{{ __('Signing timeline') }}</h2>
-                <div class="mt-2 space-y-2">
-                    @foreach ($verificationResult['timeline'] as $timelineItem)
-                        <div class="rounded-lg border border-zinc-200/80 bg-white/80 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/70">
-                            <span class="font-medium">{{ ucfirst($timelineItem['action']) }}</span>
-                            <span class="mx-2 text-zinc-400">&bull;</span>
-                            <span>{{ $timelineItem['actor'] }}</span>
-                            <span class="mx-2 text-zinc-400">&bull;</span>
-                            <span>{{ $timelineItem['occurred_at'] ?? '-' }}</span>
+                    <div class="mt-4">
+                        <h3 class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{{ __('Signing timeline') }}</h3>
+                        <div class="mt-2 space-y-2">
+                            @foreach ($verificationResult['timeline'] as $timelineItem)
+                                <div class="rounded-lg border border-zinc-200/80 bg-white/80 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/70">
+                                    <span class="font-medium">{{ ucfirst($timelineItem['action']) }}</span>
+                                    <span class="mx-2 text-zinc-400">&bull;</span>
+                                    <span>{{ $timelineItem['actor'] }}</span>
+                                    <span class="mx-2 text-zinc-400">&bull;</span>
+                                    <span>{{ $timelineItem['occurred_at'] ?? '-' }}</span>
+                                </div>
+                            @endforeach
                         </div>
-                    @endforeach
-                </div>
+                    </div>
+                @endif
             </div>
         </div>
     @endif

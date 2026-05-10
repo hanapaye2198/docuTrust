@@ -48,7 +48,7 @@ class DocumentSeeder extends Seeder
             return;
         }
 
-        $content = <<<PDF
+        $content = <<<'PDF'
 %PDF-1.1
 1 0 obj
 << /Type /Catalog /Pages 2 0 R >>

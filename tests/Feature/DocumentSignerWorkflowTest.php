@@ -4,8 +4,9 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
-use App\Enums\SigningMethod;
 use App\Enums\SignatureFieldType;
+use App\Enums\SigningMethod;
+use App\Enums\TemplateRoleType;
 use App\Livewire\DocumentSignersManager;
 use App\Models\Contact;
 use App\Models\Document;
@@ -294,6 +295,60 @@ class DocumentSignerWorkflowTest extends TestCase
         $this->assertSame(DocumentSignerStatus::Signed, $secondSigner->status);
     }
 
+    public function test_parallel_signer_is_blocked_until_all_approvers_complete(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'signing_workflow' => Document::SIGNING_WORKFLOW_PARALLEL,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'name' => 'Legal Reviewer',
+            'role_type' => TemplateRoleType::Approver,
+            'status' => DocumentSignerStatus::Pending,
+            'signing_order' => null,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'name' => 'Business Signer',
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Pending,
+            'signing_order' => null,
+        ]);
+
+        $this->post(route('sign.store', $signer))
+            ->assertRedirect(route('sign.show', $signer->access_token))
+            ->assertSessionHas('error', 'You cannot sign yet. Waiting for approver Legal Reviewer to approve first.');
+    }
+
+    public function test_approver_can_complete_approval_before_signer(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'signing_workflow' => Document::SIGNING_WORKFLOW_PARALLEL,
+        ]);
+        $approver = DocumentSigner::factory()->for($document)->create([
+            'name' => 'Legal Reviewer',
+            'role_type' => TemplateRoleType::Approver,
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        $this->post(route('sign.store', $approver))
+            ->assertRedirect(route('sign.show', $approver->access_token));
+
+        $approver->refresh();
+        $signer->refresh();
+        $document->refresh();
+
+        $this->assertSame(DocumentSignerStatus::Approved, $approver->status);
+        $this->assertSame(DocumentSignerStatus::Pending, $signer->status);
+        $this->assertSame(DocumentStatus::Pending, $document->status);
+    }
+
     public function test_owner_can_switch_signing_workflow_to_parallel(): void
     {
         $user = User::factory()->create();
@@ -488,6 +543,28 @@ class DocumentSignerWorkflowTest extends TestCase
             'email' => 'member@example.com',
             'signing_method' => SigningMethod::AccountVerified->value,
             'user_id' => $linkedUser->id,
+        ]);
+    }
+
+    public function test_owner_can_add_recipient_participant_via_livewire(): void
+    {
+        $owner = User::factory()->create();
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Draft]);
+
+        $this->actingAs($owner);
+
+        Livewire::test(DocumentSignersManager::class, ['documentId' => $document->id])
+            ->set('name', 'Records Team')
+            ->set('email', 'records@example.com')
+            ->set('roleType', TemplateRoleType::Recipient->value)
+            ->set('signingMethod', SigningMethod::EmailLink->value)
+            ->call('addSigner')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('document_signers', [
+            'document_id' => $document->id,
+            'email' => 'records@example.com',
+            'role_type' => TemplateRoleType::Recipient->value,
         ]);
     }
 

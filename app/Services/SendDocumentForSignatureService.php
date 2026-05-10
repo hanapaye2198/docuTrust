@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Enums\SigningMethod;
 use App\Enums\DocumentStatus;
+use App\Enums\SigningMethod;
 use App\Events\DocumentSent;
 use App\Jobs\GenerateDocumentPdfJob;
 use App\Models\Document;
@@ -26,8 +26,8 @@ class SendDocumentForSignatureService
             throw new RuntimeException(__('Only draft documents can be sent for signature.'));
         }
 
-        if (! $document->hasDocumentSigners()) {
-            throw new RuntimeException(__('Add at least one signer before sending.'));
+        if (! $document->hasActionableParticipants()) {
+            throw new RuntimeException(__('Add at least one signer or approver before sending.'));
         }
 
         if (! $document->hasSignatureFields()) {
@@ -50,7 +50,7 @@ class SendDocumentForSignatureService
         }
 
         $accountLinkedSignerMissingUser = $document->documentSigners
-            ->first(fn (DocumentSigner $signer): bool => $signer->signingMethod() === SigningMethod::AccountVerified && $signer->user_id === null);
+            ->first(fn (DocumentSigner $signer): bool => $signer->requiresAction() && $signer->signingMethod() === SigningMethod::AccountVerified && $signer->user_id === null);
 
         if ($accountLinkedSignerMissingUser !== null) {
             throw new RuntimeException(__('Signer :name must be linked to a verified DocuTrust account before sending.', [
@@ -70,7 +70,7 @@ class SendDocumentForSignatureService
             ]);
         });
 
-        GenerateDocumentPdfJob::dispatch($document->id, 'prepared');
+        GenerateDocumentPdfJob::dispatchSync($document->id, 'prepared');
         $document->refresh()->load('documentSigners');
 
         event(new DocumentSent($document));

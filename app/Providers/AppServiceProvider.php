@@ -7,17 +7,16 @@ use App\Contracts\SignerKeyStore;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSent;
 use App\Events\DocumentSignerCompleted;
-use App\Services\DatabaseCertificateAuthorityKeyStore;
 use App\Services\DatabaseSignerKeyStore;
 use App\Services\DocumentNotificationService;
 use App\Services\FileBackedCertificateAuthorityKeyStore;
 use App\View\Breadcrumbs;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Http\Request;
 
 class AppServiceProvider extends ServiceProvider
 {

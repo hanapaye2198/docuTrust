@@ -8,11 +8,12 @@ User=www-data
 Group=www-data
 WorkingDirectory=/var/www/docutrust/current/blockchain-service
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node src/index.js
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/var/www/docutrust/shared/.env
+ExecStart=/usr/bin/env node src/index.js
 Restart=always
 RestartSec=5
 KillSignal=SIGTERM
 
 [Install]
 WantedBy=multi-user.target
-

@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\SigningMethod;
+use App\Enums\TemplateRoleType;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -21,6 +22,7 @@ class DocumentSignerFactory extends Factory
     {
         return [
             'document_id' => Document::factory(),
+            'role_type' => TemplateRoleType::Signer,
             'name' => fake()->name(),
             'email' => fake()->safeEmail(),
             'signing_method' => SigningMethod::EmailLink,

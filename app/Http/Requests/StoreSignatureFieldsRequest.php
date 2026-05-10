@@ -5,8 +5,8 @@ namespace App\Http\Requests;
 use App\Enums\DocumentStatus;
 use App\Enums\SignatureFieldType;
 use App\Models\Document;
-use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Enum;
@@ -133,7 +133,7 @@ class StoreSignatureFieldsRequest extends FormRequest
         }
 
         try {
-            $pdf = new Fpdi();
+            $pdf = new Fpdi;
 
             return $pdf->setSourceFile($disk->path($path));
         } catch (Throwable) {

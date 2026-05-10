@@ -7,11 +7,37 @@ ARTIFACT_PATH="${ARTIFACT_PATH:?ARTIFACT_PATH must be set}"
 RELEASE_SHA="${RELEASE_SHA:?RELEASE_SHA must be set}"
 PHP_BIN="${PHP_BIN:-/usr/bin/php}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
+WEB_USER="${WEB_USER:-www-data}"
+WEB_GROUP="${WEB_GROUP:-$WEB_USER}"
 
 RELEASES_PATH="$APP_BASE_PATH/releases"
 SHARED_PATH="$APP_BASE_PATH/shared"
 RELEASE_PATH="$RELEASES_PATH/$RELEASE_SHA"
 CURRENT_PATH="$APP_BASE_PATH/current"
+
+run_privileged() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+    return
+  fi
+
+  echo "Unable to run privileged command: $*" >&2
+  echo "Run deployment as root or configure passwordless sudo for the deploy user." >&2
+  exit 1
+}
+
+fix_laravel_permissions() {
+  mkdir -p "$SHARED_PATH/storage/logs" "$RELEASE_PATH/bootstrap/cache"
+
+  run_privileged chown -R "$WEB_USER:$WEB_GROUP" "$SHARED_PATH/storage" "$RELEASE_PATH/bootstrap/cache"
+  run_privileged find "$SHARED_PATH/storage" "$RELEASE_PATH/bootstrap/cache" -type d -exec chmod 2775 {} \;
+  run_privileged find "$SHARED_PATH/storage" "$RELEASE_PATH/bootstrap/cache" -type f -exec chmod 664 {} \;
+}
 
 mkdir -p "$RELEASES_PATH" "$SHARED_PATH/storage" "$SHARED_PATH/bootstrap/cache"
 
@@ -43,8 +69,11 @@ rm -rf "$RELEASE_PATH/public/storage"
 ln -sfn "$SHARED_PATH/storage/app/public" "$RELEASE_PATH/public/storage"
 
 export APP_ENV=production
+export WEB_USER WEB_GROUP
 
+fix_laravel_permissions
 bash "$RELEASE_PATH/scripts/post-deploy.sh" "$RELEASE_PATH" "$PHP_BIN"
+fix_laravel_permissions
 
 ln -sfn "$RELEASE_PATH" "$CURRENT_PATH"
 

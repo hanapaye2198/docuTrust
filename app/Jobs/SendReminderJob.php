@@ -45,6 +45,9 @@ class SendReminderJob implements ShouldQueue
                     signUrl: app(SigningMethodService::class)->signerEntryUrl($signer),
                     requiresDocumentPassword: $document->hasAccessPassword(),
                     documentPasswordHint: $document->access_password_hint,
+                    customSubject: $document->email_subject,
+                    customMessage: $document->email_message,
+                    participantRoleType: $signer->roleType()->value,
                 )
             );
         } catch (Throwable $throwable) {

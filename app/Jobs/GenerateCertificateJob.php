@@ -3,8 +3,8 @@
 namespace App\Jobs;
 
 use App\Models\Document;
-use App\Services\DocumentArchiveService;
 use App\Services\CompletedDocumentSealingService;
+use App\Services\DocumentArchiveService;
 use App\Services\DocumentCertificateService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -24,8 +24,7 @@ class GenerateCertificateJob implements ShouldQueue
         CompletedDocumentSealingService $completedDocumentSealingService,
         DocumentCertificateService $documentCertificateService,
         DocumentArchiveService $documentArchiveService,
-    ): void
-    {
+    ): void {
         try {
             $document = Document::query()->find($this->documentId);
             if ($document === null) {

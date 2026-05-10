@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Enums\SignatureFieldType;
+use App\Enums\TemplateRoleType;
 use App\Jobs\SendDocumentEmailJob;
 use App\Jobs\SendReminderJob;
 use App\Mail\ReminderMail;
@@ -146,6 +147,35 @@ class NotificationSystemTest extends TestCase
         });
     }
 
+    public function test_signer_invitation_mail_uses_document_email_subject_and_message(): void
+    {
+        Mail::fake();
+
+        $owner = User::factory()->create();
+        $document = Document::factory()->for($owner)->create([
+            'status' => DocumentStatus::Pending,
+            'email_subject' => 'Custom invitation subject',
+            'email_message' => "Please sign this today.\nIt is time-sensitive.",
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        (new SendDocumentEmailJob(
+            documentId: $document->id,
+            signerId: $signer->id,
+            recipientEmail: $signer->email,
+            type: SendDocumentEmailJob::TYPE_SENT_TO_SIGNER,
+            signUrl: route('sign.show', $signer->access_token),
+        ))->handle();
+
+        Mail::assertQueued(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
+            return $mail->customSubject === 'Custom invitation subject'
+                && $mail->customMessage === "Please sign this today.\nIt is time-sensitive."
+                && $mail->envelope()->subject === 'Custom invitation subject';
+        });
+    }
+
     public function test_signature_reminder_mail_carries_document_password_hint(): void
     {
         Mail::fake();
@@ -169,5 +199,58 @@ class NotificationSystemTest extends TestCase
             return $mail->requiresDocumentPassword === true
                 && $mail->documentPasswordHint === 'Shared in chat';
         });
+    }
+
+    public function test_signature_reminder_mail_uses_document_email_subject_and_message(): void
+    {
+        Mail::fake();
+
+        $owner = User::factory()->create();
+        $document = Document::factory()->for($owner)->create([
+            'status' => DocumentStatus::Pending,
+            'email_subject' => 'Custom invitation subject',
+            'email_message' => "Please sign this today.\nIt is time-sensitive.",
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        (new SendReminderJob(
+            documentId: $document->id,
+            signerId: $signer->id,
+        ))->handle();
+
+        Mail::assertQueued(ReminderMail::class, function (ReminderMail $mail): bool {
+            return $mail->customSubject === 'Custom invitation subject'
+                && $mail->customMessage === "Please sign this today.\nIt is time-sensitive."
+                && $mail->envelope()->subject === 'Reminder: Custom invitation subject';
+        });
+    }
+
+    public function test_document_completed_notifies_recipient_participants(): void
+    {
+        Queue::fake();
+
+        $owner = User::factory()->create();
+        $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+        $recipient = DocumentSigner::factory()->for($document)->create([
+            'role_type' => TemplateRoleType::Recipient,
+            'email' => 'records@example.com',
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        $this->post(route('sign.store', $signer->access_token))->assertRedirect();
+
+        Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job): bool {
+            return $job->recipientEmail === 'records@example.com'
+                && $job->type === SendDocumentEmailJob::TYPE_COMPLETED;
+        });
+
+        $recipient->refresh();
+        $this->assertSame(DocumentSignerStatus::Notified, $recipient->status);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Enums\TemplateRoleType;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
@@ -20,12 +21,15 @@ class SignerInvitationMail extends Mailable implements ShouldQueue
         public ?string $expiresAt = null,
         public bool $requiresDocumentPassword = false,
         public ?string $documentPasswordHint = null,
+        public ?string $customSubject = null,
+        public ?string $customMessage = null,
+        public string $participantRoleType = 'signer',
     ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: __('Signature request: :title', ['title' => $this->documentTitle]),
+            subject: $this->resolvedSubject(),
         );
     }
 
@@ -34,5 +38,20 @@ class SignerInvitationMail extends Mailable implements ShouldQueue
         return new Content(
             view: 'emails.signer-invitation',
         );
+    }
+
+    private function resolvedSubject(): string
+    {
+        $subject = trim((string) $this->customSubject);
+
+        if ($subject !== '') {
+            return $subject;
+        }
+
+        if ($this->participantRoleType === TemplateRoleType::Approver->value) {
+            return __('Approval request: :title', ['title' => $this->documentTitle]);
+        }
+
+        return __('Signature request: :title', ['title' => $this->documentTitle]);
     }
 }

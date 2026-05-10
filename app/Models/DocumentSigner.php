@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\SigningMethod;
+use App\Enums\TemplateRoleType;
 use Database\Factories\DocumentSignerFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,7 @@ class DocumentSigner extends Model
     protected $fillable = [
         'document_id',
         'role_name',
+        'role_type',
         'name',
         'email',
         'signing_method',
@@ -54,6 +56,7 @@ class DocumentSigner extends Model
     {
         return [
             'status' => DocumentSignerStatus::class,
+            'role_type' => TemplateRoleType::class,
             'signing_method' => SigningMethod::class,
             'signed_at' => 'datetime',
             'expires_at' => 'datetime',
@@ -114,5 +117,39 @@ class DocumentSigner extends Model
         return $this->signing_method instanceof SigningMethod
             ? $this->signing_method
             : SigningMethod::EmailLink;
+    }
+
+    public function roleType(): TemplateRoleType
+    {
+        return $this->role_type instanceof TemplateRoleType
+            ? $this->role_type
+            : TemplateRoleType::Signer;
+    }
+
+    public function isSigner(): bool
+    {
+        return $this->roleType() === TemplateRoleType::Signer;
+    }
+
+    public function isApprover(): bool
+    {
+        return $this->roleType() === TemplateRoleType::Approver;
+    }
+
+    public function isRecipient(): bool
+    {
+        return $this->roleType() === TemplateRoleType::Recipient;
+    }
+
+    public function requiresAction(): bool
+    {
+        return ! $this->isRecipient();
+    }
+
+    public function hasCompletedAction(): bool
+    {
+        return $this->status instanceof DocumentSignerStatus
+            ? $this->status->isCompleted()
+            : false;
     }
 }

@@ -10,8 +10,8 @@
 <div class="space-y-8">
     @if ($document->status === DocumentStatus::Draft)
         <div>
-            <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Add signers') }}</h3>
-            <p class="ui-muted mt-1">{{ __('Invite people who need to sign this document') }}</p>
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Add participants') }}</h3>
+            <p class="ui-muted mt-1">{{ __('Invite signers, approvers, and final recipients for this document') }}</p>
         </div>
 
         <div class="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-4 dark:border-zinc-700/80 dark:bg-zinc-800/30">
@@ -26,8 +26,8 @@
                 </flux:field>
                 <p class="text-sm text-zinc-500 dark:text-zinc-400 lg:max-w-md">
                     {{ $signingWorkflow === \App\Models\Document::SIGNING_WORKFLOW_SEQUENTIAL
-                        ? __('Signers will be prompted in order. Reorder the list below to control who signs next.')
-                        : __('Any signer can sign as soon as the document is sent. Signer order is ignored in parallel mode.') }}
+                        ? __('Action participants will be prompted in order. Reorder the list below to control who approves or signs next.')
+                        : __('Approvers can act in any order, and signers can start once all approvers are done.') }}
                 </p>
                 <flux:button variant="outline" type="submit">{{ __('Save workflow') }}</flux:button>
             </form>
@@ -47,6 +47,15 @@
                         <flux:error name="email" />
                     </flux:field>
                 </div>
+                <flux:field>
+                    <flux:label>{{ __('Role type') }}</flux:label>
+                    <flux:select wire:model="roleType">
+                        <option value="{{ \App\Enums\TemplateRoleType::Signer->value }}">{{ __('Signer') }}</option>
+                        <option value="{{ \App\Enums\TemplateRoleType::Approver->value }}">{{ __('Approver') }}</option>
+                        <option value="{{ \App\Enums\TemplateRoleType::Recipient->value }}">{{ __('Recipient') }}</option>
+                    </flux:select>
+                    <flux:error name="roleType" />
+                </flux:field>
                 <flux:field>
                     <flux:label>{{ __('Signing method') }}</flux:label>
                     <flux:select wire:model="signingMethod">
@@ -78,7 +87,7 @@
                 @endif
             </div>
 
-            <flux:button variant="primary" type="submit">{{ __('Add signer') }}</flux:button>
+            <flux:button variant="primary" type="submit">{{ __('Add participant') }}</flux:button>
         </form>
 
         @if ($editingSignerId !== null)
@@ -101,6 +110,15 @@
                         </flux:field>
                     </div>
                     <flux:field>
+                        <flux:label>{{ __('Role type') }}</flux:label>
+                        <flux:select wire:model="editingRoleType">
+                            <option value="{{ \App\Enums\TemplateRoleType::Signer->value }}">{{ __('Signer') }}</option>
+                            <option value="{{ \App\Enums\TemplateRoleType::Approver->value }}">{{ __('Approver') }}</option>
+                            <option value="{{ \App\Enums\TemplateRoleType::Recipient->value }}">{{ __('Recipient') }}</option>
+                        </flux:select>
+                        <flux:error name="editingRoleType" />
+                    </flux:field>
+                    <flux:field>
                         <flux:label>{{ __('Signing method') }}</flux:label>
                         <flux:select wire:model="editingSigningMethod">
                             <option value="{{ SigningMethod::EmailLink->value }}">{{ __('Via Email Link') }}</option>
@@ -111,7 +129,7 @@
                     </flux:field>
 
                     <div class="flex items-center gap-2">
-                        <flux:button variant="primary" type="submit">{{ __('Save signer') }}</flux:button>
+                        <flux:button variant="primary" type="submit">{{ __('Save participant') }}</flux:button>
                         <flux:button variant="ghost" type="button" wire:click="cancelEditingSigner">{{ __('Cancel') }}</flux:button>
                     </div>
                 </form>
@@ -120,10 +138,10 @@
     @endif
 
     <div>
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signers') }}</h3>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Participants') }}</h3>
 
         @if ($document->documentSigners->isEmpty())
-            <p class="ui-muted mt-2">{{ __('No signers yet.') }}</p>
+            <p class="ui-muted mt-2">{{ __('No participants yet.') }}</p>
         @else
             <div class="ui-table-wrap mt-4">
                 <table class="min-w-full divide-y divide-zinc-200/80 text-sm dark:divide-zinc-700/80">
@@ -131,6 +149,7 @@
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Name') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Email') }}</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Role') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Method') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Status') }}</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Order') }}</th>
@@ -146,6 +165,7 @@
                             <tr class="transition-colors hover:bg-teal-500/[0.04] dark:hover:bg-white/[0.03]">
                                 <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{{ $signer->name }}</td>
                                 <td class="px-4 py-3 text-zinc-600 dark:text-zinc-300">{{ $signer->email }}</td>
+                                <td class="px-4 py-3 text-zinc-600 dark:text-zinc-300">{{ ucfirst($signer->roleType()->value) }}</td>
                                 <td class="px-4 py-3 text-zinc-600 dark:text-zinc-300">
                                     @switch($signer->signingMethod())
                                         @case(SigningMethod::AccountVerified)
@@ -164,14 +184,16 @@
                                     {{ $signer->signed_at?->format('M j, Y g:i A') ?? '—' }}
                                 </td>
                                 <td class="px-4 py-3">
-                                    @if ($signer->status === DocumentSignerStatus::Pending && $document->status === DocumentStatus::Pending)
+                                    @if ($signer->requiresAction() && $signer->status === DocumentSignerStatus::Pending && $document->status === DocumentStatus::Pending)
                                         <a
                                             href="{{ $signingMethodService->signerEntryUrl($signer) }}"
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="font-medium text-teal-700 underline decoration-teal-500/30 underline-offset-2 hover:text-teal-800 hover:decoration-teal-500 dark:text-teal-300 dark:hover:text-teal-200"
                                         >
-                                            {{ $signer->signingMethod() === SigningMethod::AccountVerified ? __('Open account signing') : __('Open') }}
+                                            {{ $signer->isApprover()
+                                                ? ($signer->signingMethod() === SigningMethod::AccountVerified ? __('Open account approval') : __('Open approval'))
+                                                : ($signer->signingMethod() === SigningMethod::AccountVerified ? __('Open account signing') : __('Open')) }}
                                         </a>
                                     @else
                                         <span class="text-zinc-400">—</span>

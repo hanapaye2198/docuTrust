@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\TemplateSigningMethod;
 use App\Models\Template;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -23,7 +24,7 @@ class TemplateFactory extends Factory
             'document_workflow' => false,
             'email_subject' => null,
             'email_message' => null,
-            'signing_method' => 'docutrust_sign',
+            'signing_method' => TemplateSigningMethod::AccountVerified,
             'audit_enabled' => true,
             'audit_settings' => Template::defaultAuditSettings(),
         ];

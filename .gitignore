@@ -13,6 +13,7 @@
 .env.production
 blockchain/.env
 blockchain-service/.env
+blockchain-service/logs/
 .phpactor.json
 .phpunit.result.cache
 Homestead.json

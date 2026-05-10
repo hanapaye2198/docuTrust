@@ -33,7 +33,8 @@ class SendPendingSignatureReminders extends Command
             ->with(['documentSigners', 'user'])
             ->where('status', DocumentStatus::Pending)
             ->whereHas('documentSigners', function ($query): void {
-                $query->where('status', DocumentSignerStatus::Pending);
+                $query->where('status', DocumentSignerStatus::Pending)
+                    ->whereIn('role_type', ['signer', 'approver']);
             })
             ->get();
 
@@ -44,6 +45,10 @@ class SendPendingSignatureReminders extends Command
 
             foreach ($document->documentSigners as $signer) {
                 if ($signer->status !== DocumentSignerStatus::Pending) {
+                    continue;
+                }
+
+                if (! $signer->requiresAction()) {
                     continue;
                 }
 

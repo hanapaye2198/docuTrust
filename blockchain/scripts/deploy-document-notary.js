@@ -1,10 +1,12 @@
-import { ethers } from "hardhat";
+import hre from "hardhat";
 
 async function main() {
+  const { ethers } = hre;
+
   const [deployer] = await ethers.getSigners();
 
   if (!deployer) {
-    throw new Error("No deployer account is configured. Set POLYGON_PRIVATE_KEY in blockchain/.env.");
+    throw new Error("No deployer account is configured. Set PRIVATE_KEY in blockchain/.env.");
   }
 
   console.log(`Deploying DocumentNotary with account: ${deployer.address}`);

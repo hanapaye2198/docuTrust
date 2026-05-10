@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Contracts\CertificateAuthorityKeyStore;
 use App\Contracts\SignerKeyStore;
+use App\Models\CertificateAuthority;
 use App\Models\DocumentSigner;
 use App\Models\SignerCertificate;
 use DateTimeImmutable;
@@ -92,7 +93,7 @@ class SignerCertificateService
         ]);
     }
 
-    private function issueForSigner(DocumentSigner $signer, \App\Models\CertificateAuthority $authority): SignerCertificate
+    private function issueForSigner(DocumentSigner $signer, CertificateAuthority $authority): SignerCertificate
     {
         $caPrivateKey = openssl_pkey_get_private($this->certificateAuthorityKeyStore->privateKeyPemFor($authority));
         if ($caPrivateKey === false) {
@@ -132,7 +133,7 @@ class SignerCertificateService
             $caCertificate,
             $caPrivateKey,
             $days,
-            $this->opensslCertificateOptions(\App\Services\CertificateAuthorityService::PROFILE_SIGNER),
+            $this->opensslCertificateOptions(CertificateAuthorityService::PROFILE_SIGNER),
             $serialNumber
         );
         if ($x509 === false) {
@@ -170,7 +171,7 @@ class SignerCertificateService
             throw new RuntimeException('Signer certificate validity timestamp missing.');
         }
 
-        return (new DateTimeImmutable())->setTimestamp($timestamp);
+        return (new DateTimeImmutable)->setTimestamp($timestamp);
     }
 
     /**

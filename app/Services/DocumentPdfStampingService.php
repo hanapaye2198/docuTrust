@@ -6,6 +6,7 @@ use App\Enums\SignatureFieldType;
 use App\Models\Document;
 use App\Models\Signature;
 use App\Models\SignatureField;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -51,10 +52,10 @@ class DocumentPdfStampingService
                 'documentSigners',
             ]);
 
-            $pdf = new Fpdi();
+            $pdf = new Fpdi;
             $pageCount = $pdf->setSourceFile($disk->path($sourcePath));
 
-            /** @var array<int, \Illuminate\Support\Collection<int, SignatureField>> $fieldsByPage */
+            /** @var array<int, Collection<int, SignatureField>> $fieldsByPage */
             $fieldsByPage = $document->signatureFields
                 ->groupBy(fn (SignatureField $field): int => (int) ($field->page_number ?? 1))
                 ->all();
@@ -73,7 +74,7 @@ class DocumentPdfStampingService
                 $pdf->AddPage($orientation, [$size['width'], $size['height']]);
                 $pdf->useTemplate($templateId);
 
-                /** @var \Illuminate\Support\Collection<int, SignatureField> $pageFields */
+                /** @var Collection<int, SignatureField> $pageFields */
                 $pageFields = $fieldsByPage[$pageNumber] ?? collect();
                 foreach ($pageFields as $field) {
                     $this->renderField($pdf, $field, $size['width'], $size['height'], $mode, $signaturesByFieldId[$field->id] ?? null);
@@ -128,6 +129,7 @@ class DocumentPdfStampingService
 
         if ($mode === 'prepared') {
             $this->drawPreparedField($pdf, $type, $field, $x, $y, $width, $height);
+
             return;
         }
 
@@ -156,6 +158,7 @@ class DocumentPdfStampingService
             $pdf->SetFont('Helvetica', '', max(7, min(9, $height * 1.55)));
             $pdf->SetXY($boxX + $boxSize + 1.4, $y + max(1.1, ($height - 4.6) / 2));
             $pdf->Cell(max(4, $width - ($boxSize + 4)), 4.4, $label, 0, 0, 'L');
+
             return;
         }
 
@@ -182,6 +185,7 @@ class DocumentPdfStampingService
 
         if ($isSignature) {
             $this->drawSignatureImage($pdf, $type, $signature, $x, $y, $width, $height);
+
             return;
         }
 
@@ -201,6 +205,7 @@ class DocumentPdfStampingService
         if ($isToggle) {
             $pdf->SetXY($x + 1.5, $y + max(1.5, $height * 0.18));
             $pdf->MultiCell($width - 3, max(3.8, $height * 0.55), $value, 0, 'L');
+
             return;
         }
 

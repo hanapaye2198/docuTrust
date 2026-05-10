@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DocumentStatus;
 use App\Models\Document;
 use App\Services\CompletedDocumentArtifactService;
 use App\Support\PublicPdfStream;
@@ -32,7 +33,7 @@ class DocumentStreamController extends Controller
 
         $response = PublicPdfStream::inlineResponse($path, $disk);
 
-        if (! $streamSource && $document->status === \App\Enums\DocumentStatus::Completed) {
+        if (! $streamSource && $document->status === DocumentStatus::Completed) {
             $response->headers->set('Cache-Control', 'private, no-store, max-age=0');
             $response->headers->set('Pragma', 'no-cache');
         }

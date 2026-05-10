@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\TemplateRoleType;
+use Database\Factories\DocumentFactory;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Document extends Model
 {
-    /** @use HasFactory<\Database\Factories\DocumentFactory> */
+    /** @use HasFactory<DocumentFactory> */
     use HasFactory;
 
     public const SIGNING_WORKFLOW_SEQUENTIAL = 'sequential';
@@ -29,6 +31,10 @@ class Document extends Model
         'user_id',
         'title',
         'file_path',
+        'email_subject',
+        'email_message',
+        'audit_enabled',
+        'audit_settings',
         'access_password_hash',
         'access_password_hint',
         'signing_workflow',
@@ -54,6 +60,22 @@ class Document extends Model
             'sent_at' => 'datetime',
             'archived_at' => 'datetime',
             'files' => 'array',
+            'audit_enabled' => 'boolean',
+            'audit_settings' => 'array',
+        ];
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    public static function defaultAuditSettings(): array
+    {
+        return [
+            'show_email' => true,
+            'show_document_id' => true,
+            'show_author' => true,
+            'show_mobile' => false,
+            'show_id_details' => false,
         ];
     }
 
@@ -191,6 +213,22 @@ class Document extends Model
         return is_string($this->access_password_hash) && $this->access_password_hash !== '';
     }
 
+    public function isAuditTrailEnabled(): bool
+    {
+        return $this->audit_enabled ?? true;
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    public function resolvedAuditSettings(): array
+    {
+        return array_merge(
+            self::defaultAuditSettings(),
+            is_array($this->audit_settings) ? $this->audit_settings : [],
+        );
+    }
+
     public function signingWorkflow(): string
     {
         $workflow = (string) ($this->signing_workflow ?? self::SIGNING_WORKFLOW_SEQUENTIAL);
@@ -233,6 +271,15 @@ class Document extends Model
         return $this->documentSigners()->exists();
     }
 
+    public function hasSigningParticipants(): bool
+    {
+        if ($this->relationLoaded('documentSigners')) {
+            return $this->documentSigners->contains(fn (DocumentSigner $signer) => $signer->isSigner());
+        }
+
+        return $this->documentSigners()->where('role_type', TemplateRoleType::Signer)->exists();
+    }
+
     public function hasSignatureFields(): bool
     {
         if ($this->relationLoaded('signatureFields')) {
@@ -256,24 +303,25 @@ class Document extends Model
                 ->all();
 
             return $this->documentSigners
-                ->filter(fn (DocumentSigner $signer) => ! in_array($signer->id, $fieldSignerIds, true))
+                ->filter(fn (DocumentSigner $signer) => $signer->isSigner() && ! in_array($signer->id, $fieldSignerIds, true))
                 ->values();
         }
 
         return $this->documentSigners()
+            ->where('role_type', TemplateRoleType::Signer)
             ->whereDoesntHave('signatureFields')
             ->get();
     }
 
     public function canPrepareForSigning(): bool
     {
-        return $this->status === DocumentStatus::Draft && $this->hasDocumentSigners();
+        return $this->status === DocumentStatus::Draft && $this->hasSigningParticipants();
     }
 
     public function canSendForSigning(): bool
     {
         return $this->status === DocumentStatus::Draft
-            && $this->hasDocumentSigners()
+            && $this->hasSigningParticipants()
             && $this->hasSignatureFields()
             && $this->signersMissingFields()->isEmpty()
             && $this->workflowConfigurationIsValid();
@@ -281,13 +329,44 @@ class Document extends Model
 
     public function allSignersHaveSigned(): bool
     {
-        if ($this->documentSigners->isEmpty()) {
+        $signers = $this->relationLoaded('documentSigners')
+            ? $this->documentSigners->filter(fn (DocumentSigner $signer) => $signer->isSigner())->values()
+            : $this->documentSigners()->where('role_type', TemplateRoleType::Signer)->get();
+
+        if ($signers->isEmpty()) {
             return false;
         }
 
-        return $this->documentSigners->every(
+        return $signers->every(
             fn (DocumentSigner $signer) => $signer->status === DocumentSignerStatus::Signed
         );
+    }
+
+    public function allApproversHaveApproved(): bool
+    {
+        $approvers = $this->relationLoaded('documentSigners')
+            ? $this->documentSigners->filter(fn (DocumentSigner $signer) => $signer->isApprover())->values()
+            : $this->documentSigners()->where('role_type', TemplateRoleType::Approver)->get();
+
+        if ($approvers->isEmpty()) {
+            return true;
+        }
+
+        return $approvers->every(
+            fn (DocumentSigner $signer) => $signer->status === DocumentSignerStatus::Approved
+        );
+    }
+
+    public function hasActionableParticipants(): bool
+    {
+        if ($this->relationLoaded('documentSigners')) {
+            return $this->documentSigners->contains(fn (DocumentSigner $signer) => $signer->requiresAction());
+        }
+
+        return $this->documentSigners()->whereIn('role_type', [
+            TemplateRoleType::Signer->value,
+            TemplateRoleType::Approver->value,
+        ])->exists();
     }
 
     public function workflowConfigurationIsValid(): bool

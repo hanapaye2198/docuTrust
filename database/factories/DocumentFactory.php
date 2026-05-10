@@ -21,6 +21,10 @@ class DocumentFactory extends Factory
             'user_id' => User::factory(),
             'title' => fake()->sentence(3),
             'file_path' => 'documents/'.fake()->uuid().'.pdf',
+            'email_subject' => null,
+            'email_message' => null,
+            'audit_enabled' => true,
+            'audit_settings' => Document::defaultAuditSettings(),
             'signing_workflow' => Document::SIGNING_WORKFLOW_SEQUENTIAL,
             'status' => DocumentStatus::Draft,
         ];

@@ -1,8 +1,8 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "E:\\GitHub\\docuTrust\\blockchain\\contracts\\DocumentNotary.sol": {
-      "lastModificationDate": 1777713384821,
+    "C:\\Users\\Admin\\docuTrust\\blockchain\\contracts\\DocumentNotary.sol": {
+      "lastModificationDate": 1777794038724,
       "contentHash": "f7fee58cc9ee4cd55f1947b3f2f37e9a",
       "sourceName": "contracts/DocumentNotary.sol",
       "solcConfig": {
@@ -37,8 +37,8 @@
         "DocumentNotary"
       ]
     },
-    "E:\\GitHub\\docuTrust\\blockchain\\contracts\\DocuTrustRegistry.sol": {
-      "lastModificationDate": 1778256919323,
+    "C:\\Users\\Admin\\docuTrust\\blockchain\\contracts\\DocuTrustRegistry.sol": {
+      "lastModificationDate": 1778310496878,
       "contentHash": "bdd91a81da3a2bd9c517deabbb4fe746",
       "sourceName": "contracts/DocuTrustRegistry.sol",
       "solcConfig": {

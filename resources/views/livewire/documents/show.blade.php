@@ -20,6 +20,15 @@ new #[Layout('components.layouts.app')] class extends Component {
     /** @var list<int> */
     public array $tagIds = [];
 
+    public string $emailSubject = '';
+
+    public string $emailMessage = '';
+
+    public bool $auditEnabled = true;
+
+    /** @var array<string, bool> */
+    public array $auditSettings = [];
+
     /** @var array<int, string> */
     public array $revocationReasons = [];
 
@@ -35,7 +44,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'signatures.signer',
             'tags',
         ]);
-        $this->tagIds = $this->document->tags->pluck('id')->all();
+        $this->syncEditableState();
     }
 
     #[On('document-updated')]
@@ -48,7 +57,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'signatures.signer',
             'tags',
         ]);
-        $this->tagIds = $this->document->tags->pluck('id')->all();
+        $this->syncEditableState();
     }
 
     public function with(): array
@@ -128,6 +137,36 @@ new #[Layout('components.layouts.app')] class extends Component {
         session()->flash('status', __('Document sent for signature.'));
     }
 
+    public function saveDeliverySettings(): void
+    {
+        $this->authorize('update', $this->document);
+
+        if ($this->document->status !== DocumentStatus::Draft) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'emailSubject' => ['nullable', 'string', 'max:255'],
+            'emailMessage' => ['nullable', 'string', 'max:5000'],
+            'auditEnabled' => ['boolean'],
+            'auditSettings.show_email' => ['boolean'],
+            'auditSettings.show_document_id' => ['boolean'],
+            'auditSettings.show_author' => ['boolean'],
+            'auditSettings.show_mobile' => ['boolean'],
+            'auditSettings.show_id_details' => ['boolean'],
+        ]);
+
+        $this->document->update([
+            'email_subject' => trim((string) $validated['emailSubject']) !== '' ? trim((string) $validated['emailSubject']) : null,
+            'email_message' => trim((string) $validated['emailMessage']) !== '' ? trim((string) $validated['emailMessage']) : null,
+            'audit_enabled' => (bool) $validated['auditEnabled'],
+            'audit_settings' => $validated['auditSettings'],
+        ]);
+
+        $this->refreshDocument();
+        session()->flash('status', __('Delivery settings updated.'));
+    }
+
     public function revokeCertificate(int $certificateId): void
     {
         abort_unless(Auth::user()?->role === UserRole::Admin, 403);
@@ -150,6 +189,15 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->revocationReasons[$certificateId] = '';
         $this->refreshDocument();
         session()->flash('status', __('Signer certificate revoked.'));
+    }
+
+    private function syncEditableState(): void
+    {
+        $this->tagIds = $this->document->tags->pluck('id')->all();
+        $this->emailSubject = (string) ($this->document->email_subject ?? '');
+        $this->emailMessage = (string) ($this->document->email_message ?? '');
+        $this->auditEnabled = $this->document->isAuditTrailEnabled();
+        $this->auditSettings = $this->document->resolvedAuditSettings();
     }
 
 }; ?>
@@ -271,6 +319,71 @@ new #[Layout('components.layouts.app')] class extends Component {
                         @endif
                     </p>
                 </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($document->status === DocumentStatus::Draft)
+        <div class="ui-panel p-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Delivery settings') }}</h2>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Adjust invitation copy and public verification visibility before sending this draft.') }}</p>
+                </div>
+            </div>
+
+            <div class="mt-5 grid gap-6 xl:grid-cols-2">
+                <section class="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-900/30">
+                    <div>
+                        <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Invitation email') }}</h3>
+                        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('These values will be used for both the initial invitation and reminder emails. Leave blank to keep the default DocuTrust copy.') }}</p>
+                    </div>
+
+                    <div class="mt-4 space-y-4">
+                        <flux:field>
+                            <flux:label>{{ __('Email subject') }}</flux:label>
+                            <flux:input wire:model="emailSubject" type="text" placeholder="{{ __('Please review and sign this document') }}" />
+                            <flux:error name="emailSubject" />
+                        </flux:field>
+
+                        <flux:field>
+                            <flux:label>{{ __('Email message') }}</flux:label>
+                            <flux:textarea wire:model="emailMessage" rows="5" placeholder="{{ __('Hello, please review and sign this document at your earliest convenience.') }}" />
+                            <flux:error name="emailMessage" />
+                        </flux:field>
+                    </div>
+                </section>
+
+                <section class="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-900/30">
+                    <div>
+                        <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Public audit trail') }}</h3>
+                        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Control what outsiders can see on the verification page after the document is completed.') }}</p>
+                    </div>
+
+                    <div class="mt-4 flex items-start gap-3 rounded-xl border border-zinc-200/80 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/30">
+                        <flux:checkbox wire:model.live="auditEnabled" :label="__('Enable public audit details')" />
+                    </div>
+
+                    @if ($auditEnabled)
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                            <flux:checkbox wire:model="auditSettings.show_email" :label="__('Show signer email')" />
+                            <flux:checkbox wire:model="auditSettings.show_document_id" :label="__('Show document ID')" />
+                            <flux:checkbox wire:model="auditSettings.show_author" :label="__('Show document author')" />
+                            <flux:checkbox wire:model="auditSettings.show_mobile" :label="__('Show verified mobile')" />
+                            <flux:checkbox wire:model="auditSettings.show_id_details" :label="__('Show verified ID details')" />
+                        </div>
+                    @else
+                        <div class="mt-4 rounded-xl border border-zinc-200/80 bg-white px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/30 dark:text-zinc-300">
+                            {{ __('Signer and timeline details will be hidden from the public verification page.') }}
+                        </div>
+                    @endif
+                </section>
+            </div>
+
+            <div class="mt-5 flex justify-end">
+                <flux:button variant="outline" type="button" wire:click="saveDeliverySettings">
+                    {{ __('Save delivery settings') }}
+                </flux:button>
             </div>
         </div>
     @endif

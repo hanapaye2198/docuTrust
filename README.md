@@ -40,6 +40,19 @@ Expected layout on the server:
 
 The deployment script unpacks each release into `releases/<git-sha>`, links shared state, runs Laravel post-deploy steps, and repoints `current`.
 
+`scripts/deploy.sh` normalizes `shared/storage` and `bootstrap/cache` ownership before and after Artisan runs. This prevents deploy-owned log/cache files from causing production 500 responses when PHP-FPM writes as `www-data`. Run deployments as root or with passwordless `sudo` available to the deploy user so the script can apply ownership.
+
+The post-deploy path runs:
+
+```bash
+php artisan migrate --force
+php artisan optimize:clear
+php artisan storage:link
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
 ## GitHub Secrets
 
 Set these repository or environment secrets before enabling production deploys:
@@ -51,6 +64,7 @@ Set these repository or environment secrets before enabling production deploys:
 - `DEPLOY_SSH_KEY`
 - `APP_BASE_PATH` with a value like `/var/www/docutrust`
 - `PHP_BIN` with a value like `/usr/bin/php`
+- `WEB_USER` optionally, with the PHP-FPM user. Defaults to `www-data`.
 
 ## Host Setup
 

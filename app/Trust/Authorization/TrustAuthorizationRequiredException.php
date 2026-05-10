@@ -4,6 +4,4 @@ namespace App\Trust\Authorization;
 
 use RuntimeException;
 
-class TrustAuthorizationRequiredException extends RuntimeException
-{
-}
+class TrustAuthorizationRequiredException extends RuntimeException {}

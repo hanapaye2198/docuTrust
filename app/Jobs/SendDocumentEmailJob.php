@@ -56,6 +56,9 @@ class SendDocumentEmailJob implements ShouldQueue
                         expiresAt: $signer->expires_at?->toDateTimeString(),
                         requiresDocumentPassword: $document->hasAccessPassword(),
                         documentPasswordHint: $document->access_password_hint,
+                        customSubject: $document->email_subject,
+                        customMessage: $document->email_message,
+                        participantRoleType: $signer->roleType()->value,
                     )
                 );
 

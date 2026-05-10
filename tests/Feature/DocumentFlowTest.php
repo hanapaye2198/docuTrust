@@ -144,6 +144,104 @@ class DocumentFlowTest extends TestCase
         $this->assertSame('Same password from the email thread', $document->access_password_hint);
     }
 
+    public function test_user_can_upload_a_document_with_restricted_public_audit_settings(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $file = UploadedFile::fake()->create('private-contract.pdf', 120, 'application/pdf');
+
+        $this->actingAs($user);
+
+        LivewireVolt::test('documents.create')
+            ->set('title', 'Private contract')
+            ->set('auditEnabled', false)
+            ->set('auditSettings', [
+                'show_email' => false,
+                'show_document_id' => false,
+                'show_author' => false,
+                'show_mobile' => false,
+                'show_id_details' => false,
+            ])
+            ->set('file', $file)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $document = Document::query()->where('title', 'Private contract')->first();
+        $this->assertNotNull($document);
+        $this->assertFalse($document->isAuditTrailEnabled());
+        $this->assertSame([
+            'show_email' => false,
+            'show_document_id' => false,
+            'show_author' => false,
+            'show_mobile' => false,
+            'show_id_details' => false,
+        ], $document->audit_settings);
+    }
+
+    public function test_user_can_upload_a_document_with_custom_invitation_copy(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $file = UploadedFile::fake()->create('custom-invite-contract.pdf', 120, 'application/pdf');
+
+        $this->actingAs($user);
+
+        LivewireVolt::test('documents.create')
+            ->set('title', 'Custom invite contract')
+            ->set('emailSubject', 'Please sign this custom contract')
+            ->set('emailMessage', "Hi there,\nPlease sign this contract before Friday.")
+            ->set('file', $file)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $document = Document::query()->where('title', 'Custom invite contract')->first();
+        $this->assertNotNull($document);
+        $this->assertSame('Please sign this custom contract', $document->email_subject);
+        $this->assertSame("Hi there,\nPlease sign this contract before Friday.", $document->email_message);
+    }
+
+    public function test_owner_can_update_draft_delivery_settings_from_document_page(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'email_subject' => null,
+            'email_message' => null,
+            'audit_enabled' => true,
+            'audit_settings' => Document::defaultAuditSettings(),
+        ]);
+
+        $this->actingAs($user);
+
+        LivewireVolt::test('documents.show', ['document' => $document])
+            ->set('emailSubject', 'Updated subject')
+            ->set('emailMessage', "Updated message\nfor signers.")
+            ->set('auditEnabled', false)
+            ->set('auditSettings', [
+                'show_email' => false,
+                'show_document_id' => false,
+                'show_author' => false,
+                'show_mobile' => false,
+                'show_id_details' => false,
+            ])
+            ->call('saveDeliverySettings')
+            ->assertHasNoErrors();
+
+        $document->refresh();
+        $this->assertSame('Updated subject', $document->email_subject);
+        $this->assertSame("Updated message\nfor signers.", $document->email_message);
+        $this->assertFalse($document->isAuditTrailEnabled());
+        $this->assertSame([
+            'show_email' => false,
+            'show_document_id' => false,
+            'show_author' => false,
+            'show_mobile' => false,
+            'show_id_details' => false,
+        ], $document->audit_settings);
+    }
+
     public function test_documents_index_searches_by_filename_and_tag_name(): void
     {
         $user = User::factory()->create();

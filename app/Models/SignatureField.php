@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SignatureFieldType;
+use Database\Factories\SignatureFieldFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class SignatureField extends Model
 {
-    /** @use HasFactory<\Database\Factories\SignatureFieldFactory> */
+    /** @use HasFactory<SignatureFieldFactory> */
     use HasFactory;
 
     /**

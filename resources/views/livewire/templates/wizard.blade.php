@@ -33,7 +33,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public ?string $emailMessage = null;
 
-    public string $signingMethod = 'docutrust_sign';
+    public string $signingMethod = TemplateSigningMethod::AccountVerified->value;
 
     public bool $auditEnabled = true;
 
@@ -54,7 +54,9 @@ new #[Layout('components.layouts.app')] class extends Component {
             $this->name = $template->name;
             $this->storedFilePaths = $template->files ?? [];
             $this->documentWorkflow = $template->document_workflow;
-            $this->roles = $template->templateSigners->map(fn ($s) => [
+            $this->roles = $template->templateSigners
+                ->filter(fn ($s) => $s->isActiveRoleType())
+                ->map(fn ($s) => [
                 'role_name' => $s->role_name,
                 'role_type' => $s->role_type->value,
             ])->values()->all();
@@ -146,10 +148,13 @@ new #[Layout('components.layouts.app')] class extends Component {
             'documentWorkflow' => ['boolean'],
             'roles' => ['required', 'array', 'min:1'],
             'roles.*.role_name' => ['required', 'string', 'max:255', 'distinct'],
-            'roles.*.role_type' => ['required', 'in:signer,approver,recipient'],
+            'roles.*.role_type' => ['required', 'in:'.implode(',', TemplateRoleType::activeValues())],
             'emailSubject' => ['nullable', 'string', 'max:255'],
             'emailMessage' => ['nullable', 'string', 'max:5000'],
-            'signingMethod' => ['required', 'in:docutrust_sign,email'],
+            'signingMethod' => ['required', 'in:'.implode(',', array_map(
+                static fn (TemplateSigningMethod $method): string => $method->value,
+                TemplateSigningMethod::cases(),
+            ))],
             'auditEnabled' => ['boolean'],
             'auditSettings.show_email' => ['boolean'],
             'auditSettings.show_document_id' => ['boolean'],
@@ -370,7 +375,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <flux:checkbox wire:model.live="documentWorkflow" :label="__('Set document workflow')" />
                 </div>
                 <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    {{ __('When enabled, participants follow the order below (sequential flow).') }}
+                    {{ __('When enabled, approvers and signers follow the order below (sequential flow).') }}
                 </p>
 
                 <div class="mt-4 space-y-4">
@@ -443,17 +448,24 @@ new #[Layout('components.layouts.app')] class extends Component {
                 <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-50">{{ __('Signing method') }}</h2>
                 <div class="mt-4 space-y-3">
                     <label class="flex cursor-pointer gap-3 rounded-xl border border-zinc-200 p-4 has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50/50 dark:border-zinc-700 dark:has-[:checked]:border-teal-500 dark:has-[:checked]:bg-teal-950/30">
-                        <input type="radio" wire:model="signingMethod" value="docutrust_sign" class="mt-1 text-teal-600" />
+                        <input type="radio" wire:model="signingMethod" value="{{ TemplateSigningMethod::EmailLink->value }}" class="mt-1 text-teal-600" />
                         <span>
-                            <span class="block font-medium text-zinc-900 dark:text-zinc-50">{{ __('Via DocuTrust Sign') }}</span>
-                            <span class="text-sm text-zinc-500">{{ __('Sign using verified email') }}</span>
+                            <span class="block font-medium text-zinc-900 dark:text-zinc-50">{{ __('Via Email Link') }}</span>
+                            <span class="text-sm text-zinc-500">{{ __('Recipients sign through a secure email link without needing an account.') }}</span>
                         </span>
                     </label>
-                    <label class="flex cursor-not-allowed gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-4 opacity-80 dark:border-zinc-700 dark:bg-zinc-900/40">
-                        <input type="radio" value="email" class="mt-1 text-teal-600" disabled />
+                    <label class="flex cursor-pointer gap-3 rounded-xl border border-zinc-200 p-4 has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50/50 dark:border-zinc-700 dark:has-[:checked]:border-teal-500 dark:has-[:checked]:bg-teal-950/30">
+                        <input type="radio" wire:model="signingMethod" value="{{ TemplateSigningMethod::AccountVerified->value }}" class="mt-1 text-teal-600" />
                         <span>
-                            <span class="block font-medium text-zinc-700 dark:text-zinc-200">{{ __('Via email') }}</span>
-                            <span class="text-sm text-zinc-500">{{ __('Coming soon. Disabled for demo stability.') }}</span>
+                            <span class="block font-medium text-zinc-900 dark:text-zinc-50">{{ __('Via DocuTrust Account') }}</span>
+                            <span class="text-sm text-zinc-500">{{ __('Each signer must use an existing verified DocuTrust account in your organization.') }}</span>
+                        </span>
+                    </label>
+                    <label class="flex cursor-pointer gap-3 rounded-xl border border-zinc-200 p-4 has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50/50 dark:border-zinc-700 dark:has-[:checked]:border-teal-500 dark:has-[:checked]:bg-teal-950/30">
+                        <input type="radio" wire:model="signingMethod" value="{{ TemplateSigningMethod::PkiCertificate->value }}" class="mt-1 text-teal-600" />
+                        <span>
+                            <span class="block font-medium text-zinc-900 dark:text-zinc-50">{{ __('Via PKI Certificate') }}</span>
+                            <span class="text-sm text-zinc-500">{{ __('Create signers that must complete a certificate-backed digital signature.') }}</span>
                         </span>
                     </label>
                 </div>
@@ -473,7 +485,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <div class="flex items-start gap-3">
                         <flux:checkbox wire:model="auditEnabled" :label="__('Audit trail enabled')" />
                     </div>
-                    <p class="mt-2 text-xs text-zinc-500">{{ __('Choose what appears on the audit trail.') }}</p>
+                    <p class="mt-2 text-xs text-zinc-500">{{ __('These settings control what the public verification record shows after the document is completed.') }}</p>
 
                     <div class="mt-6 grid gap-3 sm:grid-cols-2">
                         <flux:checkbox wire:model="auditSettings.show_email" :label="__('Show email address')" />

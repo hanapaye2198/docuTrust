@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Enums\TemplateRoleType;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use Illuminate\Bus\Queueable;
@@ -20,6 +21,9 @@ class PendingSignatureReminderMail extends Mailable
         public string $signUrl,
         public bool $requiresDocumentPassword = false,
         public ?string $documentPasswordHint = null,
+        public ?string $customSubject = null,
+        public ?string $customMessage = null,
+        public string $participantRoleType = 'signer',
     ) {}
 
     /**
@@ -28,7 +32,7 @@ class PendingSignatureReminderMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: __('Reminder: pending signature for :title', ['title' => $this->document->title]),
+            subject: $this->resolvedSubject(),
         );
     }
 
@@ -40,5 +44,20 @@ class PendingSignatureReminderMail extends Mailable
         return new Content(
             view: 'emails.pending-signature-reminder',
         );
+    }
+
+    private function resolvedSubject(): string
+    {
+        $subject = trim((string) $this->customSubject);
+
+        if ($subject !== '') {
+            return __('Reminder: :subject', ['subject' => $subject]);
+        }
+
+        if ($this->participantRoleType === TemplateRoleType::Approver->value) {
+            return __('Reminder: pending approval for :title', ['title' => $this->document->title]);
+        }
+
+        return __('Reminder: pending signature for :title', ['title' => $this->document->title]);
     }
 }

@@ -13,6 +13,7 @@ use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
 use App\Models\User;
+use App\Services\CertificateAuthorityService;
 use App\Services\CertificateVerificationService;
 use App\Services\PkiSignatureService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -375,13 +376,13 @@ CFG;
             'certificate_source' => 'provider_managed',
             'provider_name' => 'remote_managed',
             'provider_reference' => 'provider-ref-verify-001',
-            'subject_dn' => app(\App\Services\CertificateAuthorityService::class)->distinguishedNameToString($certificateParsed['subject'] ?? []),
-            'issuer_dn' => app(\App\Services\CertificateAuthorityService::class)->distinguishedNameToString($certificateParsed['issuer'] ?? []),
-            'serial_number' => app(\App\Services\CertificateAuthorityService::class)->parsedSerialNumber($certificateParsed),
+            'subject_dn' => app(CertificateAuthorityService::class)->distinguishedNameToString($certificateParsed['subject'] ?? []),
+            'issuer_dn' => app(CertificateAuthorityService::class)->distinguishedNameToString($certificateParsed['issuer'] ?? []),
+            'serial_number' => app(CertificateAuthorityService::class)->parsedSerialNumber($certificateParsed),
             'public_key_pem' => $chain['public_key_pem'],
             'certificate_pem' => $chain['certificate_pem'],
             'issuer_certificate_pem' => $chain['issuer_certificate_pem'],
-            'fingerprint_sha256' => app(\App\Services\CertificateAuthorityService::class)->certificateFingerprint($chain['certificate_pem']),
+            'fingerprint_sha256' => app(CertificateAuthorityService::class)->certificateFingerprint($chain['certificate_pem']),
             'valid_from' => now()->subDay(),
             'valid_to' => now()->addYear(),
             'status' => 'active',
@@ -445,13 +446,13 @@ CFG;
             'certificate_source' => 'provider_managed',
             'provider_name' => 'remote_managed',
             'provider_reference' => 'provider-ref-verify-002',
-            'subject_dn' => app(\App\Services\CertificateAuthorityService::class)->distinguishedNameToString($certificateParsed['subject'] ?? []),
-            'issuer_dn' => app(\App\Services\CertificateAuthorityService::class)->distinguishedNameToString($certificateParsed['issuer'] ?? []),
-            'serial_number' => app(\App\Services\CertificateAuthorityService::class)->parsedSerialNumber($certificateParsed),
+            'subject_dn' => app(CertificateAuthorityService::class)->distinguishedNameToString($certificateParsed['subject'] ?? []),
+            'issuer_dn' => app(CertificateAuthorityService::class)->distinguishedNameToString($certificateParsed['issuer'] ?? []),
+            'serial_number' => app(CertificateAuthorityService::class)->parsedSerialNumber($certificateParsed),
             'public_key_pem' => $chain['public_key_pem'],
             'certificate_pem' => $chain['certificate_pem'],
             'issuer_certificate_pem' => $chain['issuer_certificate_pem'],
-            'fingerprint_sha256' => app(\App\Services\CertificateAuthorityService::class)->certificateFingerprint($chain['certificate_pem']),
+            'fingerprint_sha256' => app(CertificateAuthorityService::class)->certificateFingerprint($chain['certificate_pem']),
             'valid_from' => now()->subDay(),
             'valid_to' => now()->addYear(),
             'status' => 'active',

@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Enums\TemplateRoleType;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
@@ -19,12 +20,15 @@ class ReminderMail extends Mailable implements ShouldQueue
         public string $signUrl,
         public bool $requiresDocumentPassword = false,
         public ?string $documentPasswordHint = null,
+        public ?string $customSubject = null,
+        public ?string $customMessage = null,
+        public string $participantRoleType = 'signer',
     ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: __('Reminder: pending signature for :title', ['title' => $this->documentTitle]),
+            subject: $this->resolvedSubject(),
         );
     }
 
@@ -33,5 +37,20 @@ class ReminderMail extends Mailable implements ShouldQueue
         return new Content(
             view: 'emails.reminder',
         );
+    }
+
+    private function resolvedSubject(): string
+    {
+        $subject = trim((string) $this->customSubject);
+
+        if ($subject !== '') {
+            return __('Reminder: :subject', ['subject' => $subject]);
+        }
+
+        if ($this->participantRoleType === TemplateRoleType::Approver->value) {
+            return __('Reminder: pending approval for :title', ['title' => $this->documentTitle]);
+        }
+
+        return __('Reminder: pending signature for :title', ['title' => $this->documentTitle]);
     }
 }

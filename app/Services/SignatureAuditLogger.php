@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\Document;
-use App\Models\SignatureAuditEvent;
 use App\Models\DocumentSigner;
+use App\Models\SignatureAuditEvent;
 use Illuminate\Support\Facades\Log;
 
 final class SignatureAuditLogger

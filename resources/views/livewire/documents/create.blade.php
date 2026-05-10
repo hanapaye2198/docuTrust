@@ -30,6 +30,20 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public string $accessPasswordHint = '';
 
+    public string $emailSubject = '';
+
+    public string $emailMessage = '';
+
+    public bool $auditEnabled = true;
+
+    /** @var array<string, bool> */
+    public array $auditSettings = [];
+
+    public function mount(): void
+    {
+        $this->auditSettings = Document::defaultAuditSettings();
+    }
+
     public function with(): array
     {
         return [
@@ -67,6 +81,14 @@ new #[Layout('components.layouts.app')] class extends Component {
                     'accessPassword' => ['nullable', 'string', 'min:6', 'max:255', 'same:accessPasswordConfirmation'],
                     'accessPasswordConfirmation' => ['nullable', 'string', 'max:255'],
                     'accessPasswordHint' => ['nullable', 'string', 'max:255'],
+                    'emailSubject' => ['nullable', 'string', 'max:255'],
+                    'emailMessage' => ['nullable', 'string', 'max:5000'],
+                    'auditEnabled' => ['boolean'],
+                    'auditSettings.show_email' => ['boolean'],
+                    'auditSettings.show_document_id' => ['boolean'],
+                    'auditSettings.show_author' => ['boolean'],
+                    'auditSettings.show_mobile' => ['boolean'],
+                    'auditSettings.show_id_details' => ['boolean'],
                 ]
             ));
 
@@ -76,6 +98,10 @@ new #[Layout('components.layouts.app')] class extends Component {
             $document = Auth::user()->documents()->create([
                 'title' => $this->title,
                 'file_path' => $path,
+                'email_subject' => trim($this->emailSubject) !== '' ? trim($this->emailSubject) : null,
+                'email_message' => trim($this->emailMessage) !== '' ? trim($this->emailMessage) : null,
+                'audit_enabled' => $this->auditEnabled,
+                'audit_settings' => $this->auditSettings,
                 'access_password_hash' => $this->accessPassword !== '' ? Hash::make($this->accessPassword) : null,
                 'access_password_hint' => $this->accessPasswordHint !== '' ? trim($this->accessPasswordHint) : null,
                 'status' => DocumentStatus::Draft,
@@ -284,6 +310,58 @@ new #[Layout('components.layouts.app')] class extends Component {
                             />
                             <flux:error name="accessPasswordHint" />
                         </flux:field>
+                    </section>
+
+                    <section class="space-y-4 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
+                        <div>
+                            <h2 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ __('Invitation email') }}</h2>
+                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Optional custom subject and message for the signer invitation email. Leave blank to use the default DocuTrust invitation copy.') }}</p>
+                        </div>
+
+                        <flux:field>
+                            <flux:label>{{ __('Email subject') }}</flux:label>
+                            <flux:input
+                                wire:model="emailSubject"
+                                type="text"
+                                placeholder="{{ __('Please review and sign this document') }}"
+                            />
+                            <flux:error name="emailSubject" />
+                        </flux:field>
+
+                        <flux:field>
+                            <flux:label>{{ __('Email message') }}</flux:label>
+                            <flux:textarea
+                                wire:model="emailMessage"
+                                rows="4"
+                                placeholder="{{ __('Hello, please review and sign this document at your earliest convenience.') }}"
+                            />
+                            <flux:error name="emailMessage" />
+                        </flux:field>
+                    </section>
+
+                    <section class="space-y-4 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
+                        <div>
+                            <h2 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ __('Public audit trail') }}</h2>
+                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Control what outsiders can see on the public verification page after this document is completed.') }}</p>
+                        </div>
+
+                        <div class="flex items-start gap-3 rounded-xl border border-zinc-200/80 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/30">
+                            <flux:checkbox wire:model.live="auditEnabled" :label="__('Enable public audit details')" />
+                        </div>
+
+                        @if ($auditEnabled)
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <flux:checkbox wire:model="auditSettings.show_email" :label="__('Show signer email')" />
+                                <flux:checkbox wire:model="auditSettings.show_document_id" :label="__('Show document ID')" />
+                                <flux:checkbox wire:model="auditSettings.show_author" :label="__('Show document author')" />
+                                <flux:checkbox wire:model="auditSettings.show_mobile" :label="__('Show verified mobile')" />
+                                <flux:checkbox wire:model="auditSettings.show_id_details" :label="__('Show verified ID details')" />
+                            </div>
+                        @else
+                            <div class="rounded-xl border border-zinc-200/80 bg-white px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/30 dark:text-zinc-300">
+                                {{ __('Signer and timeline details will be hidden from the public verification page.') }}
+                            </div>
+                        @endif
                     </section>
 
                     {{-- Actions --}}

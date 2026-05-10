@@ -3,7 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Enums\TemplateRoleType;
+use App\Enums\TemplateSigningMethod;
 use App\Models\Template;
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -39,8 +41,9 @@ class UseTemplateRequest extends FormRequest
             /** @var Template $template */
             $template = $this->route('template');
             $assignees = $this->input('assignees', []);
+            $requiresExistingAccount = $template->signing_method === TemplateSigningMethod::AccountVerified;
 
-            foreach ($template->templateSigners()->where('role_type', TemplateRoleType::Signer)->orderBy('signing_order')->get() as $templateSigner) {
+            foreach ($template->templateSigners()->whereIn('role_type', TemplateRoleType::activeValues())->orderBy('signing_order')->get() as $templateSigner) {
                 $role = $templateSigner->role_name;
                 $name = data_get($assignees, $role.'.name');
                 $email = data_get($assignees, $role.'.email');
@@ -49,6 +52,23 @@ class UseTemplateRequest extends FormRequest
                 }
                 if (! is_string($email) || $email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     $validator->errors()->add('assignees.'.$role.'.email', __('Enter a valid email for :role.', ['role' => $role]));
+
+                    continue;
+                }
+
+                if ($requiresExistingAccount && $templateSigner->role_type !== TemplateRoleType::Recipient) {
+                    $linkedUserExists = User::query()
+                        ->where('organization_id', $template->organization_id)
+                        ->whereRaw('LOWER(email) = ?', [strtolower($email)])
+                        ->whereNotNull('email_verified_at')
+                        ->exists();
+
+                    if (! $linkedUserExists) {
+                        $validator->errors()->add(
+                            'assignees.'.$role.'.email',
+                            __('This signer method requires an existing verified DocuTrust account in your organization.')
+                        );
+                    }
                 }
             }
         });
@@ -59,8 +79,8 @@ class UseTemplateRequest extends FormRequest
      */
     public function validatedAssigneesByRole(Template $template): array
     {
-        $signerRoleNames = $template->templateSigners()
-            ->where('role_type', TemplateRoleType::Signer)
+        $participantRoleNames = $template->templateSigners()
+            ->whereIn('role_type', TemplateRoleType::activeValues())
             ->orderBy('signing_order')
             ->pluck('role_name')
             ->all();
@@ -70,7 +90,7 @@ class UseTemplateRequest extends FormRequest
         $assignees = $data['assignees'];
 
         $out = [];
-        foreach ($signerRoleNames as $roleName) {
+        foreach ($participantRoleNames as $roleName) {
             $out[$roleName] = [
                 'name' => (string) data_get($assignees, $roleName.'.name'),
                 'email' => (string) data_get($assignees, $roleName.'.email'),

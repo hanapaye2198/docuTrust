@@ -8,9 +8,10 @@ use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
 use App\Models\Signature;
-use App\Models\SignerCertificate;
 use App\Models\SignatureAuditEvent;
+use App\Models\SignerCertificate;
 use App\Models\User;
+use App\Services\CertificateAuthorityService;
 use App\Services\PkiSignatureService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -115,6 +116,138 @@ class PublicDocumentVerificationTest extends TestCase
             ->assertSee('Invalid or unverified document');
     }
 
+    public function test_public_verify_page_hides_restricted_audit_details(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:3001/verify' => Http::response([
+                'exists' => true,
+                'transactionMatches' => true,
+                'blockNumber' => 999,
+                'proofTimestamp' => 1710000000,
+                'submittedBy' => '0xVerifier',
+            ]),
+        ]);
+
+        $owner = User::factory()->create(['name' => 'Hidden Author']);
+        $document = Document::factory()->for($owner)->create([
+            'status' => DocumentStatus::Completed,
+            'audit_enabled' => false,
+            'audit_settings' => [
+                'show_email' => false,
+                'show_document_id' => false,
+                'show_author' => false,
+                'show_mobile' => false,
+                'show_id_details' => false,
+            ],
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'name' => 'Private Signer',
+            'email' => 'private@example.test',
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+        SignatureAuditEvent::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'action' => SignatureAuditEvent::ACTION_SIGNED,
+            'ip_address' => '127.0.0.1',
+        ]);
+        SignatureAuditEvent::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => null,
+            'action' => SignatureAuditEvent::ACTION_COMPLETED,
+            'ip_address' => '127.0.0.1',
+        ]);
+        $documentHash = DocumentHash::query()->create([
+            'document_id' => $document->id,
+            'hash' => hash('sha256', 'restricted-audit'),
+            'transaction_id' => '0xrestricted',
+            'created_at' => now(),
+        ]);
+
+        $this->get(route('verify.index').'?documentIdentifier='.$documentHash->hash)
+            ->assertOk()
+            ->assertSee('Audit trail')
+            ->assertSee('restricted public verification record')
+            ->assertDontSee('Signer list')
+            ->assertDontSee('Signing timeline')
+            ->assertDontSee('Document author:')
+            ->assertDontSee('Email:');
+    }
+
+    public function test_public_verify_page_shows_configured_audit_metadata(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:3001/verify' => Http::response([
+                'exists' => true,
+                'transactionMatches' => true,
+                'blockNumber' => 555,
+                'proofTimestamp' => 1710000000,
+                'submittedBy' => '0xVerifier',
+            ]),
+        ]);
+
+        $owner = User::factory()->create(['name' => 'Visible Author']);
+        $linkedSigner = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+            'email' => 'linked.audit@example.test',
+            'mobile_number' => '+15551234567',
+            'mobile_verified_at' => now(),
+            'kyc_id_type' => 'passport',
+            'kyc_verified_at' => now(),
+        ]);
+        $document = Document::factory()->for($owner)->create([
+            'status' => DocumentStatus::Completed,
+            'audit_enabled' => true,
+            'audit_settings' => [
+                'show_email' => true,
+                'show_document_id' => true,
+                'show_author' => true,
+                'show_mobile' => true,
+                'show_id_details' => true,
+            ],
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'name' => 'Visible Signer',
+            'email' => 'linked.audit@example.test',
+            'user_id' => $linkedSigner->id,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+        SignatureAuditEvent::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'action' => SignatureAuditEvent::ACTION_SIGNED,
+            'ip_address' => '127.0.0.1',
+        ]);
+        SignatureAuditEvent::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => null,
+            'action' => SignatureAuditEvent::ACTION_COMPLETED,
+            'ip_address' => '127.0.0.1',
+        ]);
+        $documentHash = DocumentHash::query()->create([
+            'document_id' => $document->id,
+            'hash' => hash('sha256', 'visible-audit'),
+            'transaction_id' => '0xvisible',
+            'created_at' => now(),
+        ]);
+
+        $this->get(route('verify.index').'?documentIdentifier='.$documentHash->hash)
+            ->assertOk()
+            ->assertSee('Document ID:')
+            ->assertSee((string) $document->id)
+            ->assertSee('Document author:')
+            ->assertSee('Visible Author')
+            ->assertSee('Email:')
+            ->assertSee('linked.audit@example.test')
+            ->assertSee('Verified mobile:')
+            ->assertSee('+15551234567')
+            ->assertSee('Verified ID:')
+            ->assertSee('Verified passport')
+            ->assertSee('Signing timeline');
+    }
+
     public function test_public_verify_page_shows_blockchain_not_available_when_no_transaction_is_recorded(): void
     {
         $owner = User::factory()->create();
@@ -169,13 +302,13 @@ class PublicDocumentVerificationTest extends TestCase
             'certificate_source' => 'provider_managed',
             'provider_name' => 'trust_service_provider',
             'provider_reference' => 'public-ref-001',
-            'subject_dn' => app(\App\Services\CertificateAuthorityService::class)->distinguishedNameToString($parsed['subject'] ?? []),
-            'issuer_dn' => app(\App\Services\CertificateAuthorityService::class)->distinguishedNameToString($parsed['issuer'] ?? []),
-            'serial_number' => app(\App\Services\CertificateAuthorityService::class)->parsedSerialNumber($parsed),
+            'subject_dn' => app(CertificateAuthorityService::class)->distinguishedNameToString($parsed['subject'] ?? []),
+            'issuer_dn' => app(CertificateAuthorityService::class)->distinguishedNameToString($parsed['issuer'] ?? []),
+            'serial_number' => app(CertificateAuthorityService::class)->parsedSerialNumber($parsed),
             'public_key_pem' => $chain['public_key_pem'],
             'certificate_pem' => $chain['certificate_pem'],
             'issuer_certificate_pem' => $chain['issuer_certificate_pem'],
-            'fingerprint_sha256' => app(\App\Services\CertificateAuthorityService::class)->certificateFingerprint($chain['certificate_pem']),
+            'fingerprint_sha256' => app(CertificateAuthorityService::class)->certificateFingerprint($chain['certificate_pem']),
             'valid_from' => now()->subDay(),
             'valid_to' => now()->addYear(),
             'status' => 'active',

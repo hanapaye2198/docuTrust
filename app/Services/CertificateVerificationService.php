@@ -242,5 +242,4 @@ class CertificateVerificationService
             'valid_to' => $certificate?->valid_to?->toDateTimeString(),
         ];
     }
-
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\TemplateRoleType;
+use App\Enums\TemplateSigningMethod;
 use App\Models\Template;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -12,7 +13,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         $this->authorize('view', $template);
         $this->template = $template->load([
-            'templateSigners' => fn ($q) => $q->where('role_type', TemplateRoleType::Signer)->orderBy('signing_order'),
+            'templateSigners' => fn ($q) => $q->whereIn('role_type', TemplateRoleType::activeValues())->orderBy('signing_order'),
         ]);
     }
 }; ?>
@@ -32,6 +33,42 @@ new #[Layout('components.layouts.app')] class extends Component {
                 <flux:input name="document_title" type="text" required value="{{ old('document_title', $template->name) }}" placeholder="{{ __('e.g. Acme Corp — Employment agreement') }}" />
                 <flux:error name="document_title" />
             </flux:field>
+
+            <div class="rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{{ __('Signing method') }}</h2>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    @if ($template->signing_method === TemplateSigningMethod::EmailLink)
+                        {{ __('Recipients will sign through secure email links without needing a DocuTrust account.') }}
+                    @elseif ($template->signing_method === TemplateSigningMethod::AccountVerified)
+                        {{ __('Each signer must use an existing verified DocuTrust account in your organization.') }}
+                    @else
+                        {{ __('Each signer will complete a certificate-backed digital signature.') }}
+                    @endif
+                </p>
+            </div>
+
+            <div class="rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{{ __('Audit trail') }}</h2>
+                @if ($template->audit_enabled)
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('The completed document will expose only the verification details enabled in this template.') }}</p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        @foreach (collect(\App\Models\Template::defaultAuditSettings())->keys()->filter(fn ($key) => data_get($template->audit_settings ?? [], $key, data_get(\App\Models\Template::defaultAuditSettings(), $key, false))) as $settingKey)
+                            <span class="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+                                {{ match ($settingKey) {
+                                    'show_email' => __('Signer email'),
+                                    'show_document_id' => __('Document ID'),
+                                    'show_author' => __('Document author'),
+                                    'show_mobile' => __('Verified mobile'),
+                                    'show_id_details' => __('Verified ID details'),
+                                    default => $settingKey,
+                                } }}
+                            </span>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('The public verification record will hide signer and timeline details for documents created from this template.') }}</p>
+                @endif
+            </div>
 
             <div class="space-y-4 rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
                 <div>
@@ -76,11 +113,16 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
 
             <div class="space-y-4">
-                <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signers') }}</h2>
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Participants') }}</h2>
 
                 @foreach ($template->templateSigners as $signer)
                     <div class="rounded-lg border border-zinc-200/90 p-3.5 dark:border-zinc-700">
-                        <p class="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{{ $signer->role_name }}</p>
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{{ $signer->role_name }}</p>
+                            <span class="rounded-full bg-zinc-100 px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                                {{ ucfirst($signer->role_type->value) }}
+                            </span>
+                        </div>
                         <div class="mt-3 grid gap-3 sm:grid-cols-2">
                             <flux:field>
                                 <flux:label>{{ __('Name') }}</flux:label>

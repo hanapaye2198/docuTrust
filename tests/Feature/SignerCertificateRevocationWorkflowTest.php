@@ -10,6 +10,7 @@ use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
+use App\Models\SignerCertificate;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -90,7 +91,7 @@ class SignerCertificateRevocationWorkflowTest extends TestCase
     }
 
     /**
-     * @return array{User, Document, \App\Models\SignerCertificate}
+     * @return array{User, Document, SignerCertificate}
      */
     private function createSignedDocumentContext(): array
     {

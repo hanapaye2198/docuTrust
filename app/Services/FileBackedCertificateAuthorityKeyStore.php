@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Contracts\CertificateAuthorityKeyStore;
 use App\Models\CertificateAuthority;
 use Illuminate\Support\Facades\File;
-use RuntimeException;
 
 class FileBackedCertificateAuthorityKeyStore implements CertificateAuthorityKeyStore
 {

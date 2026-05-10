@@ -21,10 +21,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -153,7 +153,9 @@ class SignDocumentController extends Controller
             ]);
 
             return redirect()->route('sign.show', $this->signerRouteToken($signer))
-                ->with('status', __('Thank you. Your signature has been recorded.'));
+                ->with('status', $signer->isApprover()
+                    ? __('Thank you. Your approval has been recorded.')
+                    : __('Thank you. Your signature has been recorded.'));
         } catch (TrustAuthorizationRequiredException $exception) {
             return redirect()->route('sign.show', $token)
                 ->with('error', $exception->getMessage());
@@ -211,7 +213,9 @@ class SignDocumentController extends Controller
             ]);
 
             return redirect()->route('sign.account.show', ['signerId' => $signer->id])
-                ->with('status', __('Thank you. Your signature has been recorded.'));
+                ->with('status', $signer->isApprover()
+                    ? __('Thank you. Your approval has been recorded.')
+                    : __('Thank you. Your signature has been recorded.'));
         } catch (TrustAuthorizationRequiredException $exception) {
             return redirect()->route('sign.account.show', ['signerId' => $signerId])
                 ->with('error', $exception->getMessage());

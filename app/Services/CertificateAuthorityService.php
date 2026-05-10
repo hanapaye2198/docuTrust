@@ -34,8 +34,8 @@ class CertificateAuthorityService
      *   private_key_pem: string,
      *   certificate_pem: string,
      *   fingerprint_sha256: string,
-     *   valid_from: \DateTimeImmutable,
-     *   valid_to: \DateTimeImmutable,
+     *   valid_from: DateTimeImmutable,
+     *   valid_to: DateTimeImmutable,
      *   subject_dn: string,
      *   issuer_dn: string
      * }
@@ -120,7 +120,7 @@ class CertificateAuthorityService
 
     public function generateCertificateSerialInteger(): int
     {
-        return random_int(1, 0x7fffffff);
+        return random_int(1, 0x7FFFFFFF);
     }
 
     public function distinguishedNameToString(array $distinguishedName): string
@@ -180,7 +180,7 @@ class CertificateAuthorityService
             throw new RuntimeException('Certificate validity timestamp missing.');
         }
 
-        return (new DateTimeImmutable())->setTimestamp($timestamp);
+        return (new DateTimeImmutable)->setTimestamp($timestamp);
     }
 
     /**

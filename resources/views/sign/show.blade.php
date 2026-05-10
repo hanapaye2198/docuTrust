@@ -16,7 +16,22 @@
         ! $documentHasSignatureFields
         && count($fieldsJson) === 0
         && $signer->status === DocumentSignerStatus::Pending
-        && $signer->document->status === DocumentStatus::Pending;
+        && $signer->document->status === DocumentStatus::Pending
+        && ! $signer->isRecipient();
+
+    $isApprover = $signer->isApprover();
+    $isRecipient = $signer->isRecipient();
+    $actionVerb = $isApprover ? __('approve') : __('sign');
+    $sessionHeading = $isRecipient ? __('Document participant') : ($isApprover ? __('Approve document') : __('Sign document'));
+    $sessionDescription = $isApprover
+        ? __('Review the details below, then approve the document when you are ready.')
+        : ($isRecipient
+            ? __('Recipients receive the completed document after the workflow finishes and do not take action during signing.')
+            : __('Review the details below, then complete any highlighted signature fields on the document.'));
+    $legacyActionPrompt = $isApprover
+        ? __('Confirm to approve this document.')
+        : __('Confirm to complete your signature on this document.');
+    $legacyActionButton = $isApprover ? __('Approve document') : __('Sign document');
 
     $showAwaitingAssignedFields =
         $documentHasSignatureFields
@@ -57,11 +72,11 @@
                 {{ __('Secure e-signature') }}
             </div>
             <h1 class="mt-5 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
-                {{ __('Sign document') }}
+                {{ $sessionHeading }}
             </h1>
             <p class="mt-3 text-lg font-medium text-zinc-700 dark:text-zinc-200">{{ $signer->document->title }}</p>
             <p class="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
-                {{ __('Review the details below, then complete any highlighted signature fields on the document.') }}
+                {{ $sessionDescription }}
             </p>
         </header>
 
@@ -85,7 +100,7 @@
 
                 @if ($signer->document->status === DocumentStatus::Draft)
                     <p class="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                        {{ __('This document has not been sent for signature yet.') }}
+                        {{ $isApprover ? __('This document has not been sent for approval yet.') : __('This document has not been sent for signature yet.') }}
                     </p>
                 @endif
 
@@ -179,7 +194,7 @@
                     </div>
                     @if ($signer->signed_at)
                         <div class="flex justify-between gap-4">
-                            <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Signed at') }}</dt>
+                            <dt class="text-zinc-500 dark:text-zinc-400">{{ $isApprover ? __('Approved at') : __('Signed at') }}</dt>
                             <dd class="text-right text-zinc-800 dark:text-zinc-200">{{ $signer->signed_at->format('M j, Y g:i A') }}</dd>
                         </div>
                     @endif
@@ -357,7 +372,7 @@
                     : route('sign.store', $signer->access_token ?? $signer->id) }}" class="flex flex-col gap-4">
                     @csrf
                     <p class="text-center text-sm text-zinc-600 dark:text-zinc-400">
-                        {{ __('Confirm to complete your signature on this document.') }}
+                        {{ $legacyActionPrompt }}
                     </p>
                     @if ($trustAuthorizationEnabled)
                         <p id="legacy-sign-trust-note" class="rounded-xl border border-sky-200/80 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100">
@@ -373,7 +388,7 @@
                         :disabled="$trustAuthorizationEnabled && ! $trustAuthorizationSessionActive"
                         class="w-full py-3 text-base font-semibold shadow-lg shadow-teal-900/15"
                     >
-                        {{ __('Sign document') }}
+                        {{ $legacyActionButton }}
                     </flux:button>
                 </form>
             </div>
