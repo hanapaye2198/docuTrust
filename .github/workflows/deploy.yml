@@ -117,7 +117,7 @@ jobs:
           ARTIFACT_FILE: ${{ needs.build-release.outputs.artifact_name }}.tar.gz
           RELEASE_SHA: ${{ needs.build-release.outputs.release_sha }}
         run: |
-          scp "$ARTIFACT_FILE" "$DEPLOY_USER@$DEPLOY_HOST:/tmp/docutrust-$RELEASE_SHA.tar.gz"
+          scp "$ARTIFACT_FILE" "$DEPLOY_USER@$DEPLOY_HOST:/var/tmp/docutrust-$RELEASE_SHA.tar.gz"
 
       - name: Run Remote Deployment
         env:
@@ -129,5 +129,5 @@ jobs:
           WEB_USER: ${{ secrets.WEB_USER }}
         run: |
           ssh "$DEPLOY_USER@$DEPLOY_HOST" \
-            "export APP_BASE_PATH='${APP_BASE_PATH:-/var/www/docutrust}' RELEASE_SHA='$RELEASE_SHA' PHP_BIN='${PHP_BIN:-/usr/bin/php}' WEB_USER='${WEB_USER:-www-data}' ARTIFACT_PATH='/tmp/docutrust-$RELEASE_SHA.tar.gz'; bash -s" \
+            "export APP_BASE_PATH='${APP_BASE_PATH:-/var/www/docutrust}' RELEASE_SHA='$RELEASE_SHA' PHP_BIN='${PHP_BIN:-/usr/bin/php}' WEB_USER='${WEB_USER:-www-data}' ARTIFACT_PATH='/var/tmp/docutrust-$RELEASE_SHA.tar.gz'; bash -s" \
             < scripts/deploy.sh
