@@ -78,9 +78,9 @@ fix_laravel_permissions
 ln -sfn "$RELEASE_PATH" "$CURRENT_PATH"
 
 if command -v systemctl >/dev/null 2>&1; then
-  systemctl reload php8.4-fpm || true
-  systemctl restart docutrust-queue.service || true
-  systemctl restart docutrust-blockchain.service || true
+  run_privileged systemctl reload php8.4-fpm || true
+  run_privileged systemctl restart docutrust-queue.service || true
+  run_privileged systemctl restart docutrust-blockchain.service || true
 fi
 
 rm -f "$ARTIFACT_PATH"
