@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Mail\SendOtpMail;
 use App\Models\Otp;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 
@@ -218,7 +219,17 @@ class OtpService
 
     private function passesRateLimit(string $identifier, string $channel, string $purpose): bool
     {
-        $unused = [$identifier, $channel, $purpose];
+        $key = sprintf('otp_rate:%s:%s:%s', $channel, $purpose, $identifier);
+        $maxPerWindow = (int) config('otp.rate_limit_max', 5);
+        $windowSeconds = (int) config('otp.rate_limit_window_seconds', 300);
+
+        $attempts = (int) Cache::get($key, 0);
+
+        if ($attempts >= $maxPerWindow) {
+            return false;
+        }
+
+        Cache::put($key, $attempts + 1, $windowSeconds);
 
         return true;
     }

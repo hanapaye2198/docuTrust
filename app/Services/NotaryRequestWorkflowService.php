@@ -179,6 +179,9 @@ class NotaryRequestWorkflowService
             throw new RuntimeException($readiness['issues'][0] ?? __('This notary request is not ready for finalization.'));
         }
 
+        // Auto-trigger digital notarization (seal, QR, certificates) before marking as notarized
+        app(NotaryDigitalizationService::class)->digitalize($request);
+
         $request->markNotarized();
 
         event(new NotaryRequestNotarized($request));

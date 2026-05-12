@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Concerns\ResolvesSecureDisk;
 use App\Contracts\SignerKeyStore;
 use App\Data\FieldSignatureCaptureResult;
 use App\Models\DocumentSigner;
@@ -15,6 +16,8 @@ use RuntimeException;
 
 class FieldSignatureCaptureService
 {
+    use ResolvesSecureDisk;
+
     public function __construct(
         private readonly SignerKeyStore $signerKeyStore,
         private readonly PkiSignatureService $pkiSignatureService,
@@ -83,11 +86,6 @@ class FieldSignatureCaptureService
             signature: $signature->fresh(),
             message: $message,
         );
-    }
-
-    private function secureDiskName(): string
-    {
-        return (string) config('filesystems.docutrust_disk', 'local');
     }
 
     private function ensureSignerKeyPair(DocumentSigner $signer): void

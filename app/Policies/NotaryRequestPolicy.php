@@ -38,7 +38,6 @@ class NotaryRequestPolicy
             UserRole::SuperAdmin,
             UserRole::NotaryAdmin,
             UserRole::Client,
-            UserRole::Notary,
         ], true);
     }
 
@@ -84,7 +83,7 @@ class NotaryRequestPolicy
         }
 
         return $user->organization_id === $notaryRequest->organization_id
-            && in_array($user->role, [UserRole::NotaryAdmin, UserRole::Client], true);
+            && $user->role === UserRole::NotaryAdmin;
     }
 
     public function cancel(User $user, NotaryRequest $notaryRequest): bool

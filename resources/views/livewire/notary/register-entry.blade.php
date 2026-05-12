@@ -19,6 +19,8 @@ new #[Layout('components.layouts.app')] class extends Component {
     public string $notarialActType = 'acknowledgment';
     public string $fees = '';
     public string $officialReceiptNumber = '';
+    public string $pageNumber = '';
+    public string $bookNumber = '';
 
     /** @var array<int, array{name: string, address: string}> */
     public array $parties = [['name' => '', 'address' => '']];
@@ -126,6 +128,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                     'notarial_act_type' => $this->notarialActType,
                     'fees' => $this->fees !== '' ? (float) $this->fees : null,
                     'official_receipt_number' => trim($this->officialReceiptNumber) !== '' ? trim($this->officialReceiptNumber) : null,
+                    'page_number' => $this->pageNumber !== '' ? (int) $this->pageNumber : null,
+                    'book_number' => trim($this->bookNumber) !== '' ? trim($this->bookNumber) : null,
                 ],
                 $document,
             );
@@ -317,7 +321,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
             {{-- Field 8: Fees & O.R. --}}
             <div>
-                <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('⑥ Fees & official receipt') }}</h3>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('⑥ Fees, official receipt & register location') }}</h3>
                 <div class="mt-4 grid gap-4 sm:grid-cols-2">
                     <flux:field>
                         <flux:label>{{ __('Fees (₱)') }}</flux:label>
@@ -328,6 +332,20 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <flux:label>{{ __('O.R. number') }}</flux:label>
                         <flux:input wire:model="officialReceiptNumber" type="text" placeholder="CR: 0001234" />
                         <flux:error name="officialReceiptNumber" />
+                    </flux:field>
+                </div>
+                <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    <flux:field>
+                        <flux:label>{{ __('Page number') }}</flux:label>
+                        <flux:input wire:model="pageNumber" type="number" min="1" placeholder="1" />
+                        <p class="mt-1 text-xs text-zinc-500">{{ __('Page number in the notarial register book') }}</p>
+                        <flux:error name="pageNumber" />
+                    </flux:field>
+                    <flux:field>
+                        <flux:label>{{ __('Book number') }}</flux:label>
+                        <flux:input wire:model="bookNumber" type="text" placeholder="I" />
+                        <p class="mt-1 text-xs text-zinc-500">{{ __('Roman numeral or number of the notarial register book') }}</p>
+                        <flux:error name="bookNumber" />
                     </flux:field>
                 </div>
             </div>

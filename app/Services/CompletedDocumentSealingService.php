@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Concerns\ResolvesSecureDisk;
 use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\Storage;
 
 class CompletedDocumentSealingService
 {
+    use ResolvesSecureDisk;
+
     public function __construct(
         private readonly DocumentPdfStampingService $documentPdfStampingService,
         private readonly DocumentHashService $documentHashService,
@@ -43,11 +46,6 @@ class CompletedDocumentSealingService
         $this->sealSignerSignatures($document, $hash);
 
         return $this->documentHashService->createOrRefreshForCompletedDocument($document->fresh(), $hash);
-    }
-
-    private function secureDiskName(): string
-    {
-        return (string) config('filesystems.docutrust_disk', 'local');
     }
 
     private function sealSignerSignatures(Document $document, string $hash): void

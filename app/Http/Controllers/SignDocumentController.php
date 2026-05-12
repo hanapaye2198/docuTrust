@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Concerns\ResolvesSecureDisk;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Http\Requests\StartTrustAuthorizationRequest;
@@ -31,6 +32,8 @@ use Throwable;
 
 class SignDocumentController extends Controller
 {
+    use ResolvesSecureDisk;
+
     private const DOCUMENT_UNLOCK_SESSION_PREFIX = 'document_access_unlocked:';
 
     public function __construct(
@@ -39,11 +42,6 @@ class SignDocumentController extends Controller
         private readonly TrustAuthorizationWorkflowService $trustAuthorizationWorkflowService,
         private readonly SigningMethodService $signingMethodService,
     ) {}
-
-    private function secureDiskName(): string
-    {
-        return (string) config('filesystems.docutrust_disk', 'local');
-    }
 
     public function show(string $token): View|Response|RedirectResponse
     {

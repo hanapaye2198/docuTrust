@@ -269,6 +269,7 @@ class NotaryEnotaryFlowTest extends TestCase
         $requester = User::factory()->create();
         $request = NotaryRequest::factory()->for($requester)->create([
             'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneyApproved,
         ]);
 
         $this->expectException(\RuntimeException::class);

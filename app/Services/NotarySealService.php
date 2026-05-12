@@ -2,20 +2,17 @@
 
 namespace App\Services;
 
+use App\Concerns\ResolvesSecureDisk;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use RuntimeException;
 use setasign\Fpdi\Fpdi;
 use Throwable;
 
 class NotarySealService
 {
-    private function secureDiskName(): string
-    {
-        return (string) config('filesystems.docutrust_disk', 'local');
-    }
+    use ResolvesSecureDisk;
 
     /**
      * Apply the notary seal and signature to a document PDF.
@@ -104,7 +101,7 @@ class NotarySealService
         $pdf->SetFont('Helvetica', '', 10);
         $pdf->SetXY(20, 35);
         $pdf->MultiCell(175, 5, sprintf(
-            "Republic of the Philippines\n%s\n\n" .
+            "Republic of the Philippines\n%s\n\n".
             "BEFORE ME, a Notary Public for and in the %s, personally appeared:\n",
             $credential->commission_jurisdiction,
             $credential->commission_jurisdiction,
@@ -125,9 +122,9 @@ class NotarySealService
         $pdf->SetFont('Helvetica', '', 10);
         $pdf->SetXY(20, $y);
         $pdf->MultiCell(175, 5, sprintf(
-            "known to me to be the same person(s) who executed the foregoing instrument consisting of " .
-            "the document titled \"%s\" and acknowledged to me that the same is their free and voluntary act and deed.\n\n" .
-            "This instrument refers to a %s.\n\n" .
+            'known to me to be the same person(s) who executed the foregoing instrument consisting of '.
+            "the document titled \"%s\" and acknowledged to me that the same is their free and voluntary act and deed.\n\n".
+            "This instrument refers to a %s.\n\n".
             "WITNESS MY HAND AND SEAL this %s.\n",
             $entry->document_title,
             str_replace('_', ' ', $entry->notarial_act_type),

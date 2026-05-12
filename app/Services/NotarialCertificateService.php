@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Concerns\ResolvesSecureDisk;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -10,10 +11,7 @@ use Illuminate\Support\Str;
 
 class NotarialCertificateService
 {
-    private function secureDiskName(): string
-    {
-        return (string) config('filesystems.docutrust_disk', 'local');
-    }
+    use ResolvesSecureDisk;
 
     /**
      * Generate a notarial certificate PDF for a register entry.

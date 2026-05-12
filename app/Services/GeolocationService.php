@@ -42,27 +42,25 @@ class GeolocationService
         }
 
         try {
-            // Use ip-api.com free tier (no key required, 45 req/min)
+            // Use ipapi.co (HTTPS, free tier 1000 req/day, no API key required)
             $response = Http::timeout(5)
                 ->acceptJson()
-                ->get(sprintf('http://ip-api.com/json/%s', $ipAddress), [
-                    'fields' => 'status,countryCode,country,regionName,city,lat,lon,isp,proxy,hosting',
-                ]);
+                ->get(sprintf('https://ipapi.co/%s/json/', $ipAddress));
 
-            if ($response->failed() || $response->json('status') !== 'success') {
+            if ($response->failed() || $response->json('error') === true) {
                 return $default;
             }
 
             return [
-                'country_code' => $response->json('countryCode'),
-                'country_name' => $response->json('country'),
-                'region' => $response->json('regionName'),
+                'country_code' => $response->json('country_code'),
+                'country_name' => $response->json('country_name'),
+                'region' => $response->json('region'),
                 'city' => $response->json('city'),
-                'latitude' => $response->json('lat') !== null ? (float) $response->json('lat') : null,
-                'longitude' => $response->json('lon') !== null ? (float) $response->json('lon') : null,
-                'is_vpn' => (bool) $response->json('hosting', false),
-                'is_proxy' => (bool) $response->json('proxy', false),
-                'isp' => $response->json('isp'),
+                'latitude' => $response->json('latitude') !== null ? (float) $response->json('latitude') : null,
+                'longitude' => $response->json('longitude') !== null ? (float) $response->json('longitude') : null,
+                'is_vpn' => false,
+                'is_proxy' => false,
+                'isp' => $response->json('org'),
             ];
         } catch (Throwable $throwable) {
             Log::channel('errors')->warning('Geolocation lookup failed', [

@@ -2,11 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\Document;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 use Throwable;
 
 class NotaryDigitalizationService
@@ -15,6 +17,8 @@ class NotaryDigitalizationService
         private readonly NotarySealService $notarySealService,
         private readonly NotarialCertificateService $notarialCertificateService,
         private readonly CompletedDocumentArtifactService $completedDocumentArtifactService,
+        private readonly BlockchainProofService $blockchainProofService,
+        private readonly DocumentHashService $documentHashService,
     ) {}
 
     /**
@@ -40,6 +44,11 @@ class NotaryDigitalizationService
                     'message' => $throwable->getMessage(),
                 ]);
             }
+        }
+
+        // Step 1b: Ensure blockchain anchoring for all completed documents
+        foreach ($request->documents as $document) {
+            $this->ensureBlockchainAnchoring($document->fresh());
         }
 
         // Step 2: Generate QR codes and notarial certificates for each register entry
@@ -135,5 +144,49 @@ class NotaryDigitalizationService
             ->where('status', 'active')
             ->latest()
             ->first();
+    }
+
+    private function ensureBlockchainAnchoring(Document $document): void
+    {
+        if ($document->status->value !== 'completed') {
+            return;
+        }
+
+        $documentHash = $document->documentHash;
+
+        // If hash exists and already has a transaction, nothing to do
+        if ($documentHash !== null
+            && is_string($documentHash->transaction_id)
+            && $documentHash->transaction_id !== '') {
+            return;
+        }
+
+        // If no hash exists yet, generate it
+        if ($documentHash === null || ! is_string($documentHash->hash) || $documentHash->hash === '') {
+            $documentHash = $this->documentHashService->createForCompletedDocument($document);
+        }
+
+        if ($documentHash === null || ! is_string($documentHash->hash) || $documentHash->hash === '') {
+            throw new RuntimeException(__('Unable to generate document hash for blockchain anchoring. Document: :title', [
+                'title' => $document->title,
+            ]));
+        }
+
+        // Attempt blockchain anchoring
+        if (is_string($documentHash->transaction_id) && $documentHash->transaction_id !== '') {
+            return;
+        }
+
+        $transactionId = $this->blockchainProofService->anchorDocumentHash($documentHash->hash);
+
+        if ($transactionId === null || $transactionId === '') {
+            throw new RuntimeException(__('Blockchain anchoring failed for document ":title". Ensure the blockchain service is running and configured.', [
+                'title' => $document->title,
+            ]));
+        }
+
+        $documentHash->forceFill([
+            'transaction_id' => $transactionId,
+        ])->save();
     }
 }

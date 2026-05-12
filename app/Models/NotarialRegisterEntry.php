@@ -21,6 +21,8 @@ class NotarialRegisterEntry extends Model
         'document_id',
         'entry_number',
         'entry_year',
+        'page_number',
+        'book_number',
         'document_title',
         'document_description',
         'parties',
@@ -78,10 +80,20 @@ class NotarialRegisterEntry extends Model
      */
     public function formattedReference(): string
     {
-        return sprintf(
-            'Doc. No. %s; Series of %d',
-            str_pad((string) $this->entry_number, 3, '0', STR_PAD_LEFT),
-            $this->entry_year,
-        );
+        $parts = [
+            sprintf('Doc. No. %s', str_pad((string) $this->entry_number, 3, '0', STR_PAD_LEFT)),
+        ];
+
+        if ($this->page_number !== null) {
+            $parts[] = sprintf('Page No. %s', str_pad((string) $this->page_number, 2, '0', STR_PAD_LEFT));
+        }
+
+        if ($this->book_number !== null && $this->book_number !== '') {
+            $parts[] = sprintf('Book No. %s', $this->book_number);
+        }
+
+        $parts[] = sprintf('Series of %d', $this->entry_year);
+
+        return implode('; ', $parts);
     }
 }

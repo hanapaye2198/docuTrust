@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Concerns\ResolvesSecureDisk;
 use App\Models\Document;
 use App\Models\DocumentHash;
 use Carbon\CarbonImmutable;
@@ -11,12 +12,9 @@ use Throwable;
 
 class DocumentHashService
 {
-    public function __construct(private readonly BlockchainProofService $blockchainProofService) {}
+    use ResolvesSecureDisk;
 
-    private function secureDiskName(): string
-    {
-        return (string) config('filesystems.docutrust_disk', 'local');
-    }
+    public function __construct(private readonly BlockchainProofService $blockchainProofService) {}
 
     public function createForCompletedDocument(Document $document): ?DocumentHash
     {

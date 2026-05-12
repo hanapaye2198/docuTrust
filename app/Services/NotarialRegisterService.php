@@ -25,6 +25,8 @@ class NotarialRegisterService
      *   notarial_act_type: string,
      *   fees?: float|string|null,
      *   official_receipt_number?: string|null,
+     *   page_number?: int|null,
+     *   book_number?: string|null,
      * }  $data
      */
     public function createEntry(
@@ -74,6 +76,8 @@ class NotarialRegisterService
             'document_id' => $document?->id,
             'entry_number' => $entryNumber,
             'entry_year' => $entryYear,
+            'page_number' => isset($data['page_number']) && is_numeric($data['page_number']) ? (int) $data['page_number'] : null,
+            'book_number' => isset($data['book_number']) && trim((string) $data['book_number']) !== '' ? trim((string) $data['book_number']) : null,
             'document_title' => $documentTitle,
             'document_description' => $data['document_description'] ?? null,
             'parties' => $parties,

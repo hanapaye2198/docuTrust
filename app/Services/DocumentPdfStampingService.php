@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Concerns\ResolvesSecureDisk;
 use App\Enums\SignatureFieldType;
 use App\Models\Document;
 use App\Models\Signature;
@@ -15,10 +16,7 @@ use Throwable;
 
 class DocumentPdfStampingService
 {
-    private function secureDiskName(): string
-    {
-        return (string) config('filesystems.docutrust_disk', 'local');
-    }
+    use ResolvesSecureDisk;
 
     public function generatePreparedPdf(Document $document): ?string
     {

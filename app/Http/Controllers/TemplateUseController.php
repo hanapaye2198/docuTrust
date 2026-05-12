@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Concerns\ResolvesSecureDisk;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Enums\SigningMethod;
@@ -22,10 +23,7 @@ use Illuminate\Support\Str;
 
 class TemplateUseController extends Controller
 {
-    private function secureDiskName(): string
-    {
-        return (string) config('filesystems.docutrust_disk', 'local');
-    }
+    use ResolvesSecureDisk;
 
     public function store(UseTemplateRequest $request, Template $template): RedirectResponse
     {
