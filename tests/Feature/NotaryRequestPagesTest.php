@@ -2,8 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Enums\DocumentStatus;
 use App\Enums\DocumentSignerStatus;
+use App\Enums\DocumentStatus;
+use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
 use App\Models\Document;
 use App\Models\DocumentHash;
@@ -35,7 +36,16 @@ class NotaryRequestPagesTest extends TestCase
             ->set('title', 'Board resolution acknowledgment')
             ->set('requestType', 'acknowledgment')
             ->set('notaryUserId', (string) $notary->id)
-            ->set('notes', 'Bring government ID and board secretary certificate.')
+            ->set('remarks', 'Bring government ID and board secretary certificate.')
+            ->set('signers', [
+                [
+                    'full_name' => 'Jane Signer',
+                    'email' => 'jane-signer@example.com',
+                    'phone' => '',
+                    'address' => '123 Example St',
+                    'role' => 'signer',
+                ],
+            ])
             ->call('save')
             ->assertHasNoErrors();
 
@@ -43,6 +53,11 @@ class NotaryRequestPagesTest extends TestCase
             'title' => 'Board resolution acknowledgment',
             'notary_user_id' => $notary->id,
             'organization_id' => $admin->organization_id,
+        ]);
+
+        $this->assertDatabaseHas('notary_signers', [
+            'full_name' => 'Jane Signer',
+            'email' => 'jane-signer@example.com',
         ]);
     }
 
@@ -122,9 +137,7 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Blocked request')
             ->assertSee('Ready request')
             ->assertSee('Pending request')
-            ->assertSee('1 blocked draft')
-            ->assertSee('1 ready')
-            ->assertSee('1 pending signing');
+            ->assertSee('Needs attention');
 
         $this->actingAs($admin)
             ->get(route('notary-requests.index', ['queue' => 'ready_to_send']))
@@ -195,9 +208,7 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Missing certificate request')
             ->assertSee('Missing blockchain request')
             ->assertSee('Trust ready request')
-            ->assertSee('1 missing certificate')
-            ->assertSee('1 missing blockchain proof')
-            ->assertSee('1 trust ready');
+            ->assertSee('Trust ready');
 
         $this->actingAs($admin)
             ->get(route('notary-requests.index', ['trust' => 'missing_certificate']))
@@ -305,19 +316,19 @@ class NotaryRequestPagesTest extends TestCase
         ]);
 
         DocumentSigner::factory()->for($document)->create([
-            'role_type' => \App\Enums\TemplateRoleType::Signer,
+            'role_type' => TemplateRoleType::Signer,
             'name' => 'Primary Signer',
             'status' => DocumentSignerStatus::Signed,
         ]);
 
         DocumentSigner::factory()->for($document)->create([
-            'role_type' => \App\Enums\TemplateRoleType::Approver,
+            'role_type' => TemplateRoleType::Approver,
             'name' => 'Legal Approver',
             'status' => DocumentSignerStatus::Approved,
         ]);
 
         DocumentSigner::factory()->for($document)->create([
-            'role_type' => \App\Enums\TemplateRoleType::Recipient,
+            'role_type' => TemplateRoleType::Recipient,
             'name' => 'Records Recipient',
             'status' => DocumentSignerStatus::Pending,
         ]);

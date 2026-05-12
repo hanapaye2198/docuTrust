@@ -7,16 +7,22 @@ use App\Events\NotarySessionScheduled;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
 use App\Models\NotarySession;
+use App\Models\User;
 use RuntimeException;
 
 class NotarySchedulingService
 {
+    public function __construct(
+        private readonly NotaryJitsiRoomService $jitsiRoomService,
+    ) {}
+
     public function schedule(
         NotaryRequest $request,
         \DateTimeInterface $scheduledFor,
         string $providerName,
         ?string $meetingUrl = null,
         ?string $roomName = null,
+        ?User $attorney = null,
     ): NotarySession {
         if (! in_array($request->status, [
             NotaryRequestStatus::Submitted,
@@ -26,11 +32,21 @@ class NotarySchedulingService
             throw new RuntimeException(__('This notary request cannot be scheduled right now.'));
         }
 
+        $normalizedProvider = strtolower(trim($providerName));
+        $resolvedRoom = $roomName;
+        $resolvedUrl = $meetingUrl;
+
+        if ($normalizedProvider === 'jitsi' && ($resolvedUrl === null || $resolvedUrl === '')) {
+            $resolvedRoom ??= $this->jitsiRoomService->buildRoomName($request);
+            $resolvedUrl = $this->jitsiRoomService->meetingUrl($resolvedRoom);
+        }
+
         $session = $request->sessions()->create([
+            'notary_user_id' => $attorney?->id ?? $request->notary_user_id,
             'provider_name' => $providerName,
             'status' => 'scheduled',
-            'room_name' => $roomName,
-            'meeting_url' => $meetingUrl,
+            'room_name' => $resolvedRoom,
+            'meeting_url' => $resolvedUrl,
             'scheduled_for' => $scheduledFor,
         ]);
 
@@ -115,6 +131,7 @@ class NotarySchedulingService
      *   signer_conscious_aware?: bool,
      *   signer_agrees_voluntarily?: bool,
      *   signer_in_philippines?: bool,
+     *   id_shown_on_camera?: bool,
      *   session_recorded?: bool,
      * }  $verificationChecklist
      * @param  array<string, mixed>  $evidence
@@ -155,7 +172,7 @@ class NotarySchedulingService
             'signer_conscious_aware',
             'signer_agrees_voluntarily',
             'signer_in_philippines',
-            'session_recorded',
+            'id_shown_on_camera',
         ];
 
         foreach ($requiredChecks as $check) {

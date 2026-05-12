@@ -246,4 +246,28 @@ class NotaryRequestWorkflowService
         return $request->fresh(['documents', 'journals']);
     }
 
+    public function cancel(NotaryRequest $request, string $reason = ''): NotaryRequest
+    {
+        if (in_array($request->status, [
+            NotaryRequestStatus::Notarized,
+            NotaryRequestStatus::Rejected,
+            NotaryRequestStatus::Failed,
+            NotaryRequestStatus::Cancelled,
+        ], true)) {
+            throw new RuntimeException(__('This notary request cannot be cancelled in its current state.'));
+        }
+
+        $request->markCancelled();
+
+        NotaryJournal::query()->create([
+            'notary_request_id' => $request->id,
+            'notary_user_id' => $request->notary_user_id,
+            'entry_type' => 'request_cancelled',
+            'summary' => $reason !== '' ? $reason : __('Notary request was cancelled.'),
+            'legal_assertions' => [],
+            'recorded_at' => now(),
+        ]);
+
+        return $request->fresh();
+    }
 }

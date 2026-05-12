@@ -30,11 +30,14 @@ class NotaryRequest extends Model
         'completed_at',
         'rejection_reason',
         'metadata',
+        'document_path',
+        'remarks',
         'id_document_type',
         'id_document_number',
         'id_document_path',
         'selfie_path',
         'identity_verified_at',
+        'verified_at',
         'location_verified_at',
         'location_ip_address',
         'location_country_code',
@@ -54,7 +57,9 @@ class NotaryRequest extends Model
             'approved_at' => 'datetime',
             'rejected_at' => 'datetime',
             'completed_at' => 'datetime',
+            'notarized_at' => 'datetime',
             'identity_verified_at' => 'datetime',
+            'verified_at' => 'datetime',
             'location_verified_at' => 'datetime',
             'location_vpn_detected' => 'boolean',
             'location_latitude' => 'decimal:7',
@@ -122,6 +127,30 @@ class NotaryRequest extends Model
     }
 
     /**
+     * @return HasMany<NotarySigner, $this>
+     */
+    public function signers(): HasMany
+    {
+        return $this->hasMany(NotarySigner::class)->orderBy('id');
+    }
+
+    /**
+     * @return HasMany<NotaryIdentityVerification, $this>
+     */
+    public function identityVerifications(): HasMany
+    {
+        return $this->hasMany(NotaryIdentityVerification::class)->latest();
+    }
+
+    /**
+     * @return HasMany<NotaryGeoLog, $this>
+     */
+    public function geoLogs(): HasMany
+    {
+        return $this->hasMany(NotaryGeoLog::class)->latest();
+    }
+
+    /**
      * @return HasMany<NotarialRegisterEntry, $this>
      */
     public function registerEntries(): HasMany
@@ -158,17 +187,28 @@ class NotaryRequest extends Model
 
     public function markNotarized(): void
     {
+        $now = now();
         $this->forceFill([
             'status' => NotaryRequestStatus::Notarized,
-            'completed_at' => now(),
+            'completed_at' => $now,
+            'notarized_at' => $now,
         ])->save();
     }
 
     public function markIdentityVerified(): void
     {
+        $now = now();
         $this->forceFill([
             'status' => NotaryRequestStatus::IdentityVerified,
-            'identity_verified_at' => now(),
+            'identity_verified_at' => $now,
+            'verified_at' => $now,
+        ])->save();
+    }
+
+    public function markCancelled(): void
+    {
+        $this->forceFill([
+            'status' => NotaryRequestStatus::Cancelled,
         ])->save();
     }
 

@@ -39,13 +39,14 @@ return [
         'require_identity_verification' => (bool) env('DOCUTRUST_NOTARY_REQUIRE_IDENTITY', true),
         'require_video_session' => (bool) env('DOCUTRUST_NOTARY_REQUIRE_VIDEO', true),
         'session_expiry_hours' => (int) env('DOCUTRUST_NOTARY_SESSION_EXPIRY_HOURS', 72),
+        'jitsi_base_url' => env('DOCUTRUST_NOTARY_JITSI_BASE_URL', 'https://meet.jit.si'),
         'verification_checklist' => [
             'face_matches_id',
             'id_valid_not_expired',
             'signer_conscious_aware',
             'signer_agrees_voluntarily',
             'signer_in_philippines',
-            'session_recorded',
+            'id_shown_on_camera',
         ],
         'notarial_act_types' => [
             'acknowledgment',

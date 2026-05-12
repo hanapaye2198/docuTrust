@@ -1,12 +1,15 @@
 <?php
 
+use App\Enums\NotaryIdentityVerificationStatus;
 use App\Enums\NotaryRequestStatus;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\SigningMethod;
 use App\Enums\TemplateRoleType;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\NotaryIdentityVerification;
 use App\Models\NotaryRequest;
+use App\Models\NotarySigner;
 use App\Models\User;
 use App\Services\CompletedDocumentArtifactService;
 use App\Services\CompletedDocumentSealingService;
@@ -14,10 +17,12 @@ use App\Services\IdentityVerificationService;
 use App\Services\LocationVerificationService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
+use App\Services\OtpService;
 use App\Services\SendDocumentForSignatureService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
@@ -35,17 +40,47 @@ new #[Layout('components.layouts.app')] class extends Component {
     public string $newDocumentTitle = '';
     public $newDocumentFile = null;
 
+    public string $geoLatitude = '';
+
+    public string $geoLongitude = '';
+
+    public ?int $geoSignerId = null;
+
+    public string $identityOtpCode = '';
+
+    public ?int $identityTargetSignerId = null;
+
+    public string $pendingIdType = 'passport';
+
+    public string $pendingIdNumber = '';
+
+    public $idImageFile = null;
+
+    public $selfieImageFile = null;
+
+    public string $identityRejectReason = '';
+
+    public ?int $identityRejectId = null;
+
+    /**
+     * @var array<string, bool>
+     */
+    public array $sessionChecklist = [];
+
     public function mount(NotaryRequest $notaryRequest): void
     {
         $user = Auth::user();
         abort_unless($user !== null, 401);
 
-        $notaryRequest->load(['requester', 'notary', 'documents', 'sessions', 'journals.notary', 'registerEntries']);
+        $notaryRequest->load(['requester', 'notary', 'documents', 'sessions', 'journals.notary', 'registerEntries', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
 
         $canView = $user->organization_id === $notaryRequest->organization_id || $notaryRequest->notary_user_id === $user->id;
         abort_unless($canView, 403);
 
         $this->notaryRequest = $notaryRequest;
+
+        $keys = config('docutrust.notary.verification_checklist', []);
+        $this->sessionChecklist = array_fill_keys($keys, false);
     }
 
     public function with(): array
@@ -119,11 +154,29 @@ new #[Layout('components.layouts.app')] class extends Component {
                 })
                 ->orderByDesc('created_at')
                 ->get(['id', 'title', 'status', 'notary_request_id']),
+            'requestSigners' => $this->notaryRequest->signers,
+            'pendingIdentityReviews' => $this->notaryRequest->identityVerifications()
+                ->with('signer')
+                ->where('verification_status', NotaryIdentityVerificationStatus::Pending)
+                ->latest()
+                ->get(),
+            'identityHistory' => $this->notaryRequest->identityVerifications()
+                ->with('signer', 'verifier')
+                ->latest()
+                ->limit(25)
+                ->get(),
+            'geoHistory' => $this->notaryRequest->geoLogs()->with('signer')->latest()->limit(25)->get(),
         ];
     }
 
     public function submitRequest(): void
     {
+        if ($this->notaryRequest->document_path !== null && $this->notaryRequest->signers()->doesntExist()) {
+            $this->addError('submitRequest', __('Add at least one signer before submitting this eNOTARY request.'));
+
+            return;
+        }
+
         try {
             app(NotaryRequestWorkflowService::class)->submit($this->notaryRequest);
             $this->refreshRequest();
@@ -136,13 +189,202 @@ new #[Layout('components.layouts.app')] class extends Component {
     public function markLocationVerified(): void
     {
         try {
-            app(LocationVerificationService::class)->markVerified($this->notaryRequest, [
+            app(LocationVerificationService::class)->markVerified($this->notaryRequest->fresh(), [
                 'source' => 'manual_review',
-            ]);
+            ], null);
             $this->refreshRequest();
             session()->flash('status', __('Location verification recorded.'));
         } catch (\RuntimeException $exception) {
             $this->addError('markLocationVerified', $exception->getMessage());
+        }
+    }
+
+    public function runBrowserGeoVerification(): void
+    {
+        $this->validate([
+            'geoLatitude' => ['nullable', 'numeric'],
+            'geoLongitude' => ['nullable', 'numeric'],
+            'geoSignerId' => [
+                'nullable',
+                'integer',
+                Rule::exists('notary_signers', 'id')->where('notary_request_id', $this->notaryRequest->id),
+            ],
+        ]);
+
+        try {
+            $result = app(LocationVerificationService::class)->evaluateBrowserLocation(
+                $this->notaryRequest->fresh(),
+                $this->geoSignerId,
+                [
+                    'latitude' => $this->geoLatitude !== '' ? (float) $this->geoLatitude : null,
+                    'longitude' => $this->geoLongitude !== '' ? (float) $this->geoLongitude : null,
+                ],
+            );
+
+            $this->refreshRequest();
+
+            if ($result['success']) {
+                session()->flash('status', __('Philippines location verification recorded from this browser session.'));
+            } else {
+                $this->addError('runBrowserGeoVerification', (string) ($result['message'] ?? __('Location verification failed.')));
+            }
+        } catch (\RuntimeException $exception) {
+            $this->addError('runBrowserGeoVerification', $exception->getMessage());
+        }
+    }
+
+    public function sendSignerIdentityOtp(int $signerId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        $signer = NotarySigner::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->whereKey($signerId)
+            ->firstOrFail();
+
+        $result = app(OtpService::class)->generateOtp(
+            user: $user,
+            email: $signer->email,
+            mobileNumber: null,
+            purpose: 'notary_identity',
+            channel: 'email',
+        );
+
+        if (! $result['success']) {
+            $this->addError('identityOtp', (string) ($result['message'] ?? __('Unable to send OTP.')));
+
+            return;
+        }
+
+        session()->flash('status', __('We sent a verification code to :email.', ['email' => $signer->email]));
+    }
+
+    public function verifySignerIdentityOtp(int $signerId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        $validated = $this->validate([
+            'identityOtpCode' => ['required', 'string', 'min:4', 'max:12'],
+        ]);
+
+        $signer = NotarySigner::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->whereKey($signerId)
+            ->firstOrFail();
+
+        $result = app(OtpService::class)->verifyOtp(
+            inputOtp: trim($validated['identityOtpCode']),
+            user: $user,
+            email: $signer->email,
+            mobileNumber: null,
+        );
+
+        if (! $result['success']) {
+            $this->addError('identityOtpCode', (string) ($result['message'] ?? __('Invalid OTP.')));
+
+            return;
+        }
+
+        session()->flash('status', __('Email OTP verified for :name.', ['name' => $signer->full_name]));
+        $this->identityOtpCode = '';
+    }
+
+    public function saveSignerIdentityDocuments(int $signerId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        $signer = NotarySigner::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->whereKey($signerId)
+            ->firstOrFail();
+
+        $validated = $this->validate([
+            'pendingIdType' => ['required', 'string', 'max:64'],
+            'pendingIdNumber' => ['required', 'string', 'max:128'],
+            'idImageFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'selfieImageFile' => ['nullable', 'file', 'mimes:jpg,jpeg,png', 'max:10240'],
+        ]);
+
+        $idPath = $this->idImageFile->store('notary/identity', (string) config('filesystems.docutrust_disk', 'local'));
+        $selfiePath = null;
+        if ($this->selfieImageFile !== null) {
+            $selfiePath = $this->selfieImageFile->store('notary/identity', (string) config('filesystems.docutrust_disk', 'local'));
+        }
+
+        app(IdentityVerificationService::class)->submitPendingForSigner($signer, [
+            'id_type' => trim($validated['pendingIdType']),
+            'id_number' => trim($validated['pendingIdNumber']),
+            'id_image_path' => $idPath,
+            'selfie_image_path' => $selfiePath,
+        ]);
+
+        $this->idImageFile = null;
+        $this->selfieImageFile = null;
+        $this->pendingIdNumber = '';
+        $this->resetValidation(['idImageFile', 'selfieImageFile', 'pendingIdType', 'pendingIdNumber']);
+        $this->refreshRequest();
+        session()->flash('status', __('Identity documents submitted for review.'));
+    }
+
+    public function approveIdentityRecord(int $verificationId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        $record = NotaryIdentityVerification::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->whereKey($verificationId)
+            ->firstOrFail();
+
+        $this->authorize('review', $record);
+
+        try {
+            app(IdentityVerificationService::class)->approvePendingRecord($user, $record);
+            $this->refreshRequest();
+            session()->flash('status', __('Identity verification approved.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('approveIdentity', $exception->getMessage());
+        }
+    }
+
+    public function rejectIdentityRecord(): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        $validated = $this->validate([
+            'identityRejectId' => ['required', 'integer', Rule::exists('notary_identity_verifications', 'id')->where('notary_request_id', $this->notaryRequest->id)],
+            'identityRejectReason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $record = NotaryIdentityVerification::query()->whereKey($validated['identityRejectId'])->firstOrFail();
+
+        $this->authorize('review', $record);
+
+        try {
+            app(IdentityVerificationService::class)->rejectPendingRecord($user, $record, trim($validated['identityRejectReason']));
+            $this->identityRejectId = null;
+            $this->identityRejectReason = '';
+            $this->refreshRequest();
+            session()->flash('status', __('Identity verification rejected.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('rejectIdentity', $exception->getMessage());
+        }
+    }
+
+    public function cancelNotaryRequest(): void
+    {
+        $this->authorize('cancel', $this->notaryRequest);
+
+        try {
+            app(NotaryRequestWorkflowService::class)->cancel($this->notaryRequest->fresh(), __('Cancelled by user from the request workspace.'));
+            $this->refreshRequest();
+            session()->flash('status', __('This notary request was cancelled.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('cancelNotaryRequest', $exception->getMessage());
         }
     }
 
@@ -155,11 +397,18 @@ new #[Layout('components.layouts.app')] class extends Component {
         ]);
 
         try {
+            $user = Auth::user();
+            abort_unless($user !== null, 401);
+
+            $attorney = $user->role->value === 'notary' ? $user : null;
+
             app(NotarySchedulingService::class)->schedule(
                 $this->notaryRequest,
                 new DateTimeImmutable($validated['scheduleAt']),
                 trim($validated['providerName']),
                 trim((string) $validated['meetingUrl']) !== '' ? trim((string) $validated['meetingUrl']) : null,
+                null,
+                $attorney,
             );
 
             $this->refreshRequest();
@@ -188,17 +437,19 @@ new #[Layout('components.layouts.app')] class extends Component {
         try {
             $session = $this->notaryRequest->sessions()->whereKey($sessionId)->firstOrFail();
 
-            app(NotarySchedulingService::class)->complete($session, [
-                'face_matches_id' => true,
-                'id_valid_not_expired' => true,
-                'signer_conscious_aware' => true,
-                'signer_agrees_voluntarily' => true,
-                'signer_in_philippines' => true,
-                'session_recorded' => true,
-            ]);
+            $required = config('docutrust.notary.verification_checklist', []);
+            foreach ($required as $key) {
+                if (! ($this->sessionChecklist[$key] ?? false)) {
+                    $this->addError('sessionChecklist', __('Complete every item on the attorney checklist before finishing the session.'));
+
+                    return;
+                }
+            }
+
+            app(NotarySchedulingService::class)->complete($session, $this->sessionChecklist);
 
             $this->refreshRequest();
-            session()->flash('status', __('Video session completed. All verification checks passed.'));
+            session()->flash('status', __('Video session completed with verification evidence.'));
         } catch (\RuntimeException $exception) {
             $this->addError('completeSession', $exception->getMessage());
         }
@@ -404,7 +655,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     private function refreshRequest(): void
     {
-        $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions', 'journals.notary', 'registerEntries']);
+        $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions', 'journals.notary', 'registerEntries', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
     }
 
     private function resolveCompletedLinkedDocument(int $documentId): Document
@@ -610,13 +861,17 @@ new #[Layout('components.layouts.app')] class extends Component {
                 <flux:button variant="outline" wire:click="digitalizeRequest">{{ __('Apply digital seal') }}</flux:button>
                 <flux:button variant="primary" wire:click="finalizeRequest" :disabled="! $finalizationReadiness['ready']">{{ __('Finalize notarization') }}</flux:button>
             @endif
+            @if ($canManageLifecycle && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
+                <flux:button variant="outline" wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notary request? This cannot be undone.') }}">{{ __('Cancel request') }}</flux:button>
+            @endif
             <flux:button variant="ghost" :href="Auth::user()?->role->value === 'notary' ? route('notary.requests.index') : route('notary-requests.index')" wire:navigate>{{ __('Back') }}</flux:button>
         </div>
-        @if ($errors->has('submitRequest') || $errors->has('digitalizeRequest') || $errors->has('finalizeRequest'))
+        @if ($errors->has('submitRequest') || $errors->has('digitalizeRequest') || $errors->has('finalizeRequest') || $errors->has('cancelNotaryRequest'))
             <div class="mt-2">
                 <flux:error name="submitRequest" />
                 <flux:error name="digitalizeRequest" />
                 <flux:error name="finalizeRequest" />
+                <flux:error name="cancelNotaryRequest" />
             </div>
         @endif
     </div>
@@ -686,6 +941,133 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <div class="mt-2 text-sm font-medium text-sky-900 dark:text-sky-100">{{ $nextDocumentAction['description'] }}</div>
                         <div class="mt-3">
                             <flux:button variant="outline" :href="$nextDocumentAction['href']" wire:navigate>{{ $nextDocumentAction['label'] }}</flux:button>
+                        </div>
+                    </div>
+                @endif
+            </div>
+
+            <div class="ui-panel p-6">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signers & eNOTARY intake') }}</h2>
+                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Principal signers attached to this case. Identity documents require email OTP confirmation before upload.') }}</p>
+                <div class="mt-4 space-y-3">
+                    @forelse ($requestSigners as $signer)
+                        <div class="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                            <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ $signer->full_name }}</div>
+                            <div class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $signer->email }} @if ($signer->phone) • {{ $signer->phone }} @endif</div>
+                            @if ($notaryRequest->status === NotaryRequestStatus::Submitted && $canManageLifecycle)
+                                <div class="mt-4 space-y-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+                                    <flux:button size="sm" variant="outline" type="button" wire:click="sendSignerIdentityOtp({{ $signer->id }})">{{ __('Send email OTP') }}</flux:button>
+                                    <flux:field>
+                                        <flux:label>{{ __('OTP code') }}</flux:label>
+                                        <div class="flex flex-wrap items-end gap-2">
+                                            <flux:input class="max-w-xs" type="text" wire:model="identityOtpCode" placeholder="{{ __('Enter code') }}" />
+                                            <flux:button size="sm" variant="primary" type="button" wire:click="verifySignerIdentityOtp({{ $signer->id }})">{{ __('Verify OTP') }}</flux:button>
+                                        </div>
+                                        <flux:error name="identityOtp" />
+                                        <flux:error name="identityOtpCode" />
+                                    </flux:field>
+                                    <div class="grid gap-3 sm:grid-cols-2">
+                                        <flux:field>
+                                            <flux:label>{{ __('ID type') }}</flux:label>
+                                            <select wire:model="pendingIdType" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                                                <option value="passport">{{ __('Passport') }}</option>
+                                                <option value="drivers_license">{{ __('Driver license') }}</option>
+                                                <option value="national_id">{{ __('National ID') }}</option>
+                                                <option value="other">{{ __('Other') }}</option>
+                                            </select>
+                                        </flux:field>
+                                        <flux:field>
+                                            <flux:label>{{ __('ID number') }}</flux:label>
+                                            <flux:input type="text" wire:model="pendingIdNumber" />
+                                            <flux:error name="pendingIdNumber" />
+                                        </flux:field>
+                                    </div>
+                                    <flux:field>
+                                        <flux:label>{{ __('Government ID scan') }}</flux:label>
+                                        <input type="file" wire:model="idImageFile" accept=".pdf,.jpg,.jpeg,.png" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+                                        <flux:error name="idImageFile" />
+                                    </flux:field>
+                                    <flux:field>
+                                        <flux:label>{{ __('Selfie (optional)') }}</flux:label>
+                                        <input type="file" wire:model="selfieImageFile" accept=".jpg,.jpeg,.png" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+                                        <flux:error name="selfieImageFile" />
+                                    </flux:field>
+                                    <flux:button size="sm" variant="primary" type="button" wire:click="saveSignerIdentityDocuments({{ $signer->id }})">{{ __('Submit ID for review') }}</flux:button>
+                                </div>
+                            @endif
+                        </div>
+                    @empty
+                        <div class="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">{{ __('No signers were attached at creation. You can still proceed using linked documents for participants.') }}</div>
+                    @endforelse
+                </div>
+
+                @if ($isNotary && $pendingIdentityReviews->isNotEmpty())
+                    <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Pending identity review') }}</h3>
+                        <div class="mt-3 space-y-3">
+                            @foreach ($pendingIdentityReviews as $review)
+                                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/40 dark:bg-amber-950/20">
+                                    <div class="font-medium text-amber-950 dark:text-amber-100">{{ $review->signer?->full_name }}</div>
+                                    <div class="mt-1 text-amber-900/80 dark:text-amber-200/80">{{ __('ID type') }}: {{ $review->id_type }} • {{ __('Number') }}: {{ $review->id_number }}</div>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <flux:button size="sm" variant="primary" type="button" wire:click="approveIdentityRecord({{ $review->id }})">{{ __('Approve') }}</flux:button>
+                                        <flux:button size="sm" variant="outline" type="button" wire:click="$set('identityRejectId', {{ $review->id }})">{{ __('Reject') }}</flux:button>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                @if ($identityRejectId)
+                    <div class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-950/20">
+                        <flux:field>
+                            <flux:label>{{ __('Rejection reason') }}</flux:label>
+                            <flux:textarea wire:model="identityRejectReason" rows="3" />
+                            <flux:error name="identityRejectReason" />
+                        </flux:field>
+                        <flux:button class="mt-3" variant="outline" type="button" wire:click="rejectIdentityRecord">{{ __('Confirm rejection') }}</flux:button>
+                        <flux:error name="rejectIdentity" />
+                    </div>
+                @endif
+
+                <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Philippines location check') }}</h3>
+                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Uses your browser coordinates together with server-side IP intelligence. Failed checks flag the request automatically.') }}</p>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        <flux:field>
+                            <flux:label>{{ __('Latitude (optional)') }}</flux:label>
+                            <flux:input type="text" wire:model="geoLatitude" />
+                        </flux:field>
+                        <flux:field>
+                            <flux:label>{{ __('Longitude (optional)') }}</flux:label>
+                            <flux:input type="text" wire:model="geoLongitude" />
+                        </flux:field>
+                        <flux:field class="sm:col-span-2">
+                            <flux:label>{{ __('Signer (optional)') }}</flux:label>
+                            <select wire:model="geoSignerId" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                                <option value="">{{ __('Entire request') }}</option>
+                                @foreach ($requestSigners as $signer)
+                                    <option value="{{ $signer->id }}">{{ $signer->full_name }}</option>
+                                @endforeach
+                            </select>
+                        </flux:field>
+                    </div>
+                    <flux:button class="mt-3" variant="outline" type="button" wire:click="runBrowserGeoVerification">{{ __('Run location verification') }}</flux:button>
+                    <flux:error name="runBrowserGeoVerification" />
+                </div>
+
+                @if ($geoHistory->isNotEmpty())
+                    <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Recent geo checks') }}</h3>
+                        <div class="mt-3 space-y-2 text-xs text-zinc-600 dark:text-zinc-300">
+                            @foreach ($geoHistory as $log)
+                                <div class="flex flex-wrap justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700">
+                                    <span>{{ $log->verified_at?->toDateTimeString() ?? '-' }}</span>
+                                    <span class="font-medium">{{ $log->verification_status->value }}</span>
+                                    <span>{{ $log->country ?? '—' }} @if ($log->city) • {{ $log->city }} @endif</span>
+                                </div>
+                            @endforeach
                         </div>
                     </div>
                 @endif
@@ -910,8 +1292,26 @@ new #[Layout('components.layouts.app')] class extends Component {
                                         <flux:error name="startSession" />
                                     </div>
                                 @elseif ($session->status === 'in_progress')
-                                    <div class="mt-2">
-                                        <flux:button variant="outline" size="sm" type="button" wire:click="completeSession({{ $session->id }})">{{ __('Complete session') }}</flux:button>
+                                    <div class="mt-3 space-y-3">
+                                        <div class="flex flex-wrap gap-2">
+                                            @if (is_string($session->meeting_url) && $session->meeting_url !== '')
+                                                <flux:button variant="outline" size="sm" :href="auth()->user()?->role->value === 'notary' ? route('notary.requests.session.live', [$notaryRequest, $session]) : route('notary-requests.session.live', [$notaryRequest, $session])" target="_blank">{{ __('Open secure video room') }}</flux:button>
+                                                <flux:button variant="ghost" size="sm" :href="$session->meeting_url" target="_blank">{{ __('Join in new tab') }}</flux:button>
+                                            @endif
+                                        </div>
+                                        <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-200">
+                                            <div class="font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Attorney checklist') }}</div>
+                                            <div class="mt-2 space-y-2">
+                                                @foreach (config('docutrust.notary.verification_checklist', []) as $key)
+                                                    <label class="flex items-center gap-2">
+                                                        <input type="checkbox" class="rounded border-zinc-300 text-teal-600" wire:model.live="sessionChecklist.{{ $key }}" />
+                                                        <span>{{ __(str_replace('_', ' ', $key)) }}</span>
+                                                    </label>
+                                                @endforeach
+                                            </div>
+                                            <flux:error name="sessionChecklist" />
+                                        </div>
+                                        <flux:button variant="outline" size="sm" type="button" wire:click="completeSession({{ $session->id }})">{{ __('Mark session completed') }}</flux:button>
                                         <flux:error name="completeSession" />
                                     </div>
                                 @endif

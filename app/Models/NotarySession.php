@@ -17,6 +17,7 @@ class NotarySession extends Model
      */
     protected $fillable = [
         'notary_request_id',
+        'notary_user_id',
         'provider_name',
         'status',
         'room_name',
@@ -54,5 +55,13 @@ class NotarySession extends Model
     public function notaryRequest(): BelongsTo
     {
         return $this->belongsTo(NotaryRequest::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function notaryUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'notary_user_id');
     }
 }

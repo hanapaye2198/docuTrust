@@ -41,7 +41,20 @@ class AddSecurityHeaders
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-XSS-Protection', '1; mode=block');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+
+        $isEnotaryRoute = $this->isEnotaryRoute($request);
+
+        if ($isEnotaryRoute) {
+            $response->headers->set('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
+            $connectSrc .= ' https://meet.jit.si https://*.jit.si wss://*.jit.si wss://meet.jit.si wss://8x8.vc https://8x8.vc';
+        } else {
+            $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        }
+
+        $frameSrc = $isEnotaryRoute
+            ? "'self' https://meet.jit.si https://*.jit.si https://8x8.vc"
+            : "'self'";
+
         $response->headers->set(
             'Content-Security-Policy',
             "default-src 'self'; ".
@@ -50,12 +63,23 @@ class AddSecurityHeaders
             "img-src 'self' data: https://images.unsplash.com https://api.qrserver.com; ".
             "font-src {$fontSrc}; ".
             "connect-src {$connectSrc}; ".
+            "frame-src {$frameSrc}; ".
             "frame-ancestors 'none'; ".
             "base-uri 'self'; ".
             "form-action 'self'"
         );
 
         return $response;
+    }
+
+    private function isEnotaryRoute(Request $request): bool
+    {
+        return $request->routeIs([
+            'notary-requests.show',
+            'notary.requests.show',
+            'notary-requests.session.live',
+            'notary.requests.session.live',
+        ]);
     }
 
     /**

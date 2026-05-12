@@ -5,10 +5,10 @@ use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\DocumentPrepareController;
 use App\Http\Controllers\DocumentStreamController;
 use App\Http\Controllers\EmailInfrastructureExampleController;
-use App\Models\NotaryRequest;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
+use App\Services\NotarialRegisterService;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -18,7 +18,7 @@ Route::get('/', function () {
 })->name('home');
 
 Route::get('/verify/notary/{token}', function (string $token) {
-    $entry = app(\App\Services\NotarialRegisterService::class)->findByVerificationToken($token);
+    $entry = app(NotarialRegisterService::class)->findByVerificationToken($token);
 
     if ($entry === null) {
         abort(404);
@@ -69,6 +69,7 @@ Route::middleware(['auth', 'role:notary'])->group(function () {
     Volt::route('notary/credentials', 'notary.credentials')->name('notary.credentials');
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
+    Volt::route('notary/requests/{notaryRequest}/sessions/{session}/live', 'notary-requests.session-live')->name('notary.requests.session.live');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
     Volt::route('notary/requests/{notaryRequest}/register-entry', 'notary.register-entry')->name('notary.register-entry');
 });
@@ -78,6 +79,7 @@ Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
 
     Volt::route('notary-requests', 'notary-requests.index')->name('notary-requests.index');
     Volt::route('notary-requests/create', 'notary-requests.create')->name('notary-requests.create');
+    Volt::route('notary-requests/{notaryRequest}/sessions/{session}/live', 'notary-requests.session-live')->name('notary-requests.session.live');
     Volt::route('notary-requests/{notaryRequest}', 'notary-requests.show')->name('notary-requests.show');
 
     Volt::route('documents', 'documents.index')->name('documents.index');

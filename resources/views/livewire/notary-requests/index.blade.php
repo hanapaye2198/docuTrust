@@ -185,8 +185,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             'requestSummaries' => $requestSummaries,
             'isNotaryView' => $isNotaryView,
             'requestCount' => $filteredRequests->count(),
-            'openCount' => $filteredRequests->filter(fn (NotaryRequest $request) => ! in_array($request->status->value, ['rejected', 'failed', 'notarized'], true))->count(),
-            'closedCount' => $filteredRequests->filter(fn (NotaryRequest $request) => in_array($request->status->value, ['rejected', 'failed', 'notarized'], true))->count(),
+            'openCount' => $filteredRequests->filter(fn (NotaryRequest $request) => ! in_array($request->status->value, ['rejected', 'failed', 'notarized', 'cancelled'], true))->count(),
+            'closedCount' => $filteredRequests->filter(fn (NotaryRequest $request) => in_array($request->status->value, ['rejected', 'failed', 'notarized', 'cancelled'], true))->count(),
             'blockedCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['queue_state'] ?? 'empty') === 'blocked')->count(),
             'readyToSendCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['queue_state'] ?? 'empty') === 'ready_to_send')->count(),
             'awaitingSignaturesCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['queue_state'] ?? 'empty') === 'awaiting_signatures')->count(),
@@ -296,6 +296,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <option value="notarized">{{ __('Notarized') }}</option>
                     <option value="rejected">{{ __('Rejected') }}</option>
                     <option value="failed">{{ __('Failed') }}</option>
+                    <option value="cancelled">{{ __('Cancelled') }}</option>
                 </select>
                 <select
                     wire:model.live="queueFilter"

@@ -18,6 +18,7 @@ class NotarySessionFactory extends Factory
     {
         return [
             'notary_request_id' => NotaryRequest::factory(),
+            'notary_user_id' => null,
             'provider_name' => 'manual',
             'status' => 'scheduled',
             'room_name' => fake()->bothify('notary-room-###'),

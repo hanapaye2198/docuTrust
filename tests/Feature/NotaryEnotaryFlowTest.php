@@ -74,6 +74,11 @@ class NotaryEnotaryFlowTest extends TestCase
         $this->assertNotNull($request->location_verified_at);
         $this->assertFalse($request->location_vpn_detected);
 
+        $this->assertDatabaseHas('notary_geo_logs', [
+            'notary_request_id' => $request->id,
+            'verification_status' => 'passed',
+        ]);
+
         // Step 4: Schedule Session
         $schedulingService = app(NotarySchedulingService::class);
         $session = $schedulingService->schedule(
@@ -98,7 +103,7 @@ class NotaryEnotaryFlowTest extends TestCase
             'signer_conscious_aware' => true,
             'signer_agrees_voluntarily' => true,
             'signer_in_philippines' => true,
-            'session_recorded' => true,
+            'id_shown_on_camera' => true,
         ]);
         $this->assertSame('completed', $session->status);
         $this->assertNotNull($session->verification_checklist);

@@ -14,4 +14,5 @@ enum NotaryRequestStatus: string
     case Notarized = 'notarized';
     case Rejected = 'rejected';
     case Failed = 'failed';
+    case Cancelled = 'cancelled';
 }

@@ -44,7 +44,7 @@ class NotaryRequestPolicy
 
     public function update(User $user, NotaryRequest $notaryRequest): bool
     {
-        if ($notaryRequest->status === NotaryRequestStatus::Notarized) {
+        if (in_array($notaryRequest->status, [NotaryRequestStatus::Notarized, NotaryRequestStatus::Cancelled], true)) {
             return false;
         }
 
@@ -87,9 +87,14 @@ class NotaryRequestPolicy
             && in_array($user->role, [UserRole::NotaryAdmin, UserRole::Client], true);
     }
 
+    public function cancel(User $user, NotaryRequest $notaryRequest): bool
+    {
+        return $this->update($user, $notaryRequest);
+    }
+
     public function delete(User $user, NotaryRequest $notaryRequest): bool
     {
-        if ($notaryRequest->status === NotaryRequestStatus::Notarized) {
+        if (in_array($notaryRequest->status, [NotaryRequestStatus::Notarized, NotaryRequestStatus::Cancelled], true)) {
             return false;
         }
 

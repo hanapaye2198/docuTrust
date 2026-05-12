@@ -33,15 +33,15 @@ class NotarialRegisterService
         array $data,
         ?Document $document = null,
     ): NotarialRegisterEntry {
+        if (! $credential->isActive()) {
+            throw new RuntimeException(__('Notary commission is expired or inactive.'));
+        }
+
         if (! in_array($request->status, [
             NotaryRequestStatus::AttorneyApproved,
             NotaryRequestStatus::Notarized,
         ], true)) {
             throw new RuntimeException(__('Register entries can only be created after attorney approval.'));
-        }
-
-        if (! $credential->isActive()) {
-            throw new RuntimeException(__('Notary commission is expired or inactive.'));
         }
 
         $documentTitle = trim((string) ($data['document_title'] ?? ''));
