@@ -1509,7 +1509,7 @@ footer{
   <a href="#blockchain" onclick="closeMobileNav()">Security</a>
   <a href="#ai" onclick="closeMobileNav()">AI Engine</a>
   <a href="#about" onclick="closeMobileNav()">About</a>
-      <a href="#showcase" onclick="closeMobileNav()">Advertisement</a>
+  <a href="#showcase" onclick="closeMobileNav()">Advertisement</a>
   <a href="#industries" onclick="closeMobileNav()">Industries</a>
   <a href="#faq" onclick="closeMobileNav()">FAQ</a>
   <a href="{{ $secondaryHeaderUrl }}" onclick="closeMobileNav()">{{ $secondaryHeaderLabel }}</a>

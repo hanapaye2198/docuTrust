@@ -7,9 +7,14 @@ use App\Contracts\SignerKeyStore;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSent;
 use App\Events\DocumentSignerCompleted;
+use App\Events\NotaryRequestApproved;
+use App\Events\NotaryRequestNotarized;
+use App\Events\NotaryRequestSubmitted;
+use App\Events\NotarySessionScheduled;
 use App\Services\DatabaseSignerKeyStore;
 use App\Services\DocumentNotificationService;
 use App\Services\FileBackedCertificateAuthorityKeyStore;
+use App\Services\NotaryNotificationService;
 use App\View\Breadcrumbs;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -60,6 +65,22 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(DocumentCompleted::class, function (DocumentCompleted $event): void {
             app(DocumentNotificationService::class)->handleDocumentCompleted($event);
+        });
+
+        Event::listen(NotaryRequestSubmitted::class, function (NotaryRequestSubmitted $event): void {
+            app(NotaryNotificationService::class)->handleRequestSubmitted($event);
+        });
+
+        Event::listen(NotarySessionScheduled::class, function (NotarySessionScheduled $event): void {
+            app(NotaryNotificationService::class)->handleSessionScheduled($event);
+        });
+
+        Event::listen(NotaryRequestApproved::class, function (NotaryRequestApproved $event): void {
+            app(NotaryNotificationService::class)->handleRequestApproved($event);
+        });
+
+        Event::listen(NotaryRequestNotarized::class, function (NotaryRequestNotarized $event): void {
+            app(NotaryNotificationService::class)->handleRequestNotarized($event);
         });
     }
 }

@@ -56,7 +56,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     public function with(): array
     {
         $user = auth()->user();
-        $isSignerView = $user?->role === UserRole::Signer && ! $user?->isOrganizationAdmin();
+        $isSignerView = $user?->role === UserRole::Client && ! $user?->isOrganizationAdmin();
         $cacheScope = implode('|', [
             'documents-index',
             (string) $user?->id,

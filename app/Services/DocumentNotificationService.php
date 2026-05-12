@@ -59,14 +59,13 @@ class DocumentNotificationService
                 type: SendDocumentEmailJob::TYPE_SIGNED,
             );
         }
-        if ($signer->isSigner()) {
-            SendDocumentEmailJob::dispatch(
-                documentId: $document->id,
-                signerId: $signer->id,
-                recipientEmail: $document->user->email,
-                type: SendDocumentEmailJob::TYPE_SIGNED,
-            );
-        }
+
+        SendDocumentEmailJob::dispatch(
+            documentId: $document->id,
+            signerId: $signer->id,
+            recipientEmail: $document->user->email,
+            type: SendDocumentEmailJob::TYPE_SIGNED,
+        );
 
         $this->createInAppNotification(
             $document->user_id,

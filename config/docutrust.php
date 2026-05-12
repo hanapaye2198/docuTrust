@@ -31,4 +31,29 @@ return [
         'signer_valid_days' => (int) env('DOCUTRUST_SIGNER_CERT_VALID_DAYS', 825),
     ],
 
+    'notary' => [
+        'jurisdiction' => env('DOCUTRUST_NOTARY_JURISDICTION', 'Philippines'),
+        'allowed_country_code' => env('DOCUTRUST_NOTARY_ALLOWED_COUNTRY', 'PH'),
+        'timezone' => env('DOCUTRUST_NOTARY_TIMEZONE', 'Asia/Manila'),
+        'require_location_verification' => (bool) env('DOCUTRUST_NOTARY_REQUIRE_LOCATION', true),
+        'require_identity_verification' => (bool) env('DOCUTRUST_NOTARY_REQUIRE_IDENTITY', true),
+        'require_video_session' => (bool) env('DOCUTRUST_NOTARY_REQUIRE_VIDEO', true),
+        'session_expiry_hours' => (int) env('DOCUTRUST_NOTARY_SESSION_EXPIRY_HOURS', 72),
+        'verification_checklist' => [
+            'face_matches_id',
+            'id_valid_not_expired',
+            'signer_conscious_aware',
+            'signer_agrees_voluntarily',
+            'signer_in_philippines',
+            'session_recorded',
+        ],
+        'notarial_act_types' => [
+            'acknowledgment',
+            'jurat',
+            'affidavit',
+            'oath',
+            'other',
+        ],
+    ],
+
 ];

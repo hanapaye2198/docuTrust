@@ -44,7 +44,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 }; ?>
 
 <x-auth.onboarding-wizard-shell :active-step="1">
-    <h1 class="text-2xl font-semibold tracking-tight text-[#1F2937] dark:text-zinc-100 sm:text-3xl">{{ __('Create your free Signer account') }}</h1>
+    <h1 class="text-2xl font-semibold tracking-tight text-[#1F2937] dark:text-zinc-100 sm:text-3xl">{{ __('Create your free Client account') }}</h1>
     <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">{{ __('We sent a secure 6-digit code to your inbox. Enter it below to continue onboarding.') }}</p>
 
     <div class="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-4 dark:border-zinc-700 dark:bg-zinc-800/60 sm:px-5">

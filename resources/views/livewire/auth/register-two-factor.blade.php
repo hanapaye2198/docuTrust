@@ -311,7 +311,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component
                         <div class="rounded-lg border border-gray-200 bg-gray-100 p-2 text-[#1F2937]">{{ __('4. MFA Setup') }}</div>
                     </nav>
 
-                    <h1 class="text-2xl font-semibold text-[#1F2937]">{{ __('Create your free Signer account') }}</h1>
+                    <h1 class="text-2xl font-semibold text-[#1F2937]">{{ __('Create your free Client account') }}</h1>
                     <p class="mt-2 text-sm text-[#1F2937]/80">
                         {{ __('Enter your 6-digit authenticator code first. You will proceed to Mobile Verification after this step.') }}
                     </p>

@@ -40,4 +40,12 @@ class Organization extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    /**
+     * @return HasMany<NotaryRequest, $this>
+     */
+    public function notaryRequests(): HasMany
+    {
+        return $this->hasMany(NotaryRequest::class);
+    }
 }

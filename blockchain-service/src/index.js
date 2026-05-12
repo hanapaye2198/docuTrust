@@ -3,9 +3,12 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
+import { fileURLToPath } from "url";
 import express from "express";
 import { Contract, JsonRpcProvider, Wallet, getAddress, isAddress, isHexString } from "ethers";
 import { DOCUMENT_NOTARY_ABI } from "./contractAbi.js";
+
+loadLocalEnvFile();
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -19,8 +22,21 @@ const blockchainConfig = buildBlockchainConfig();
 const cscConfig = buildCscConfig();
 const authorizationSessions = new Map();
 
-if (!blockchainConfig.enabled && !cscConfig.enabled) {
-  throw new Error("At least one of blockchain anchoring or CSC remote signing must be configured.");
+const allowEmptyStartup = parseBoolean(process.env.DOCUTRUST_ALLOW_EMPTY_SERVICE ?? "");
+
+if (!blockchainConfig.enabled && !cscConfig.enabled && !allowEmptyStartup) {
+  throw new Error(
+    "At least one of blockchain anchoring or CSC remote signing must be configured. "
+      + "For local development without secrets, set DOCUTRUST_ALLOW_EMPTY_SERVICE=true "
+      + "(/anchor and /verify will respond with 503 until Polygon or CSC is configured)."
+  );
+}
+
+if (!blockchainConfig.enabled && !cscConfig.enabled && allowEmptyStartup) {
+  console.warn(
+    "[docutrust-blockchain-service] DOCUTRUST_ALLOW_EMPTY_SERVICE is enabled: "
+      + "blockchain anchoring and CSC are off; POST /anchor and POST /verify return 503."
+  );
 }
 
 const blockchainState = blockchainConfig.enabled ? buildBlockchainState(blockchainConfig) : null;
@@ -292,6 +308,56 @@ app.post("/csc/v1/signatures/timestamp", requireCscService, requireBearerAuth, (
 app.listen(PORT, () => {
   console.log(`DocuTrust service listening on port ${PORT}`);
 });
+
+function loadLocalEnvFile() {
+  const envPath = path.resolve(currentDirectory(), "..", ".env");
+  if (!fs.existsSync(envPath)) {
+    return;
+  }
+
+  const envContents = fs.readFileSync(envPath, "utf8");
+  for (const line of envContents.split(/\r?\n/u)) {
+    const parsed = parseEnvLine(line);
+    if (parsed === null) {
+      continue;
+    }
+
+    if (process.env[parsed.key] === undefined) {
+      process.env[parsed.key] = parsed.value;
+    }
+  }
+}
+
+function currentDirectory() {
+  return path.dirname(fileURLToPath(import.meta.url));
+}
+
+function parseEnvLine(line) {
+  const trimmed = line.trim();
+  if (trimmed === "" || trimmed.startsWith("#")) {
+    return null;
+  }
+
+  const separatorIndex = trimmed.indexOf("=");
+  if (separatorIndex <= 0) {
+    return null;
+  }
+
+  const key = trimmed.slice(0, separatorIndex).trim();
+  if (key === "") {
+    return null;
+  }
+
+  let value = trimmed.slice(separatorIndex + 1).trim();
+  if (
+    (value.startsWith("\"") && value.endsWith("\""))
+    || (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+
+  return { key, value };
+}
 
 function buildBlockchainConfig() {
   const network = process.env.POLYGON_NETWORK ?? "amoy";

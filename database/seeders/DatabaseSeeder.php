@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Demo Admin',
             'password' => 'password',
             'email_verified_at' => now(),
-            'role' => UserRole::Admin,
+            'role' => UserRole::NotaryAdmin,
             'organization_role' => OrganizationRole::Admin,
             'onboarding_step' => OnboardingStep::Completed,
             'mfa_enabled' => true,
@@ -27,6 +27,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call([
+            ENotarySeeder::class,
             DocumentSeeder::class,
             SignerSeeder::class,
             TemplateSeeder::class,

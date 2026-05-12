@@ -46,7 +46,7 @@ class RegistrationTest extends TestCase
 
         $this->assertDatabaseHas('users', [
             'email' => 'test@example.com',
-            'role' => UserRole::Signer->value,
+            'role' => UserRole::Client->value,
             'onboarding_step' => OnboardingStep::EmailVerification->value,
             'ekyc_status' => EkycStatus::NotSubmitted->value,
         ]);

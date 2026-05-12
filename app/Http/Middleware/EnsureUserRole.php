@@ -10,6 +10,18 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureUserRole
 {
+    /**
+     * @return list<string>
+     */
+    private function expandRoleAlias(string $role): array
+    {
+        return match ($role) {
+            'admin' => [UserRole::NotaryAdmin->value],
+            'signer' => [UserRole::Client->value],
+            default => [UserRole::from($role)->value],
+        };
+    }
+
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         $user = $request->user();
@@ -20,7 +32,7 @@ class EnsureUserRole
         $allowed = collect($roles)
             ->flatMap(fn (string $group) => explode(',', $group))
             ->map(fn (string $r): string => trim($r))
-            ->map(fn (string $r): string => UserRole::from($r)->value)
+            ->flatMap(fn (string $r): array => $this->expandRoleAlias($r))
             ->filter()
             ->unique()
             ->all();

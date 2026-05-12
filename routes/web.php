@@ -5,6 +5,7 @@ use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\DocumentPrepareController;
 use App\Http\Controllers\DocumentStreamController;
 use App\Http\Controllers\EmailInfrastructureExampleController;
+use App\Models\NotaryRequest;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
@@ -15,6 +16,16 @@ use Livewire\Volt\Volt;
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
+
+Route::get('/verify/notary/{token}', function (string $token) {
+    $entry = app(\App\Services\NotarialRegisterService::class)->findByVerificationToken($token);
+
+    if ($entry === null) {
+        abort(404);
+    }
+
+    return view('notary.verify', ['entry' => $entry]);
+})->name('notary.verify');
 
 Route::get('/test-email', function () {
 
@@ -37,7 +48,7 @@ Route::middleware('throttle:signing-links')->group(function () {
     Route::post('/sign/{token}/complete', [SignDocumentController::class, 'complete'])->name('sign.complete');
 });
 
-Route::middleware(['auth', 'role:admin,signer'])->group(function () {
+Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
     Route::get('/account-sign/{signerId}', [SignDocumentController::class, 'showAuthenticated'])->name('sign.account.show');
     Route::post('/account-sign/{signerId}/unlock', [SignDocumentController::class, 'unlockAuthenticated'])->name('sign.account.unlock');
     Route::get('/account-sign/{signerId}/pdf', [SignDocumentController::class, 'streamAuthenticatedPdf'])->name('sign.account.document.pdf');
@@ -49,16 +60,25 @@ Route::middleware(['auth', 'role:admin,signer'])->group(function () {
 });
 Volt::route('verify', 'pages.verify')->name('verify.index');
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
+Route::middleware(['auth', 'role:super_admin,notary_admin'])->group(function () {
     Volt::route('dashboard', 'pages.dashboard')->name('dashboard');
 });
 
 Route::middleware(['auth', 'role:notary'])->group(function () {
     Volt::route('notary/dashboard', 'notary.dashboard')->name('notary.dashboard');
+    Volt::route('notary/credentials', 'notary.credentials')->name('notary.credentials');
+    Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
+    Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
+    Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
+    Volt::route('notary/requests/{notaryRequest}/register-entry', 'notary.register-entry')->name('notary.register-entry');
 });
 
-Route::middleware(['auth', 'role:admin,signer'])->group(function () {
+Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
     Volt::route('contacts', 'contacts.index')->name('contacts.index');
+
+    Volt::route('notary-requests', 'notary-requests.index')->name('notary-requests.index');
+    Volt::route('notary-requests/create', 'notary-requests.create')->name('notary-requests.create');
+    Volt::route('notary-requests/{notaryRequest}', 'notary-requests.show')->name('notary-requests.show');
 
     Volt::route('documents', 'documents.index')->name('documents.index');
     Volt::route('documents/create', 'documents.create')->name('documents.create');

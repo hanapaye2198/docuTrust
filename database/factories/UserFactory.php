@@ -38,7 +38,7 @@ class UserFactory extends Factory
             'ekyc_status' => EkycStatus::Verified,
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
-            'role' => UserRole::Admin,
+            'role' => UserRole::NotaryAdmin,
             'organization_role' => OrganizationRole::Admin,
             'mfa_enabled' => true,
             'two_factor_secret' => null,
@@ -60,7 +60,7 @@ class UserFactory extends Factory
     public function signer(): static
     {
         return $this->state(fn (array $attributes) => [
-            'role' => UserRole::Signer,
+            'role' => UserRole::Client,
         ]);
     }
 
@@ -74,7 +74,24 @@ class UserFactory extends Factory
     public function admin(): static
     {
         return $this->state(fn (array $attributes) => [
-            'role' => UserRole::Admin,
+            'role' => UserRole::NotaryAdmin,
+        ]);
+    }
+
+    public function client(): static
+    {
+        return $this->signer();
+    }
+
+    public function notaryAdmin(): static
+    {
+        return $this->admin();
+    }
+
+    public function superAdmin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::SuperAdmin,
         ]);
     }
 

@@ -59,7 +59,7 @@
                     {{ __('Workspace') }}
                 </div>
 
-                @if ($navRole === UserRole::Admin)
+                @if (in_array($navRole, [UserRole::SuperAdmin, UserRole::NotaryAdmin], true))
                     <flux:sidebar.item
                         icon="home"
                         :href="route('dashboard')"
@@ -73,13 +73,29 @@
                     <flux:sidebar.item
                         icon="scale"
                         :href="route('notary.dashboard')"
-                        :current="request()->routeIs('notary.*')"
-                        :tooltip="__('Notary')"
+                        :current="request()->routeIs('notary.dashboard')"
+                        :tooltip="__('e-Notary Dashboard')"
                         wire:navigate
-                    >{{ __('Notary') }}</flux:sidebar.item>
+                    >{{ __('e-Notary Dashboard') }}</flux:sidebar.item>
+
+                    <flux:sidebar.item
+                        icon="clipboard-document-list"
+                        :href="route('notary.requests.index')"
+                        :current="request()->routeIs('notary.requests.*')"
+                        :tooltip="__('Notary Requests')"
+                        wire:navigate
+                    >{{ __('Notary Requests') }}</flux:sidebar.item>
                 @endif
 
-                @if (in_array($navRole, [UserRole::Admin, UserRole::Signer], true))
+                @if (auth()->user()->canAccessWorkspaceTools())
+                    <flux:sidebar.item
+                        icon="clipboard-document-list"
+                        :href="route('notary-requests.create')"
+                        :current="request()->routeIs('notary-requests.*')"
+                        :tooltip="__('Request Notarization')"
+                        wire:navigate
+                    >{{ __('Request Notarization') }}</flux:sidebar.item>
+
                     <flux:sidebar.item
                         icon="layout-grid"
                         :href="route('documents.index')"

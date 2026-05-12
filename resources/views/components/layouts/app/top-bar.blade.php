@@ -10,7 +10,7 @@
     $notifications = auth()->user()->appNotifications()->limit(8)->get();
     $unreadCount = auth()->user()->appNotifications()->whereNull('read_at')->count();
     $hasBreadcrumbs = $breadcrumbs !== [];
-    $canWorkspaceTools = in_array(auth()->user()->role, [UserRole::Admin, UserRole::Signer], true);
+    $canWorkspaceTools = auth()->user()->canAccessWorkspaceTools();
 @endphp
 
 <div class="flex w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white/90 shadow-sm shadow-zinc-950/5 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/85 dark:shadow-black/30">

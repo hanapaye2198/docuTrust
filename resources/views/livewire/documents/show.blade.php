@@ -169,7 +169,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function revokeCertificate(int $certificateId): void
     {
-        abort_unless(Auth::user()?->role === UserRole::Admin, 403);
+        abort_unless(in_array(Auth::user()?->role, [UserRole::SuperAdmin, UserRole::NotaryAdmin], true), 403);
         $this->authorize('update', $this->document);
 
         $certificate = SignerCertificate::query()
@@ -465,7 +465,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 </div>
                             </div>
 
-                            @if (Auth::user()?->role === UserRole::Admin)
+                            @if (in_array(Auth::user()?->role, [UserRole::SuperAdmin, UserRole::NotaryAdmin], true))
                                 <div class="w-full max-w-sm space-y-3">
                                     @if ($isRevoked)
                                         <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">

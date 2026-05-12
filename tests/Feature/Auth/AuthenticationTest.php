@@ -19,6 +19,22 @@ class AuthenticationTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_e_notary_login_mode_can_be_rendered_from_login_screen(): void
+    {
+        $response = $this->get('/login?mode=enotary');
+
+        $response->assertOk();
+        $response->assertSee('e-Notary', escape: false);
+        $response->assertSee('Portal access', escape: false);
+    }
+
+    public function test_legacy_e_notary_login_route_redirects_to_login_mode(): void
+    {
+        $response = $this->get('/e-notary/login');
+
+        $response->assertRedirect('/login?mode=enotary');
+    }
+
     public function test_users_can_authenticate_using_the_login_screen(): void
     {
         $user = User::factory()->create();

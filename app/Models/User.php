@@ -154,15 +154,44 @@ class User extends Authenticatable implements MustVerifyEmail
     public function homeRouteName(): string
     {
         return match ($this->role) {
-            UserRole::Signer => 'documents.index',
+            UserRole::Client => 'documents.index',
             UserRole::Notary => 'notary.dashboard',
-            UserRole::Admin => 'dashboard',
+            UserRole::NotaryAdmin, UserRole::SuperAdmin => 'dashboard',
         };
     }
 
     public function isOrganizationAdmin(): bool
     {
         return $this->organization_role === OrganizationRole::Admin;
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === UserRole::SuperAdmin;
+    }
+
+    public function isNotaryAdmin(): bool
+    {
+        return $this->role === UserRole::NotaryAdmin;
+    }
+
+    public function isNotary(): bool
+    {
+        return $this->role === UserRole::Notary;
+    }
+
+    public function isClient(): bool
+    {
+        return $this->role === UserRole::Client;
+    }
+
+    public function canAccessWorkspaceTools(): bool
+    {
+        return in_array($this->role, [
+            UserRole::SuperAdmin,
+            UserRole::NotaryAdmin,
+            UserRole::Client,
+        ], true);
     }
 
     /**
@@ -195,6 +224,30 @@ class User extends Authenticatable implements MustVerifyEmail
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class);
+    }
+
+    /**
+     * @return HasMany<NotaryRequest, $this>
+     */
+    public function notaryRequests(): HasMany
+    {
+        return $this->hasMany(NotaryRequest::class);
+    }
+
+    /**
+     * @return HasMany<NotaryRequest, $this>
+     */
+    public function assignedNotaryRequests(): HasMany
+    {
+        return $this->hasMany(NotaryRequest::class, 'notary_user_id');
+    }
+
+    /**
+     * @return HasOne<NotaryCredential, $this>
+     */
+    public function notaryCredential(): HasOne
+    {
+        return $this->hasOne(NotaryCredential::class)->latestOfMany();
     }
 
     /**

@@ -44,7 +44,12 @@ class DocumentHashService
     {
         try {
             $existing = DocumentHash::query()->where('document_id', $document->id)->first();
-            if ($existing !== null && hash_equals(strtolower($existing->hash), strtolower($hash))) {
+            $existingHashMatches = $existing !== null && hash_equals(strtolower($existing->hash), strtolower($hash));
+            $existingHasTransaction = $existing !== null
+                && is_string($existing->transaction_id)
+                && $existing->transaction_id !== '';
+
+            if ($existingHashMatches && $existingHasTransaction) {
                 return $existing;
             }
 

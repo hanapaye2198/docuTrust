@@ -53,7 +53,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             'name' => $fullName,
             'email' => $validated['email'],
             'password' => $validated['password'],
-            'role' => UserRole::Signer,
+            'role' => UserRole::Client,
             'onboarding_step' => OnboardingStep::EmailVerification,
             'email_verified_at' => null,
             'email_otp' => $otp,
@@ -140,7 +140,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                         <div class="rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-2 text-center text-[#1F2937] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 sm:px-3">{{ __('4. MFA Setup') }}</div>
                     </nav>
 
-                    <h1 class="text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Create your free Signer account') }}</h1>
+                    <h1 class="text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Create your free Client account') }}</h1>
                     <x-auth-session-status class="mt-4 rounded-lg bg-[#2EC4B6]/10 px-3 py-2 text-center text-sm text-[#1B5E20] dark:text-teal-300" :status="session('status')" />
 
                     @php
