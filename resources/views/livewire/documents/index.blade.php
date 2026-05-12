@@ -141,7 +141,6 @@ new #[Layout('components.layouts.app')] class extends Component {
 }; ?>
 
 <div class="flex min-h-full w-full flex-1 flex-col gap-6 p-1">
-
     {{-- ── Page header ── --}}
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -154,12 +153,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                     : __('Manage your uploaded PDFs and track signing progress in one view.') }}
             </p>
         </div>
-        @unless ($isSignerView)
-            <flux:button variant="primary" :href="route('documents.create')" wire:navigate>
-                <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
-                {{ __('Upload document') }}
-            </flux:button>
-        @endunless
+        <flux:button variant="primary" :href="route('documents.create')" wire:navigate>
+            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
+            {{ __('Upload document') }}
+        </flux:button>
     </div>
 
     {{-- ── Stat counters ── --}}
@@ -399,16 +396,14 @@ new #[Layout('components.layouts.app')] class extends Component {
                                             @if ($search !== '' || $statusFilter !== 'all' || $tagFilter !== 'all' || $dateFrom !== '' || $dateTo !== '')
                                                 {{ __('Try adjusting your search or filter.') }}
                                             @else
-                                                {{ $isSignerView ? __('No documents are currently assigned to you.') : __('Upload a PDF to create your first document.') }}
+                                                {{ $isSignerView ? __('No documents are currently assigned to you yet.') : __('Upload a PDF to create your first document.') }}
                                             @endif
                                         </p>
                                     </div>
                                     @if ($search === '' && $statusFilter === 'all' && $tagFilter === 'all' && $dateFrom === '' && $dateTo === '')
-                                        @unless ($isSignerView)
-                                            <flux:button variant="primary" size="sm" :href="route('documents.create')" wire:navigate>
-                                                {{ __('Upload document') }}
-                                            </flux:button>
-                                        @endunless
+                                        <flux:button variant="primary" size="sm" :href="route('documents.create')" wire:navigate>
+                                            {{ __('Upload document') }}
+                                        </flux:button>
                                     @endif
                                 </div>
                             </td>
