@@ -116,10 +116,10 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 <div
     x-data="{
         mode: @js($mode),
-        setMode(nextMode) {
+        setMode: function(nextMode) {
             this.mode = nextMode;
 
-            const url = new URL(window.location.href);
+            var url = new URL(window.location.href);
             if (nextMode === 'enotary') {
                 url.searchParams.set('mode', 'enotary');
             } else {

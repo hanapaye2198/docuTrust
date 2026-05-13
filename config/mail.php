@@ -95,6 +95,11 @@ return [
             ],
         ],
 
+        'brevo' => [
+            'transport' => 'native',
+            'dsn' => env('MAIL_DSN', 'brevo+api://KEY@default'),
+        ],
+
     ],
 
     /*
