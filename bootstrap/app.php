@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsureOnboardingProgress;
 use App\Http\Middleware\EnsurePendingTwoFactorChallenge;
 use App\Http\Middleware\EnsureTwoFactorIsVerified;
 use App\Http\Middleware\EnsureUserRole;
+use App\Http\Middleware\VirtualGateway;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,6 +19,19 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function () {
+            // PKI protocol routes (CSC compliance)
+            \Illuminate\Support\Facades\Route::middleware('web')
+                ->group(base_path('routes/ocsp.php'));
+            \Illuminate\Support\Facades\Route::middleware('web')
+                ->group(base_path('routes/crl.php'));
+            \Illuminate\Support\Facades\Route::middleware('web')
+                ->group(base_path('routes/scep.php'));
+            \Illuminate\Support\Facades\Route::middleware('web')
+                ->group(base_path('routes/cmp.php'));
+            \Illuminate\Support\Facades\Route::middleware('web')
+                ->group(base_path('routes/hsm.php'));
+        },
     )
     ->withCommands([
         MoveRootCaKeyToExternalStore::class,
@@ -30,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'pending.two.factor' => EnsurePendingTwoFactorChallenge::class,
             'role' => EnsureUserRole::class,
             'two.factor.verified' => EnsureTwoFactorIsVerified::class,
+            'vgw' => VirtualGateway::class,
         ]);
 
         $middleware->appendToGroup('web', [

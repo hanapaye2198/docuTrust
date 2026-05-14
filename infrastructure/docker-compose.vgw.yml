@@ -1,0 +1,57 @@
+# Docker Compose for Dedicated VGW (Virtual Gateway)
+# Deploy on separate DigitalOcean droplet for CSC compliance
+#
+# This runs the VGW as a dedicated service, separate from the application.
+# All PKI traffic flows through this gateway before reaching the app server.
+
+version: '3.8'
+
+services:
+  vgw-nginx:
+    image: nginx:1.25-alpine
+    container_name: docutrust-vgw
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx/vgw.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/client-certs:/etc/nginx/client-certs:ro
+      - vgw-logs:/var/log/nginx
+    networks:
+      - vgw-net
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  vgw-fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: docutrust-fail2ban
+    restart: unless-stopped
+    volumes:
+      - vgw-logs:/var/log/nginx:ro
+      - ./fail2ban:/etc/fail2ban:ro
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+  vgw-audit-logger:
+    image: fluent/fluentd:v1.16
+    container_name: docutrust-audit-log
+    restart: unless-stopped
+    volumes:
+      - vgw-logs:/var/log/nginx:ro
+      - ./fluentd/fluent.conf:/fluentd/etc/fluent.conf:ro
+    networks:
+      - vgw-net
+
+volumes:
+  vgw-logs:
+
+networks:
+  vgw-net:
+    driver: bridge
