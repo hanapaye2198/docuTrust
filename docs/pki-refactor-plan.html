@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocuTrust PKI Architecture Audit &amp; Phased Refactor Plan</title>
+    <style>
+        @page { margin: 18mm 16mm; size: A4; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Calibri, Arial, sans-serif;
+            font-size: 10.5pt;
+            line-height: 1.45;
+            color: #1a1a1a;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 12mm 14mm;
+        }
+        h1 {
+            font-size: 22pt;
+            color: #123629;
+            border-bottom: 3px solid #123629;
+            padding-bottom: 8px;
+            margin-top: 0;
+        }
+        h2 {
+            font-size: 14pt;
+            color: #123629;
+            margin-top: 22px;
+            page-break-after: avoid;
+            border-left: 4px solid #d7b16b;
+            padding-left: 10px;
+        }
+        h3 {
+            font-size: 11.5pt;
+            color: #2d4a3e;
+            margin-top: 16px;
+            page-break-after: avoid;
+        }
+        .meta {
+            background: #f4f7f5;
+            border: 1px solid #c5d9ce;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin: 16px 0 24px;
+            font-size: 9.5pt;
+        }
+        .meta strong { color: #123629; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0 16px;
+            font-size: 9.5pt;
+            page-break-inside: avoid;
+        }
+        th, td {
+            border: 1px solid #c8d4cc;
+            padding: 7px 9px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background: #123629;
+            color: #fff;
+            font-weight: 600;
+        }
+        tr:nth-child(even) td { background: #f8faf9; }
+        .risk-critical { color: #b91c1c; font-weight: 600; }
+        .risk-high { color: #c2410c; font-weight: 600; }
+        .risk-medium { color: #a16207; }
+        .badge {
+            display: inline-block;
+            background: #e8f0ec;
+            color: #123629;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 8.5pt;
+            font-weight: 600;
+        }
+        .summary-box {
+            background: #fffbeb;
+            border: 1px solid #f59e0b;
+            border-radius: 6px;
+            padding: 12px 14px;
+            margin: 12px 0;
+        }
+        .flow {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 8.5pt;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            padding: 12px;
+            white-space: pre-wrap;
+            line-height: 1.35;
+            page-break-inside: avoid;
+        }
+        ul, ol { margin: 8px 0; padding-left: 22px; }
+        li { margin: 4px 0; }
+        .toc { columns: 2; column-gap: 24px; font-size: 9.5pt; }
+        .toc li { break-inside: avoid; }
+        .page-break { page-break-before: always; }
+        footer {
+            margin-top: 32px;
+            padding-top: 12px;
+            border-top: 1px solid #ccc;
+            font-size: 8.5pt;
+            color: #666;
+            text-align: center;
+        }
+        code {
+            font-family: Consolas, monospace;
+            font-size: 9pt;
+            background: #eef2f0;
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>DocuTrust PKI Architecture Audit<br><span style="font-size:14pt;font-weight:normal;color:#555;">Phased Refactor Plan (Audit Only)</span></h1>
+
+<div class="meta">
+    <strong>Project:</strong> docuTrust &nbsp;|&nbsp;
+    <strong>Document type:</strong> Architecture audit &amp; migration planning &nbsp;|&nbsp;
+    <strong>Status:</strong> No code changes — planning only<br>
+    <strong>Generated:</strong> May 14, 2026 &nbsp;|&nbsp;
+    <strong>Scope:</strong> E-signature PKI, sealing pipeline, verification, blockchain anchoring
+</div>
+
+<div class="summary-box">
+    <strong>Executive summary.</strong> DocuTrust implements a <strong>two-stage signing model</strong>: field capture (synchronous UI) and cryptographic sealing (async on document completion). PKI is an <strong>embedded application CA</strong>, not a standalone enterprise RCA. This document maps dependencies, risks, and a safe phased refactor toward external RCA/HSM without breaking existing documents.
+</div>
+
+<h2>Table of Contents</h2>
+<ol class="toc">
+    <li>Current Architecture</li>
+    <li>Dependency Map</li>
+    <li>Service Interaction Map</li>
+    <li>Tightly Coupled Services</li>
+    <li>Migration Risks</li>
+    <li>Signing Flow Risks</li>
+    <li>Blockchain Dependencies</li>
+    <li>Certificate Dependencies</li>
+    <li>Refactor Order (Phases 0–7)</li>
+    <li>High-Risk Areas</li>
+    <li>Migration Strategy</li>
+    <li>Backward Compatibility Strategy</li>
+    <li>RCA Compliance Gap (Procurement Context)</li>
+</ol>
+
+<h2>1. Current Architecture</h2>
+
+<h3>Two-stage signing model</h3>
+<table>
+    <tr><th>Stage</th><th>When</th><th>What happens</th></tr>
+    <tr>
+        <td><span class="badge">Capture</span></td>
+        <td>Signer submits fields</td>
+        <td>Keys generated, signer cert issued, <code>Signature</code> row created with image/value but <code>signature_value</code> / <code>signature_hash</code> = <strong>null</strong></td>
+    </tr>
+    <tr>
+        <td><span class="badge">Seal</span></td>
+        <td>Document completes (async job)</td>
+        <td>Final PDF stamped → SHA-256 hash → per-signer cryptographic seal → blockchain anchor</td>
+    </tr>
+</table>
+
+<h3>Signing backends</h3>
+<table>
+    <tr><th>Backend</th><th>Config</th><th>Behavior</th></tr>
+    <tr>
+        <td>App-managed</td>
+        <td><code>docutrust.pki.signing_backend = app_managed</code></td>
+        <td>Internal root CA issues signer certs; keys in encrypted DB columns</td>
+    </tr>
+    <tr>
+        <td>Remote-managed</td>
+        <td><code>signing_backend = remote_managed</code></td>
+        <td>CSC/TSP signs hash; provider certs stored with <code>issuer_certificate_pem</code></td>
+    </tr>
+</table>
+
+<h3>Key source files</h3>
+<table>
+    <tr><th>Area</th><th>Primary files</th></tr>
+    <tr><td>Root CA</td><td><code>CertificateAuthorityService.php</code>, <code>CertificateAuthority.php</code></td></tr>
+    <tr><td>Signer certs</td><td><code>SignerCertificateService.php</code>, <code>SignerCertificate.php</code></td></tr>
+    <tr><td>Field capture</td><td><code>FieldSignatureCaptureService.php</code>, <code>SignDocumentController.php</code></td></tr>
+    <tr><td>Sealing</td><td><code>CompletedDocumentSealingService.php</code>, <code>SignerSealProviderManager.php</code></td></tr>
+    <tr><td>Verification</td><td><code>CertificateVerificationService.php</code>, <code>CertificateChainValidator.php</code></td></tr>
+    <tr><td>Blockchain</td><td><code>DocumentHashService.php</code>, <code>BlockchainProofService.php</code></td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>2. Dependency Map</h2>
+
+<h3>Layer A — Configuration &amp; DI</h3>
+<table>
+    <tr><th>Dependency</th><th>Consumers</th><th>Risk if changed</th></tr>
+    <tr><td><code>config('docutrust.pki.*')</code></td><td>CA service, seal manager, signing checks</td><td class="risk-high">Global behavior flip</td></tr>
+    <tr><td><code>config('services.remote_signing.*')</code></td><td>Remote seal, CSC client, timestamp validator</td><td class="risk-high">Remote signing outage</td></tr>
+    <tr><td><code>config('services.blockchain.*')</code></td><td><code>BlockchainProofService</code></td><td>Anchoring silently skipped if empty</td></tr>
+    <tr><td><code>AppServiceProvider</code> bindings</td><td><code>CertificateAuthorityKeyStore</code>, <code>SignerKeyStore</code></td><td class="risk-high">Key access path changes</td></tr>
+</table>
+
+<h3>Layer B — Persistence</h3>
+<table>
+    <tr><th>Table / model</th><th>Role</th><th>Dependents</th></tr>
+    <tr><td><code>certificate_authorities</code></td><td>Self-signed root CA</td><td>Signer certs, chain validation</td></tr>
+    <tr><td><code>signer_certificates</code></td><td>End-entity + provider certs</td><td><code>signatures</code>, verify UI</td></tr>
+    <tr><td><code>document_signers.signing_*_key</code></td><td>App-managed keys (encrypted private)</td><td>Capture + app seal</td></tr>
+    <tr><td><code>signatures</code></td><td>Field data + sealed crypto</td><td>Verification, PDF stamping</td></tr>
+    <tr><td><code>document_hashes</code></td><td>SHA-256 + transaction_id</td><td>Public verify, notary workflow</td></tr>
+</table>
+
+<h3>Layer C — Service dependency tree</h3>
+<div class="flow">CertificateAuthorityService
+  └── CertificateAuthorityKeyStore (FileBacked → Database fallback)
+
+SignerCertificateService
+  ├── CertificateAuthorityService
+  ├── CertificateAuthorityKeyStore
+  └── SignerKeyStore
+
+FieldSignatureCaptureService
+  ├── SignerKeyStore, PkiSignatureService
+  ├── SignerCertificateService  ← issues cert at capture
+  ├── SigningMethodService
+  └── TrustAuthorizationSessionService
+
+SignerSealProviderManager
+  ├── AppManagedSignerSealProvider
+  └── RemoteManagedSignerSealProvider → RemoteSigningClient
+
+CompletedDocumentSealingService
+  ├── DocumentPdfStampingService
+  ├── DocumentHashService → BlockchainProofService
+  └── SignerSealProviderManager
+
+CertificateVerificationService
+  ├── PkiSignatureService
+  ├── CertificateChainValidator
+  └── TimestampEvidenceValidator</div>
+
+<h3>Layer D — External systems</h3>
+<table>
+    <tr><th>System</th><th>Integration</th><th>PKI coupling</th></tr>
+    <tr><td>OpenSSL (PHP)</td><td>CA issuance, chain validation, signing</td><td class="risk-critical">Hard dependency</td></tr>
+    <tr><td>OpenSSL CLI</td><td><code>TimestampEvidenceValidator</code></td><td>Remote timestamp verify only</td></tr>
+    <tr><td>Remote CSC/TSP</td><td><code>RemoteSigningClient</code></td><td>Provider-managed certs</td></tr>
+    <tr><td>blockchain-service</td><td><code>/anchor</code>, <code>/verify</code></td><td>Document hash only — not cert signing</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>3. Service Interaction Map</h2>
+
+<h3>Signing path (field-based, happy path)</h3>
+<div class="flow">1. User → SignDocumentController → FieldSignatureCaptureService.capture()
+2. Capture → SignerCertificateService.getOrIssueForSigner()  [cert issued; signature_value=null]
+3. Controller → DocumentSigningWorkflowService.completeSignerIfAllFieldsSigned()
+4. On all signers done → DocumentStatus::Completed
+5. GenerateCertificateJob (async) → CompletedDocumentSealingService.seal()
+6. Seal → stamp final PDF → SHA-256 hash
+7. Seal → SignerSealProviderManager.seal() per signer
+8. DocumentHashService.createOrRefreshForCompletedDocument() → BlockchainProofService.anchor()</div>
+
+<h3>Verification path</h3>
+<div class="flow">verify.blade.php
+  → DocumentHashService.verifyStoredProof(documentHash)     [blockchain]
+  → CertificateVerificationService.verifyDocumentSignatures() [PKI]
+       → CertificateChainValidator.validate(certificate)
+       → PkiSignatureService.verifySignature()
+       → TimestampEvidenceValidator (remote_managed + timestamp)</div>
+
+<h3>Dual certificate sources</h3>
+<table>
+    <tr><th>certificate_source</th><th>Issuer stored in</th><th>Validation path</th></tr>
+    <tr><td>app_managed (default)</td><td><code>certificate_authorities</code> FK</td><td><code>validateAppManagedCertificateChain</code></td></tr>
+    <tr><td>provider_managed</td><td><code>issuer_certificate_pem</code> on row</td><td><code>validateProviderManagedCertificateChain</code></td></tr>
+</table>
+
+<h2>4. Tightly Coupled Services</h2>
+<table>
+    <tr><th>Coupling</th><th>Why it matters</th></tr>
+    <tr><td>SignerCertificateService ↔ CertificateAuthorityService</td><td>Single root CA, inline OpenSSL; no CA abstraction</td></tr>
+    <tr><td>FieldSignatureCaptureService ↔ cert issuance</td><td>Certs at field save; remote path still generates local keys at capture</td></tr>
+    <tr><td>CompletedDocumentSealingService ↔ DocumentHashService</td><td>Hash + persist + blockchain anchor in one chain</td></tr>
+    <tr><td>SignerSealProviderManager ↔ global config</td><td>One signing_backend for entire deployment</td></tr>
+    <tr><td>CertificateChainValidator ↔ OpenSSL + DB</td><td>Two branches keyed on certificate_source string</td></tr>
+    <tr><td>GenerateCertificateJob ↔ artifact pipeline</td><td>Seal + cert PDF + archive; failures logged only</td></tr>
+    <tr><td>NotaryDigitalizationService</td><td>Re-runs ensureReady + separate blockchain anchoring</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>5. Migration Risks</h2>
+<table>
+    <tr><th>Risk</th><th>Severity</th><th>Detail</th></tr>
+    <tr><td>Existing sealed documents</td><td class="risk-critical">Critical</td><td>signature_hash tied to specific final PDF bytes; regeneration invalidates verification</td></tr>
+    <tr><td>Blockchain re-anchor</td><td class="risk-high">High</td><td>Hash refresh may replace transaction_id; old tx becomes stale</td></tr>
+    <tr><td>Root CA key migration</td><td class="risk-high">High</td><td><code>external://root-ca</code> marker; rotating root affects new certs only</td></tr>
+    <tr><td>Signer keys in DB</td><td class="risk-high">High</td><td>Encrypted private keys; HSM move needs re-wrap or migration</td></tr>
+    <tr><td>Provider-managed rows</td><td class="risk-medium">Medium</td><td>Nullable certificate_authority_id; chain uses issuer_certificate_pem</td></tr>
+    <tr><td>Partial seal state</td><td class="risk-high">High</td><td>signer_certificate_id set but signature_value null if job failed</td></tr>
+    <tr><td>Unique constraints</td><td class="risk-medium">Medium</td><td>fingerprint_sha256 unique; re-issuance must handle collisions</td></tr>
+    <tr><td>Queued job ordering</td><td class="risk-medium">Medium</td><td>GenerateDocumentPdfJob vs GenerateCertificateJob race</td></tr>
+</table>
+
+<h2>6. Signing Flow Risks</h2>
+<ol>
+    <li><strong>Deferred cryptography</strong> — UI shows signed after capture; PKI verify fails until job completes.</li>
+    <li><strong>One hash per signer</strong> — Same document hash applied to all Signature rows for a signer.</li>
+    <li><strong>Legacy completeLegacySigning</strong> — No field capture; may lack PKI signatures.</li>
+    <li><strong>Remote + local key mismatch</strong> — Capture always creates local keys; remote seal uses provider keys.</li>
+    <li><strong>Trust authorization expiry</strong> — Remote seal needs active session between capture and seal job.</li>
+    <li><strong>Silent job failure</strong> — GenerateCertificateJob catches all errors; document may show Completed without seal.</li>
+    <li><strong>Cert issued before identity final</strong> — DN from signer name/email at issuance; edits don't re-issue.</li>
+    <li><strong>DB-only revocation</strong> — No CRL; external relying parties unaffected.</li>
+</ol>
+
+<h2>7. Blockchain Dependencies</h2>
+<table>
+    <tr><th>Concern</th><th>Current behavior</th></tr>
+    <tr><td>What is anchored</td><td>SHA-256 of verifiable/final PDF only</td></tr>
+    <tr><td>When</td><td>During DocumentHashService.createOrRefreshForCompletedDocument (from sealing)</td></tr>
+    <tr><td>Failure mode</td><td>transaction_id = null; document still completes</td></tr>
+    <tr><td>Verification</td><td>Public verify uses verifyStoredProof; independent of PKI</td></tr>
+    <tr><td>Notary path</td><td>NotaryDigitalizationService may anchor again separately</td></tr>
+</table>
+<p><strong>Refactor note:</strong> Split hash computation, persistence, and anchoring before changing PKI logic.</p>
+
+<h2>8. Certificate Dependencies</h2>
+<table>
+    <tr><th>Artifact</th><th>Created by</th><th>Stored</th><th>Used at verify</th></tr>
+    <tr><td>Root CA</td><td>CertificateAuthorityService</td><td>certificate_authorities</td><td>App-managed chain</td></tr>
+    <tr><td>Signer cert (app)</td><td>SignerCertificateService.issueForSigner</td><td>signer_certificates</td><td>Chain + RSA verify</td></tr>
+    <tr><td>Signer cert (provider)</td><td>createOrRefreshProviderManagedForSigner</td><td>+ issuer_certificate_pem</td><td>Provider chain</td></tr>
+    <tr><td>Seal binding</td><td>CompletedDocumentSealingService</td><td>signatures.* crypto cols</td><td>CertificateVerificationService</td></tr>
+    <tr><td>Completion cert PDF</td><td>DocumentCertificateService</td><td>documents.certificate_path</td><td>Download (not X.509)</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>9. Refactor Order (Phases 0–7)</h2>
+
+<h3>Phase 0 — Observability (no behavior change)</h3>
+<ul>
+    <li>Structured logging at seal job boundaries</li>
+    <li>Monitor: Completed documents with null signature_value</li>
+    <li>Inventory production: certificate_source mix, null transaction_id</li>
+</ul>
+
+<h3>Phase 1 — Extract boundaries (interfaces, 1:1 adapters)</h3>
+<ul>
+    <li>CertificateIssuer, DocumentSealer, TrustAnchor, CertificateTrustValidator ports</li>
+    <li>Existing classes remain default adapters</li>
+</ul>
+
+<h3>Phase 2 — Decouple capture from issuance</h3>
+<ul>
+    <li>Stop issuing certs in FieldSignatureCaptureService</li>
+    <li>Move getOrIssueForSigner to seal time only</li>
+</ul>
+
+<h3>Phase 3 — Split hash / seal / anchor</h3>
+<ul>
+    <li>SealingService: seal only</li>
+    <li>DocumentHashService: hash + persist only</li>
+    <li>BlockchainAnchoringService: optional async job (feature flag, default off)</li>
+</ul>
+
+<h3>Phase 4 — Key store abstraction (HSM prep)</h3>
+<ul>
+    <li>Key handles vs raw PEM; dual-read for legacy rows</li>
+</ul>
+
+<h3>Phase 5 — External RCA / TSP adapter</h3>
+<ul>
+    <li>Map to provider_managed schema first</li>
+    <li>app_managed root behind legacy flag</li>
+</ul>
+
+<h3>Phase 6 — Verification &amp; revocation hardening</h3>
+<ul>
+    <li>Optional CRL/OCSP adapter; DB revocation remains UI source of truth</li>
+</ul>
+
+<h3>Phase 7 — Deprecate embedded root (long horizon)</h3>
+<ul>
+    <li>Freeze getOrCreateRootAuthority for new issuances after migration window</li>
+    <li>Retain root rows for historical verification</li>
+</ul>
+
+<h2>10. High-Risk Areas</h2>
+<table>
+    <tr><th>Area</th><th>Risk</th></tr>
+    <tr><td>CompletedDocumentSealingService.sealSignerSignatureSet</td><td>Re-seal overwrites rows; changes hash and blockchain proof</td></tr>
+    <tr><td>DocumentHashService.createOrRefreshForCompletedDocument</td><td>Hash refresh breaks public verify for old tx</td></tr>
+    <tr><td>CertificateAuthorityService.getOrCreateRootAuthority</td><td>Accidental second root or key rotation</td></tr>
+    <tr><td>SignerCertificate fingerprint unique</td><td>Re-issue collisions</td></tr>
+    <tr><td>GenerateCertificateJob silent catch</td><td>Masks PKI failures</td></tr>
+    <tr><td>Global signing_backend</td><td>Cannot migrate per tenant/document</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>11. Migration Strategy</h2>
+<p><strong>Approach: Strangler fig + dual-write/read</strong></p>
+<ol>
+    <li>Classify data: app_managed_sealed, app_managed_unsealed, provider_managed, legacy_no_fields</li>
+    <li>Introduce pki_backend resolution: signer → document → global (defaults unchanged)</li>
+    <li>New issuances on external RCA/TSP; retain app-managed for historical verify</li>
+    <li>Key migration in maintenance window: HSM for root; do not mass re-issue signer certs</li>
+    <li>Blockchain: never re-hash completed docs in place; version table if re-stamping required</li>
+    <li>Rollout: dev → staging snapshot → canary → cutover per signing_backend</li>
+</ol>
+<h3>Rollback</h3>
+<ul>
+    <li>Feature flags revert to current adapters</li>
+    <li>PEM + certificate_authorities snapshot before HSM cutover</li>
+    <li>Disable external issuer → fall back to embedded CA</li>
+</ul>
+
+<h2>12. Backward Compatibility Strategy</h2>
+<table>
+    <tr><th>Surface</th><th>Contract to preserve</th></tr>
+    <tr><td>DB schema</td><td>Keep existing columns; add nullable only</td></tr>
+    <tr><td>certificate_source</td><td>app_managed / provider_managed</td></tr>
+    <tr><td>external://root-ca</td><td>File-backed root key indirection</td></tr>
+    <tr><td>Public verify</td><td>verifyDocumentSignatures + verifyStoredProof shapes</td></tr>
+    <tr><td>Encrypted signer keys</td><td>Laravel encrypted cast on signing_private_key</td></tr>
+    <tr><td>Routes</td><td>sign.show, sign.account.* unchanged during PKI refactor</td></tr>
+    <tr><td>Tests as contract</td><td>SignatureCertificateVerificationTest, CertificateAuthorityKeyStoreTest, PublicDocumentVerificationTest, SignerCertificateRevocationWorkflowTest</td></tr>
+</table>
+<h3>Compatibility rules</h3>
+<ul>
+    <li>Never change signature_hash algorithm without version field</li>
+    <li>Never rotate root CA in place; add new CA row + superseded_by</li>
+    <li>Provider path first for external RCA (issuer_certificate_pem)</li>
+    <li>Defer CRL/SCEP/CMP until issuer adapter is stable</li>
+</ul>
+
+<h2>13. RCA Compliance Gap (Procurement Context)</h2>
+<table>
+    <tr><th>Requirement</th><th>docuTrust today</th></tr>
+    <tr><td>EAL4+ / FIPS 140-2 L3 HSM RCA</td><td class="risk-critical">Not implemented</td></tr>
+    <tr><td>Dedicated VGW + network isolation</td><td class="risk-critical">Not implemented</td></tr>
+    <tr><td>CRL / CMP / SCEP / PKCS#7 CA services</td><td class="risk-critical">Not implemented</td></tr>
+    <tr><td>Broad PKI interoperability (VPN, browsers, etc.)</td><td class="risk-critical">Not implemented</td></tr>
+    <tr><td>Internal X.509 for DocuTrust documents</td><td>Partial (RSA 2048, app-managed)</td></tr>
+    <tr><td>Remote TSP via CSC</td><td>Partial (remote_managed path)</td></tr>
+</table>
+<p><strong>Recommendation:</strong> Deploy accredited commercial RCA on HSM; use docuTrust as relying party / enrollment client. Keep embedded OpenSSL root for dev/demo only.</p>
+
+<h3>Recommended first step</h3>
+<p>Execute <strong>Phase 0 + Phase 1</strong> only: monitoring for unsealed completed documents and interface extraction with zero delegation change.</p>
+
+<footer>
+    DocuTrust PKI Architecture Audit — Generated May 14, 2026 — Audit and planning only; no code modifications included.
+</footer>
+
+</body>
+</html>
