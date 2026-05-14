@@ -185,16 +185,36 @@
                                 </td>
                                 <td class="px-4 py-3">
                                     @if ($signer->requiresAction() && $signer->status === DocumentSignerStatus::Pending && $document->status === DocumentStatus::Pending)
-                                        <a
-                                            href="{{ $signingMethodService->signerEntryUrl($signer) }}"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="font-medium text-teal-700 underline decoration-teal-500/30 underline-offset-2 hover:text-teal-800 hover:decoration-teal-500 dark:text-teal-300 dark:hover:text-teal-200"
-                                        >
-                                            {{ $signer->isApprover()
-                                                ? ($signer->signingMethod() === SigningMethod::AccountVerified ? __('Open account approval') : __('Open approval'))
-                                                : ($signer->signingMethod() === SigningMethod::AccountVerified ? __('Open account signing') : __('Open')) }}
-                                        </a>
+                                        <div class="flex items-center gap-2">
+                                            <a
+                                                href="{{ $signingMethodService->signerEntryUrl($signer) }}"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="font-medium text-teal-700 underline decoration-teal-500/30 underline-offset-2 hover:text-teal-800 hover:decoration-teal-500 dark:text-teal-300 dark:hover:text-teal-200"
+                                            >
+                                                {{ $signer->isApprover()
+                                                    ? ($signer->signingMethod() === SigningMethod::AccountVerified ? __('Open account approval') : __('Open approval'))
+                                                    : ($signer->signingMethod() === SigningMethod::AccountVerified ? __('Open account signing') : __('Open')) }}
+                                            </a>
+                                            <flux:button
+                                                size="sm"
+                                                variant="ghost"
+                                                type="button"
+                                                wire:click="resendInvitation({{ $signer->id }})"
+                                                wire:confirm="{{ __('Resend the invitation email to :name?', ['name' => $signer->name]) }}"
+                                            >
+                                                {{ __('Resend') }}
+                                            </flux:button>
+                                            <flux:button
+                                                size="sm"
+                                                variant="ghost"
+                                                type="button"
+                                                wire:click="sendReminder({{ $signer->id }})"
+                                                wire:confirm="{{ __('Send a reminder email to :name?', ['name' => $signer->name]) }}"
+                                            >
+                                                {{ __('Remind') }}
+                                            </flux:button>
+                                        </div>
                                     @else
                                         <span class="text-zinc-400">—</span>
                                     @endif

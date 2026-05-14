@@ -348,6 +348,53 @@ class DocumentSignersManager extends Component
         $this->moveSigner($signerId, 1);
     }
 
+    public function sendReminder(int $signerId): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Pending) {
+            return;
+        }
+
+        $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
+
+        if (! $signer->requiresAction() || $signer->status !== DocumentSignerStatus::Pending) {
+            return;
+        }
+
+        app(\App\Services\DocumentNotificationService::class)->sendReminder($document, $signer);
+        session()->flash('status', __('Reminder sent to :name.', ['name' => $signer->name]));
+    }
+
+    public function resendInvitation(int $signerId): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Pending) {
+            return;
+        }
+
+        $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
+
+        if (! $signer->requiresAction() || $signer->status !== DocumentSignerStatus::Pending) {
+            return;
+        }
+
+        $signingMethodService = app(\App\Services\SigningMethodService::class);
+
+        \App\Jobs\SendDocumentEmailJob::dispatch(
+            documentId: $document->id,
+            signerId: $signer->id,
+            recipientEmail: $signer->email,
+            type: \App\Jobs\SendDocumentEmailJob::TYPE_SENT_TO_SIGNER,
+            signUrl: $signingMethodService->signerEntryUrl($signer),
+        );
+
+        session()->flash('status', __('Invitation resent to :name.', ['name' => $signer->name]));
+    }
+
     public function render(): View
     {
         $document = $this->resolveDocument()->load([

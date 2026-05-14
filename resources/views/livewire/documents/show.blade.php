@@ -234,7 +234,10 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
         </div>
         <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
-            @if ($document->status === DocumentStatus::Draft)
+            @if ($document->status === DocumentStatus::Draft && $workflow['canSend'])
+                <flux:button variant="primary" type="button" wire:click="sendForSignature" wire:confirm="{{ __('Send this document to all participants for signing?') }}">
+                    {{ __('Send for signature') }}
+                </flux:button>
             @endif
             @if ($document->status === DocumentStatus::Completed)
                 <flux:button variant="outline" :href="route('documents.download', $document)">
