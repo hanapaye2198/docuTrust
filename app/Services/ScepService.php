@@ -407,14 +407,14 @@ class ScepService
     }
 
     /**
-     * Handle SCEP enrollment request and return result.
+     * Handle SCEP enrollment request — extracts CSR from PKCS#7 envelope and issues certificate.
      *
      * @param array $pkiMessage Parsed PKI message
      * @return array{status: string, certificate: string|null, errorMessage: string|null}
      */
     public function handleEnrollmentRequest(array $pkiMessage): array
     {
-        // Validate message type is PKCSReq (19)
+        // Validate message type is PKCSReq (19) or generic (0)
         if (isset($pkiMessage['messageType']) && $pkiMessage['messageType'] !== 19 && $pkiMessage['messageType'] !== 0) {
             return [
                 'status' => 'error',
@@ -423,11 +423,85 @@ class ScepService
             ];
         }
 
-        // In production: validate CSR, issue certificate, return in PKCS#7 envelope
-        return [
-            'status' => 'pending',
-            'certificate' => null,
-            'errorMessage' => null,
-        ];
+        // Extract the CSR from the message content
+        $messageContent = $pkiMessage['message'] ?? '';
+        $csrPem = null;
+
+        // Try base64 decode the message content
+        $decoded = base64_decode($messageContent, true);
+        if ($decoded !== false) {
+            // Check if it's a PEM CSR
+            if (str_contains($decoded, '-----BEGIN CERTIFICATE REQUEST-----')) {
+                $csrPem = $decoded;
+            } else {
+                // Assume DER-encoded CSR, wrap as PEM
+                $csrPem = "-----BEGIN CERTIFICATE REQUEST-----\n" . chunk_split(base64_encode($decoded), 64, "\n") . "-----END CERTIFICATE REQUEST-----\n";
+            }
+        }
+
+        if ($csrPem === null || @openssl_csr_get_subject($csrPem) === false) {
+            return [
+                'status' => 'error',
+                'certificate' => null,
+                'errorMessage' => 'Unable to extract valid CSR from SCEP message.',
+            ];
+        }
+
+        try {
+            $caService = app(CertificateAuthorityService::class);
+            $ca = $caService->getOrCreateRootAuthority();
+
+            $keyStore = app(\App\Contracts\CertificateAuthorityKeyStore::class);
+            $caPrivateKey = openssl_pkey_get_private($keyStore->privateKeyPemFor($ca));
+
+            if ($caPrivateKey === false) {
+                return [
+                    'status' => 'error',
+                    'certificate' => null,
+                    'errorMessage' => 'CA private key unavailable.',
+                ];
+            }
+
+            $caCert = openssl_x509_read($ca->certificate_pem);
+            $serialNumber = $caService->generateCertificateSerialInteger();
+            $validDays = (int) config('docutrust.pki.signer_valid_days', 825);
+
+            $config = [
+                'digest_alg' => 'sha256',
+                'private_key_bits' => 2048,
+                'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            ];
+
+            $configPath = (string) config('docutrust.pki.openssl_config_path', '');
+            if ($configPath !== '' && is_file($configPath)) {
+                $config['config'] = $configPath;
+                $config['x509_extensions'] = 'usr_cert';
+            }
+
+            $x509 = openssl_csr_sign($csrPem, $caCert, $caPrivateKey, $validDays, $config, $serialNumber);
+
+            if ($x509 === false) {
+                return [
+                    'status' => 'error',
+                    'certificate' => null,
+                    'errorMessage' => 'Certificate signing failed.',
+                ];
+            }
+
+            $certificatePem = '';
+            openssl_x509_export($x509, $certificatePem);
+
+            return [
+                'status' => 'success',
+                'certificate' => base64_encode($certificatePem),
+                'errorMessage' => null,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'status' => 'error',
+                'certificate' => null,
+                'errorMessage' => 'SCEP enrollment failed: ' . $e->getMessage(),
+            ];
+        }
     }
 }

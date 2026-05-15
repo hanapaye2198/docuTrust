@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Contracts\CertificateAuthorityKeyStore;
+use App\Models\CertificateAuthority;
+use App\Models\SignerCertificate;
 use RuntimeException;
 
 /**
@@ -354,9 +357,9 @@ class CmpService
     }
 
     /**
-     * Handle CMP enrollment request
+     * Handle CMP enrollment request — issues a certificate from the CSR payload.
      *
-     * @param array $request Enrollment request
+     * @param array $request Parsed CMP message
      * @return array{
      *   status: string,
      *   certificate: string|null,
@@ -365,8 +368,9 @@ class CmpService
      */
     public function handleEnrollmentRequest(array $request): array
     {
-        // Validate request
-        if (!isset($request['message'])) {
+        $payload = $request['payload'] ?? ($request['message'] ?? null);
+
+        if ($payload === null || $payload === '') {
             return [
                 'status' => 'error',
                 'certificate' => null,
@@ -374,19 +378,91 @@ class CmpService
             ];
         }
 
-        // Process enrollment
-        // In production, validate and issue certificate
-        return [
-            'status' => 'pending',
-            'certificate' => null,
-            'errorMessage' => null,
-        ];
+        // Attempt to decode payload as a PKCS#10 CSR
+        $csrPem = $payload;
+        if (!str_contains($csrPem, '-----BEGIN CERTIFICATE REQUEST-----')) {
+            // Try base64 decode
+            $decoded = base64_decode($payload, true);
+            if ($decoded !== false && str_contains($decoded, '-----BEGIN CERTIFICATE REQUEST-----')) {
+                $csrPem = $decoded;
+            } else {
+                // Wrap raw DER as PEM
+                $csrPem = "-----BEGIN CERTIFICATE REQUEST-----\n" . chunk_split(base64_encode($decoded ?: $payload), 64, "\n") . "-----END CERTIFICATE REQUEST-----\n";
+            }
+        }
+
+        // Parse the CSR to extract subject and public key
+        $csrResource = @openssl_csr_get_subject($csrPem);
+        if ($csrResource === false) {
+            return [
+                'status' => 'error',
+                'certificate' => null,
+                'errorMessage' => 'Invalid certificate signing request.',
+            ];
+        }
+
+        try {
+            $caService = app(CertificateAuthorityService::class);
+            $ca = $caService->getOrCreateRootAuthority();
+
+            $keyStore = app(CertificateAuthorityKeyStore::class);
+            $caPrivateKey = openssl_pkey_get_private($keyStore->privateKeyPemFor($ca));
+
+            if ($caPrivateKey === false) {
+                return [
+                    'status' => 'error',
+                    'certificate' => null,
+                    'errorMessage' => 'CA private key unavailable.',
+                ];
+            }
+
+            $caCert = openssl_x509_read($ca->certificate_pem);
+            $serialNumber = $caService->generateCertificateSerialInteger();
+            $validDays = (int) config('docutrust.pki.signer_valid_days', 825);
+
+            $config = [
+                'digest_alg' => 'sha256',
+                'private_key_bits' => 2048,
+                'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            ];
+
+            $configPath = (string) config('docutrust.pki.openssl_config_path', '');
+            if ($configPath !== '' && is_file($configPath)) {
+                $config['config'] = $configPath;
+                $config['x509_extensions'] = 'usr_cert';
+            }
+
+            $x509 = openssl_csr_sign($csrPem, $caCert, $caPrivateKey, $validDays, $config, $serialNumber);
+
+            if ($x509 === false) {
+                return [
+                    'status' => 'error',
+                    'certificate' => null,
+                    'errorMessage' => 'Certificate signing failed.',
+                ];
+            }
+
+            $certificatePem = '';
+            openssl_x509_export($x509, $certificatePem);
+
+            return [
+                'status' => 'success',
+                'certificate' => $certificatePem,
+                'errorMessage' => null,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'status' => 'error',
+                'certificate' => null,
+                'errorMessage' => 'Enrollment processing failed: ' . $e->getMessage(),
+            ];
+        }
     }
 
     /**
-     * Handle CMP revocation request
+     * Handle CMP revocation request — revokes a certificate by serial number.
      *
-     * @param array $request Revocation request
+     * @param array $request Parsed CMP message
      * @return array{
      *   status: string,
      *   errorMessage: string|null
@@ -394,8 +470,55 @@ class CmpService
      */
     public function handleRevocationRequest(array $request): array
     {
-        // Validate and process revocation
-        // In production, update certificate status
+        $serialNumber = $request['serialNumber'] ?? null;
+
+        // Try to extract serial from payload if not directly provided
+        if ($serialNumber === null && isset($request['payload'])) {
+            // Search for INTEGER in the DER payload that could be a serial
+            $payload = $request['payload'];
+            if (is_string($payload) && strlen($payload) > 4) {
+                $offset = 0;
+                $len = strlen($payload);
+                while ($offset < $len - 2) {
+                    if (ord($payload[$offset]) === 0x02) { // INTEGER tag
+                        $intLen = ord($payload[$offset + 1]);
+                        if ($intLen > 2 && $intLen < 32 && ($offset + 2 + $intLen) <= $len) {
+                            $serialNumber = strtoupper(bin2hex(substr($payload, $offset + 2, $intLen)));
+                            break;
+                        }
+                    }
+                    $offset++;
+                }
+            }
+        }
+
+        if ($serialNumber === null || $serialNumber === '') {
+            return [
+                'status' => 'error',
+                'errorMessage' => 'Missing certificate serial number for revocation.',
+            ];
+        }
+
+        $certificate = SignerCertificate::query()
+            ->where('serial_number', strtoupper(trim($serialNumber)))
+            ->where('status', 'active')
+            ->first();
+
+        if ($certificate === null) {
+            return [
+                'status' => 'error',
+                'errorMessage' => 'Certificate not found or already revoked.',
+            ];
+        }
+
+        $reason = $request['reason'] ?? 'unspecified';
+
+        $certificate->update([
+            'status' => 'revoked',
+            'revoked_at' => now(),
+            'revocation_reason' => $reason,
+        ]);
+
         return [
             'status' => 'success',
             'errorMessage' => null,
