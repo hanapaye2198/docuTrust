@@ -12,8 +12,6 @@ class StoreNotaryClientCaseRequest
      */
     public static function rules(?User $user = null): array
     {
-        $orgId = $user?->organization_id;
-
         return [
             'title' => ['required', 'string', 'max:255'],
             'requestType' => ['required', 'string', Rule::in(config('docutrust.notary.notarial_act_types', ['acknowledgment']))],
@@ -28,10 +26,8 @@ class StoreNotaryClientCaseRequest
             'notaryUserId' => [
                 'nullable',
                 'integer',
-                Rule::exists('users', 'id')->where(function ($query) use ($orgId): void {
-                    if ($orgId !== null) {
-                        $query->where('organization_id', $orgId)->where('role', 'notary');
-                    }
+                Rule::exists('users', 'id')->where(function ($query): void {
+                    $query->where('role', 'notary');
                 }),
             ],
         ];
