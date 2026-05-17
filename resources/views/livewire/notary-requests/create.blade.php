@@ -69,7 +69,6 @@ new #[Layout('components.layouts.app')] class extends Component {
         return [
             'isNotaryView' => $user->role === UserRole::Notary,
             'availableNotaries' => User::query()
-                ->where('organization_id', $user->organization_id)
                 ->where('role', UserRole::Notary)
                 ->orderBy('name')
                 ->get(['id', 'name']),
