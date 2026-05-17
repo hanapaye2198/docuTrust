@@ -46,7 +46,8 @@ class AddSecurityHeaders
 
         if ($isEnotaryRoute) {
             $response->headers->set('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
-            $connectSrc .= ' https://meet.jit.si https://*.jit.si wss://*.jit.si wss://meet.jit.si wss://8x8.vc https://8x8.vc';
+            $scriptSrc .= ' https://meet.jit.si https://8x8.vc https://*.onjitsi.com';
+            $connectSrc .= ' https://meet.jit.si https://*.jit.si wss://*.jit.si wss://meet.jit.si wss://8x8.vc https://8x8.vc https://*.onjitsi.com wss://*.onjitsi.com';
         } else {
             $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
         }

@@ -23,10 +23,10 @@ final class NotaryJitsiRoomService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim((string) config('docutrust.notary.jitsi_base_url', 'https://meet.jit.si'), '/');
+        $this->baseUrl = rtrim((string) config('docutrust.notary.jitsi_base_url', 'https://8x8.vc'), '/');
         $this->appId = config('docutrust.notary.jitsi_app_id') ?: null;
         $this->appSecret = config('docutrust.notary.jitsi_app_secret') ?: null;
-        $this->domain = parse_url($this->baseUrl, PHP_URL_HOST) ?: 'meet.jit.si';
+        $this->domain = '8x8.vc';
     }
 
     /**
@@ -42,12 +42,19 @@ final class NotaryJitsiRoomService
      */
     public function meetingUrl(string $roomName): string
     {
-        $url = $this->baseUrl . '/' . $roomName;
+        $isJaas = str_starts_with($this->appId ?? '', 'vpaas-magic-cookie-');
+
+        if ($isJaas) {
+            // JaaS requires: https://8x8.vc/{appId}/{roomName}
+            $url = $this->baseUrl . '/' . $this->appId . '/' . $roomName;
+        } else {
+            $url = $this->baseUrl . '/' . $roomName;
+        }
 
         // Append JWT if configured
         $jwt = $this->generateJwt($roomName);
         if ($jwt !== null) {
-            $url .= '?jwt=' . $jwt;
+            $url .= (str_contains($url, '?') ? '&' : '?') . 'jwt=' . $jwt;
         }
 
         return $url;
@@ -58,11 +65,17 @@ final class NotaryJitsiRoomService
      */
     public function meetingUrlForUser(string $roomName, User $user, bool $isModerator = false): string
     {
-        $url = $this->baseUrl . '/' . $roomName;
+        $isJaas = str_starts_with($this->appId ?? '', 'vpaas-magic-cookie-');
+
+        if ($isJaas) {
+            $url = $this->baseUrl . '/' . $this->appId . '/' . $roomName;
+        } else {
+            $url = $this->baseUrl . '/' . $roomName;
+        }
 
         $jwt = $this->generateJwtForUser($roomName, $user, $isModerator);
         if ($jwt !== null) {
-            $url .= '?jwt=' . $jwt;
+            $url .= (str_contains($url, '?') ? '&' : '?') . 'jwt=' . $jwt;
         }
 
         return $url;
