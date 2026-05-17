@@ -106,7 +106,11 @@ final class NotaryJitsiRoomService
     public function getIframeConfig(NotarySession $session, User $user, bool $isModerator = false): array
     {
         $roomName = $session->room_name ?? $this->buildRoomName($session->notaryRequest);
-        $jwt = $this->generateJwtForUser($roomName, $user, $isModerator);
+
+        // Only generate JWT if credentials are configured
+        $jwt = ($this->appId !== null && $this->appSecret !== null)
+            ? $this->generateJwtForUser($roomName, $user, $isModerator)
+            : null;
 
         return [
             'domain' => $this->domain,
