@@ -60,6 +60,7 @@ Route::middleware(['auth', 'role:notary'])->group(function () {
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
+    Volt::route('notary/requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary.requests.session.live');
     Volt::route('notary/requests/{notaryRequest}/register-entry', 'notary.register-entry')->name('notary.register-entry');
 });
 
@@ -69,6 +70,7 @@ Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
     Volt::route('notary-requests', 'notary-requests.index')->name('notary-requests.index');
     Volt::route('notary-requests/create', 'notary-requests.create')->name('notary-requests.create');
     Volt::route('notary-requests/{notaryRequest}', 'notary-requests.show')->name('notary-requests.show');
+    Volt::route('notary-requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary-requests.session.live');
 
     Volt::route('documents', 'documents.index')->name('documents.index');
     Volt::route('documents/create', 'documents.create')->name('documents.create');
