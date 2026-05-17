@@ -117,11 +117,13 @@ final class NotaryJitsiRoomService
         }
 
         $now = time();
+        $isJaas = str_starts_with($this->appId, 'vpaas-magic-cookie-');
+
         $payload = [
-            'iss' => $this->appId,
-            'sub' => $this->domain,
-            'aud' => 'jitsi',
-            'room' => $roomName,
+            'iss' => 'chat',
+            'sub' => $isJaas ? $this->appId : $this->domain,
+            'aud' => $isJaas ? 'jitsi' : 'jitsi',
+            'room' => $isJaas ? '*' : $roomName,
             'iat' => $now,
             'exp' => $now + ($ttlMinutes * 60),
             'nbf' => $now - 10,
@@ -131,6 +133,9 @@ final class NotaryJitsiRoomService
                     'recording' => true,
                     'transcription' => false,
                     'outbound-call' => false,
+                ],
+                'room' => [
+                    'regex' => false,
                 ],
             ],
         ];
@@ -148,28 +153,32 @@ final class NotaryJitsiRoomService
         }
 
         $now = time();
+        $isJaas = str_starts_with($this->appId, 'vpaas-magic-cookie-');
+
         $payload = [
-            'iss' => $this->appId,
-            'sub' => $this->domain,
+            'iss' => 'chat',
+            'sub' => $isJaas ? $this->appId : $this->domain,
             'aud' => 'jitsi',
-            'room' => $roomName,
+            'room' => $isJaas ? '*' : $roomName,
             'iat' => $now,
             'exp' => $now + ($ttlMinutes * 60),
             'nbf' => $now - 10,
-            'moderator' => $isModerator,
             'context' => [
                 'user' => [
                     'id' => (string) $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
                     'avatar' => '',
-                    'moderator' => $isModerator,
+                    'moderator' => $isModerator ? 'true' : 'false',
                 ],
                 'features' => [
                     'livestreaming' => false,
                     'recording' => $isModerator,
                     'transcription' => false,
                     'outbound-call' => false,
+                ],
+                'room' => [
+                    'regex' => false,
                 ],
             ],
         ];
@@ -256,9 +265,59 @@ final class NotaryJitsiRoomService
     }
 
     /**
-     * Encode a JWT payload using HS256.
+     * Encode a JWT payload.
+     * Uses RS256 if the secret looks like an RSA key, otherwise HS256.
      */
     private function encodeJwt(array $payload): string
+    {
+        $isRsaKey = str_contains($this->appSecret, 'MIIE') || str_contains($this->appSecret, 'BEGIN');
+
+        if ($isRsaKey) {
+            return $this->encodeJwtRs256($payload);
+        }
+
+        return $this->encodeJwtHs256($payload);
+    }
+
+    /**
+     * Encode JWT with RS256 (for JaaS / 8x8 private key).
+     */
+    private function encodeJwtRs256(array $payload): string
+    {
+        $header = ['alg' => 'RS256', 'typ' => 'JWT', 'kid' => $this->appId . '/generated-key'];
+
+        $segments = [
+            $this->base64UrlEncode(json_encode($header)),
+            $this->base64UrlEncode(json_encode($payload)),
+        ];
+
+        $signingInput = implode('.', $segments);
+
+        // Reconstruct PEM if it was stored as raw base64
+        $pem = $this->appSecret;
+        if (!str_contains($pem, '-----BEGIN')) {
+            $pem = "-----BEGIN PRIVATE KEY-----\n" . chunk_split($pem, 64, "\n") . "-----END PRIVATE KEY-----";
+        }
+
+        $privateKey = openssl_pkey_get_private($pem);
+        if ($privateKey === false) {
+            throw new \RuntimeException('Invalid Jitsi private key. Check DOCUTRUST_NOTARY_JITSI_APP_SECRET.');
+        }
+
+        $signature = '';
+        if (!openssl_sign($signingInput, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
+            throw new \RuntimeException('Failed to sign Jitsi JWT.');
+        }
+
+        $segments[] = $this->base64UrlEncode($signature);
+
+        return implode('.', $segments);
+    }
+
+    /**
+     * Encode JWT with HS256 (for self-hosted Jitsi with shared secret).
+     */
+    private function encodeJwtHs256(array $payload): string
     {
         $header = ['alg' => 'HS256', 'typ' => 'JWT'];
 
