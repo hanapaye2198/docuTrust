@@ -58,6 +58,7 @@ Route::middleware(['auth', 'role:notary'])->group(function () {
     Volt::route('notary/dashboard', 'notary.dashboard')->name('notary.dashboard');
     Volt::route('notary/credentials', 'notary.credentials')->name('notary.credentials');
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
+    Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
     Volt::route('notary/requests/{notaryRequest}/register-entry', 'notary.register-entry')->name('notary.register-entry');
 });
