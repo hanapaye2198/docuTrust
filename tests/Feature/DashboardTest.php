@@ -56,10 +56,10 @@ class DashboardTest extends TestCase
             ->assertSee('Pending')
             ->assertSee('Completed')
             ->assertSee('Rejected')
-            ->assertSee('Active certificates')
-            ->assertSee('Revoked certificates')
+            ->assertSee('Active certs')
+            ->assertSee('Revoked')
             ->assertSee('Activity trend')
-            ->assertSee('Recent activity')
+            ->assertSee('Recent documents')
             ->assertSee('Most active signers')
             ->assertSee('data-chart=', false);
     }
