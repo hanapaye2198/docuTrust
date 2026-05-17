@@ -24,8 +24,10 @@ final class NotaryJitsiRoomService
     public function __construct()
     {
         $this->baseUrl = rtrim((string) config('docutrust.notary.jitsi_base_url', 'https://meet.jit.si'), '/');
-        $this->appId = config('docutrust.notary.jitsi_app_id') ?: null;
-        $this->appSecret = config('docutrust.notary.jitsi_app_secret') ?: null;
+        $appId = (string) config('docutrust.notary.jitsi_app_id', '');
+        $appSecret = (string) config('docutrust.notary.jitsi_app_secret', '');
+        $this->appId = $appId !== '' ? $appId : null;
+        $this->appSecret = $appSecret !== '' ? $appSecret : null;
         $this->domain = parse_url($this->baseUrl, PHP_URL_HOST) ?: 'meet.jit.si';
     }
 
