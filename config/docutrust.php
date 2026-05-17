@@ -43,6 +43,8 @@ return [
         'require_video_session' => (bool) env('DOCUTRUST_NOTARY_REQUIRE_VIDEO', true),
         'session_expiry_hours' => (int) env('DOCUTRUST_NOTARY_SESSION_EXPIRY_HOURS', 72),
         'jitsi_base_url' => env('DOCUTRUST_NOTARY_JITSI_BASE_URL', 'https://meet.jit.si'),
+        'jitsi_app_id' => env('DOCUTRUST_NOTARY_JITSI_APP_ID'),
+        'jitsi_app_secret' => env('DOCUTRUST_NOTARY_JITSI_APP_SECRET'),
         'verification_checklist' => [
             'face_matches_id',
             'id_valid_not_expired',
