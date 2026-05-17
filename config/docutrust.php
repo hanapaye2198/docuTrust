@@ -29,6 +29,9 @@ return [
         'root_ca_country' => env('DOCUTRUST_ROOT_CA_COUNTRY', 'PH'),
         'root_ca_valid_days' => (int) env('DOCUTRUST_ROOT_CA_VALID_DAYS', 3650),
         'signer_valid_days' => (int) env('DOCUTRUST_SIGNER_CERT_VALID_DAYS', 825),
+        'ocsp_responder_url' => env('DOCUTRUST_OCSP_URL', ''),
+        'crl_distribution_url' => env('DOCUTRUST_CRL_URL', ''),
+        'ca_issuers_url' => env('DOCUTRUST_CA_ISSUERS_URL', ''),
     ],
 
     'notary' => [

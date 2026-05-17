@@ -835,25 +835,27 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="mx-auto flex h-full w-full max-w-7xl flex-1 flex-col gap-8">
+<div class="mx-auto flex h-full w-full max-w-6xl flex-1 flex-col gap-6 px-1 py-4">
     @if (session('status'))
-        <div class="rounded-2xl border border-emerald-200/90 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+        <div class="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200">
+            <svg class="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
             {{ session('status') }}
         </div>
     @endif
 
-    <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-3">
-            <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">{{ $notaryRequest->title }}</h1>
+    {{-- Header --}}
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="space-y-2">
+            <h1 class="text-xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-2xl">{{ $notaryRequest->title }}</h1>
             <div class="flex flex-wrap items-center gap-2">
-                <span class="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</span>
-                <span class="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{{ str_replace('_', ' ', $notaryRequest->request_type) }}</span>
+                <span class="inline-flex items-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</span>
+                <span class="inline-flex items-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ str_replace('_', ' ', $notaryRequest->request_type) }}</span>
             </div>
             <p class="text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('Requester') }}: {{ $notaryRequest->requester?->name ?? '-' }} • {{ __('Assigned notary') }}: {{ $notaryRequest->notary?->name ?? __('Unassigned') }}
+                {{ __('Requester') }}: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $notaryRequest->requester?->name ?? '-' }}</span> · {{ __('Notary') }}: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $notaryRequest->notary?->name ?? __('Unassigned') }}</span>
             </p>
         </div>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap items-center gap-2">
             @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::Draft)
                 <flux:button variant="primary" wire:click="submitRequest">{{ __('Submit request') }}</flux:button>
             @endif
@@ -878,15 +880,12 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     <div class="grid gap-6 xl:grid-cols-3">
         <div class="space-y-6 xl:col-span-2">
-            <div class="ui-panel p-6">
-                <div class="flex items-start justify-between gap-4">
-                    <div>
-                        <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Workflow guide') }}</h2>
-                        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('This request moves from intake to verification, review, register entry, and immutable output.') }}</p>
-                    </div>
-                    <span class="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{{ __('5 stages') }}</span>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <div class="flex items-center justify-between gap-4">
+                    <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Workflow') }}</h2>
+                    <span class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('5 stages') }}</span>
                 </div>
-                <div class="mt-5 grid gap-3 lg:grid-cols-5">
+                <div class="mt-4 grid gap-2.5 lg:grid-cols-5">
                     @foreach ($workflowSteps as $index => $step)
                         @php
                             $stepStyles = match ($step['state']) {
@@ -905,28 +904,27 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 default => __('Upcoming'),
                             };
                         @endphp
-                        <div class="rounded-2xl border p-4 {{ $stepStyles }}">
-                            <div class="flex items-center justify-between gap-3">
-                                <span class="inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold {{ $badgeStyles }}">{{ $index + 1 }}</span>
-                                <span class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ $stateLabel }}</span>
+                        <div class="rounded-xl border p-3.5 {{ $stepStyles }}">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="inline-flex size-6 items-center justify-center rounded-full text-[10px] font-bold {{ $badgeStyles }}">{{ $index + 1 }}</span>
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ $stateLabel }}</span>
                             </div>
-                            <div class="mt-4 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ $step['label'] }}</div>
-                            <div class="mt-2 text-xs leading-5 text-zinc-600 dark:text-zinc-400">{{ $step['description'] }}</div>
+                            <div class="mt-3 text-xs font-semibold text-zinc-900 dark:text-zinc-100">{{ $step['label'] }}</div>
                         </div>
                     @endforeach
                 </div>
             </div>
 
-            <div class="ui-panel p-6">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Case summary') }}</h2>
-                <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-                        <div class="text-xs uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Submitted') }}</div>
-                        <div class="mt-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $notaryRequest->submitted_at?->toDateTimeString() ?? __('Not yet') }}</div>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Case summary') }}</h2>
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/30">
+                        <div class="text-[11px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Submitted') }}</div>
+                        <div class="mt-1.5 text-sm font-semibold text-zinc-800 dark:text-zinc-200">{{ $notaryRequest->submitted_at?->toDateTimeString() ?? __('Not yet') }}</div>
                     </div>
-                    <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-                        <div class="text-xs uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Documents linked') }}</div>
-                        <div class="mt-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $requestDocuments->count() }}</div>
+                    <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/30">
+                        <div class="text-[11px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Documents linked') }}</div>
+                        <div class="mt-1.5 text-sm font-semibold text-zinc-800 dark:text-zinc-200">{{ $requestDocuments->count() }}</div>
                     </div>
                 </div>
                 @if (($notaryRequest->metadata['notes'] ?? '') !== '')
@@ -946,8 +944,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                 @endif
             </div>
 
-            <div class="ui-panel p-6">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signers & eNOTARY intake') }}</h2>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Signers & eNOTARY intake') }}</h2>
                 <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Principal signers attached to this case. Identity documents require email OTP confirmation before upload.') }}</p>
                 <div class="mt-4 space-y-3">
                     @forelse ($requestSigners as $signer)
@@ -1073,8 +1071,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                 @endif
             </div>
 
-            <div class="ui-panel p-6">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Documents') }}</h2>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Documents') }}</h2>
                 @if ($canManageLifecycle)
                     <div class="mt-4 flex flex-col gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/30">
                         <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload a new document for this request') }}</div>
@@ -1211,8 +1209,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                 </div>
             </div>
 
-            <div class="ui-panel p-6">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Finalization readiness') }}</h2>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Finalization readiness') }}</h2>
                 @if ($finalizationReadiness['ready'])
                     <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
                         {{ __('All linked documents have the required notarization artifacts.') }}
@@ -1229,8 +1227,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                 @endif
             </div>
 
-            <div class="ui-panel p-6">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Journal') }}</h2>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Journal') }}</h2>
                 <div class="mt-4 space-y-4">
                     @forelse ($journalEntries as $entry)
                         <div class="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
@@ -1248,8 +1246,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         </div>
 
         <div class="space-y-6">
-            <div class="ui-panel p-6">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Session scheduling') }}</h2>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Session scheduling') }}</h2>
                 @if ($canScheduleSession)
                     <div class="mt-4 space-y-4">
                         <flux:field>
@@ -1326,8 +1324,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                 @endif
             </div>
 
-            <div class="ui-panel p-6">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Verification steps') }}</h2>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Verification steps') }}</h2>
                 <div class="mt-4 space-y-3">
                     @if ($canVerifyIdentity)
                         <flux:button variant="outline" type="button" wire:click="markIdentityVerified">{{ __('Mark identity verified') }}</flux:button>
@@ -1346,8 +1344,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
 
             @if ($isNotary)
-                <div class="ui-panel p-6">
-                    <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Notarial register') }}</h2>
+                <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                    <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Notarial register') }}</h2>
                     @if ($canCreateRegisterEntry)
                         <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Create the official notarial register entry with all 9 required fields.') }}</p>
                         <div class="mt-4">
@@ -1371,8 +1369,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                     @endif
                 </div>
 
-                <div class="ui-panel p-6">
-                    <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Notary review') }}</h2>
+                <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                    <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Notary review') }}</h2>
                     @if ($canReviewNotary)
                         <div class="mt-4 space-y-4">
                             <flux:field>

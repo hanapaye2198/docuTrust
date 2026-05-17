@@ -1,0 +1,92 @@
+# DocuTrust PKI OpenSSL Configuration
+# CSC-compliant certificate profiles
+
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+default_days     = 825
+default_md       = sha256
+preserve         = no
+policy           = policy_match
+x509_extensions  = usr_cert
+
+[ policy_match ]
+countryName            = match
+organizationName       = match
+commonName             = supplied
+
+[ req ]
+default_bits       = 2048
+default_md         = sha256
+distinguished_name = req_distinguished_name
+x509_extensions    = v3_ca
+string_mask        = utf8only
+
+[ req_distinguished_name ]
+countryName                    = Country Name (2 letter code)
+countryName_default            = PH
+organizationName               = Organization Name
+organizationName_default       = DocuTrust
+commonName                     = Common Name
+commonName_max                 = 64
+
+#----------------------------------------------------------------------
+# Root CA Certificate Profile
+#----------------------------------------------------------------------
+[ v3_ca ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints       = critical, CA:TRUE
+keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+
+#----------------------------------------------------------------------
+# Signer Certificate Profile (document signing)
+#----------------------------------------------------------------------
+[ usr_cert ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid,issuer
+basicConstraints       = CA:FALSE
+keyUsage               = critical, digitalSignature, nonRepudiation
+extendedKeyUsage       = emailProtection, clientAuth
+# authorityInfoAccess  = OCSP;URI:${ENV::DOCUTRUST_OCSP_URL},caIssuers;URI:${ENV::DOCUTRUST_CA_ISSUERS_URL}
+# crlDistributionPoints = URI:${ENV::DOCUTRUST_CRL_URL}
+
+#----------------------------------------------------------------------
+# S/MIME Certificate Profile (email signing/encryption)
+#----------------------------------------------------------------------
+[ smime_cert ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid,issuer
+basicConstraints       = CA:FALSE
+keyUsage               = critical, digitalSignature, keyEncipherment
+extendedKeyUsage       = emailProtection
+# subjectAltName       = email:copy
+# authorityInfoAccess  = OCSP;URI:${ENV::DOCUTRUST_OCSP_URL}
+
+#----------------------------------------------------------------------
+# OCSP Signing Certificate Profile
+#----------------------------------------------------------------------
+[ ocsp_cert ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid,issuer
+basicConstraints       = CA:FALSE
+keyUsage               = critical, digitalSignature
+extendedKeyUsage       = OCSPSigning
+noCheck                = ignored
+
+#----------------------------------------------------------------------
+# VPN Certificate Profile
+#----------------------------------------------------------------------
+[ vpn_cert ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid,issuer
+basicConstraints       = CA:FALSE
+keyUsage               = critical, digitalSignature, keyEncipherment
+extendedKeyUsage       = serverAuth, clientAuth
+
+#----------------------------------------------------------------------
+# CRL Configuration
+#----------------------------------------------------------------------
+[ crl_ext ]
+authorityKeyIdentifier = keyid:always
