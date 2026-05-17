@@ -33,7 +33,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     public NotaryRequest $notaryRequest;
     public string $scheduleAt = '';
     public string $meetingUrl = '';
-    public string $providerName = 'manual';
+    public string $providerName = 'jitsi';
     public string $approvalSummary = '';
     public string $rejectionReason = '';
     public string $attachDocumentId = '';
@@ -1257,7 +1257,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                         </flux:field>
                         <flux:field>
                             <flux:label>{{ __('Provider') }}</flux:label>
-                            <flux:input wire:model="providerName" type="text" />
+                            <select wire:model="providerName" class="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100">
+                                <option value="jitsi">{{ __('Jitsi Meet (auto-generated room)') }}</option>
+                                <option value="manual">{{ __('Manual (paste URL below)') }}</option>
+                            </select>
                             <flux:error name="providerName" />
                         </flux:field>
                         <flux:field>
