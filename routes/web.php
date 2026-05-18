@@ -48,10 +48,21 @@ Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
     Route::post('/account-sign/{signerId}/trust/authorize', [SignDocumentController::class, 'startAuthenticatedTrustAuthorization'])->name('sign.account.trust.authorize');
     Route::get('/account-sign/{signerId}/trust/authorize/{session}', [SignDocumentController::class, 'pollAuthenticatedTrustAuthorization'])->name('sign.account.trust.authorize.poll');
 });
+
+Route::middleware(['auth', 'role:notary'])->group(function () {
+    Route::get('/notary/account-sign/{signerId}', [SignDocumentController::class, 'showAuthenticated'])->name('notary.sign.account.show');
+    Route::post('/notary/account-sign/{signerId}/unlock', [SignDocumentController::class, 'unlockAuthenticated'])->name('notary.sign.account.unlock');
+    Route::get('/notary/account-sign/{signerId}/pdf', [SignDocumentController::class, 'streamAuthenticatedPdf'])->name('notary.sign.account.document.pdf');
+    Route::get('/notary/account-sign/{signerId}/signature-image/{signatureField}', [SignDocumentController::class, 'streamAuthenticatedSignatureImage'])->name('notary.sign.account.signature.image');
+    Route::post('/notary/account-sign/{signerId}', [SignDocumentController::class, 'signAuthenticated'])->name('notary.sign.account.store');
+    Route::post('/notary/account-sign/{signerId}/signature', [SignDocumentController::class, 'storeAuthenticatedSignature'])->name('notary.sign.account.signature.store');
+    Route::post('/notary/account-sign/{signerId}/trust/authorize', [SignDocumentController::class, 'startAuthenticatedTrustAuthorization'])->name('notary.sign.account.trust.authorize');
+    Route::get('/notary/account-sign/{signerId}/trust/authorize/{session}', [SignDocumentController::class, 'pollAuthenticatedTrustAuthorization'])->name('notary.sign.account.trust.authorize.poll');
+});
 Volt::route('verify', 'pages.verify')->name('verify.index');
 
 Route::middleware(['auth', 'role:super_admin,notary_admin'])->group(function () {
-    Volt::route('dashboard', 'pages.dashboard')->name('dashboard');
+    Volt::route('dashboard', 'notary-admin.dashboard')->name('dashboard');
 });
 
 Route::middleware(['auth', 'role:notary'])->group(function () {
@@ -60,8 +71,14 @@ Route::middleware(['auth', 'role:notary'])->group(function () {
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
-    Volt::route('notary/requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary.requests.session.live');
+    Volt::route('notary/requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary.requests.session.live')->middleware(\App\Http\Middleware\AllowMediaPermissions::class);
     Volt::route('notary/requests/{notaryRequest}/register-entry', 'notary.register-entry')->name('notary.register-entry');
+
+    // Attorney access to document preparation and field placement for eNOTARY documents
+    Route::get('notary/documents/{document}/stream', DocumentStreamController::class)->name('notary.documents.stream');
+    Route::get('notary/documents/{document}/prepare', [DocumentPrepareController::class, 'show'])->name('notary.documents.prepare');
+    Route::post('notary/documents/{document}/signature-fields', [DocumentPrepareController::class, 'store'])->name('notary.documents.signature-fields.store');
+    Route::post('notary/documents/{document}/send', [DocumentPrepareController::class, 'send'])->name('notary.documents.send');
 });
 
 Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {

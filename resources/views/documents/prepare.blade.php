@@ -82,16 +82,27 @@
                                 {{ __('Save') }}
                             </button>
 
-                            <form method="POST" action="{{ route('documents.send', $document) }}" class="contents">
+                            <form method="POST" action="{{ route(auth()->user()?->role->value === 'notary' ? 'notary.documents.send' : 'documents.send', $document) }}" class="contents">
                                 @csrf
-                                <button
-                                    type="submit"
-                                    id="btn-send-to-signer"
-                                    class="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                                    @if (! $canSend) disabled @endif
-                                >
-                                    {{ __('Send') }}
-                                </button>
+                                @if ($document->notary_request_id !== null)
+                                    <button
+                                        type="submit"
+                                        id="btn-send-to-signer"
+                                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                                        @if (! $canSend) disabled @endif
+                                    >
+                                        {{ __('Send to Signers') }}
+                                    </button>
+                                @else
+                                    <button
+                                        type="submit"
+                                        id="btn-send-to-signer"
+                                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                                        @if (! $canSend) disabled @endif
+                                    >
+                                        {{ __('Send') }}
+                                    </button>
+                                @endif
                             </form>
                         </div>
                     </section>
@@ -187,7 +198,7 @@
             </section>
         </div>
 
-        <form id="save-fields-form" method="POST" action="{{ route('documents.signature-fields.store', $document) }}" class="hidden">
+        <form id="save-fields-form" method="POST" action="{{ route(auth()->user()?->role->value === 'notary' ? 'notary.documents.signature-fields.store' : 'documents.signature-fields.store', $document) }}" class="hidden">
             @csrf
             <input type="hidden" name="fields" id="fields-payload" value="[]" />
         </form>

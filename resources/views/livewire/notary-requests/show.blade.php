@@ -18,8 +18,6 @@ use App\Services\LocationVerificationService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
 use App\Services\OtpService;
-use App\Services\SendDocumentForSignatureService;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
@@ -39,6 +37,15 @@ new #[Layout('components.layouts.app')] class extends Component {
     public string $attachDocumentId = '';
     public string $newDocumentTitle = '';
     public $newDocumentFile = null;
+    public $replaceDocumentFile = null;
+    public ?int $replaceDocumentId = null;
+
+    // Add signer form (attorney only)
+    public string $newSignerName = '';
+    public string $newSignerEmail = '';
+    public string $newSignerPhone = '';
+    public string $newSignerAddress = '';
+    public string $newSignerRole = 'signer';
 
     public string $geoLatitude = '';
 
@@ -99,6 +106,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'canVerifyLocation' => $this->canVerifyLocation(),
             'canCreateRegisterEntry' => $this->canCreateRegisterEntry(),
             'canReviewNotary' => $this->canReviewNotary(),
+            'canAttorneySign' => $this->canAttorneySign(),
             'workflowSteps' => $this->workflowSteps($readiness, $requestDocuments),
             'requestDocuments' => $requestDocuments,
             'recentSessions' => $this->notaryRequest->sessions,
@@ -142,18 +150,6 @@ new #[Layout('components.layouts.app')] class extends Component {
                 ])
                 ->all(),
             'nextDocumentAction' => $this->nextDocumentAction($requestDocuments),
-            'attachableDocuments' => Document::query()
-                ->where('organization_id', $this->notaryRequest->organization_id)
-                ->where(function (Builder $builder): void {
-                    $builder
-                        ->whereNull('notary_request_id')
-                        ->orWhere('notary_request_id', $this->notaryRequest->id);
-                })
-                ->when(! $user->isOrganizationAdmin(), function (Builder $builder) use ($user): void {
-                    $builder->where('user_id', $user->id);
-                })
-                ->orderByDesc('created_at')
-                ->get(['id', 'title', 'status', 'notary_request_id']),
             'requestSigners' => $this->notaryRequest->signers,
             'pendingIdentityReviews' => $this->notaryRequest->identityVerifications()
                 ->with('signer')
@@ -390,6 +386,9 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function scheduleSession(): void
     {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role->value === 'notary', 403);
+
         $validated = $this->validate([
             'scheduleAt' => ['required', 'date'],
             'meetingUrl' => ['nullable', 'url', 'max:1000'],
@@ -508,10 +507,30 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function digitalizeRequest(): void
     {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        // Ensure the attorney has signed all linked documents before digitalization
+        foreach ($this->notaryRequest->documents as $document) {
+            $attorneySigner = $document->documentSigners
+                ->first(fn ($signer) => (int) $signer->user_id === (int) $user->id);
+
+            if ($attorneySigner === null || $attorneySigner->status->value !== 'signed') {
+                $this->addError('digitalizeRequest', __('You must sign all documents before applying the digital seal.'));
+                return;
+            }
+        }
         try {
+            // Mark all linked documents as Completed before digitalization
+            foreach ($this->notaryRequest->documents as $document) {
+                if ($document->status->value !== 'completed') {
+                    $document->update(['status' => \App\Enums\DocumentStatus::Completed]);
+                }
+            }
+
             app(\App\Services\NotaryDigitalizationService::class)->digitalize($this->notaryRequest);
             $this->refreshRequest();
-            session()->flash('status', __('Digital notarization completed. Seal applied, certificates generated.'));
+            session()->flash('status', __('Digital notarization completed. Seal applied, certificates generated. The Notary Admin will now finalize and store the record on blockchain.'));
         } catch (\RuntimeException $exception) {
             $this->addError('digitalizeRequest', $exception->getMessage());
         }
@@ -543,14 +562,57 @@ new #[Layout('components.layouts.app')] class extends Component {
         session()->flash('status', __('Document linked to notary request.'));
     }
 
-    public function detachDocument(int $documentId): void
+    /**
+     * Add a signer to the notary request (attorney only).
+     */
+    public function addSigner(): void
     {
-        $document = Document::query()->findOrFail($documentId);
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role->value === 'notary', 403);
 
-        app(NotaryRequestWorkflowService::class)->detachDocument($this->notaryRequest, $document);
+        $validated = $this->validate([
+            'newSignerName' => ['required', 'string', 'max:255'],
+            'newSignerEmail' => ['required', 'email', 'max:255'],
+            'newSignerPhone' => ['nullable', 'string', 'max:64'],
+            'newSignerAddress' => ['nullable', 'string', 'max:500'],
+            'newSignerRole' => ['required', 'string', 'max:64'],
+        ]);
 
+        NotarySigner::query()->create([
+            'notary_request_id' => $this->notaryRequest->id,
+            'full_name' => trim($validated['newSignerName']),
+            'email' => strtolower(trim($validated['newSignerEmail'])),
+            'phone' => trim((string) ($validated['newSignerPhone'] ?? '')) !== '' ? trim((string) $validated['newSignerPhone']) : null,
+            'address' => trim((string) ($validated['newSignerAddress'] ?? '')) !== '' ? trim((string) $validated['newSignerAddress']) : null,
+            'role' => trim($validated['newSignerRole']),
+        ]);
+
+        $this->newSignerName = '';
+        $this->newSignerEmail = '';
+        $this->newSignerPhone = '';
+        $this->newSignerAddress = '';
+        $this->newSignerRole = 'signer';
+        $this->resetValidation(['newSignerName', 'newSignerEmail', 'newSignerPhone', 'newSignerAddress', 'newSignerRole']);
         $this->refreshRequest();
-        session()->flash('status', __('Document removed from notary request.'));
+        session()->flash('status', __('Signer added to this notary request.'));
+    }
+
+    /**
+     * Remove a signer from the notary request (attorney only).
+     */
+    public function removeSigner(int $signerId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role->value === 'notary', 403);
+
+        $signer = NotarySigner::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->whereKey($signerId)
+            ->firstOrFail();
+
+        $signer->delete();
+        $this->refreshRequest();
+        session()->flash('status', __('Signer removed.'));
     }
 
     public function createDocument(): void
@@ -594,17 +656,140 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function sendLinkedDocument(int $documentId): void
     {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        // Only the assigned attorney can send eNOTARY documents to signers
+        if ($user->role->value !== 'notary' || (int) $this->notaryRequest->notary_user_id !== (int) $user->id) {
+            $this->addError('sendDocument'.$documentId, __('Only the assigned attorney can send eNOTARY documents for signing.'));
+            return;
+        }
+
         $document = Document::query()
             ->whereKey($documentId)
             ->where('notary_request_id', $this->notaryRequest->id)
             ->firstOrFail();
 
         try {
-            app(SendDocumentForSignatureService::class)->send($document);
+            app(\App\Services\SendDocumentForSignatureService::class)->send($document);
             $this->refreshRequest();
-            session()->flash('status', __('Document sent for signature.'));
+            session()->flash('status', __('Document sent to signers for signing.'));
         } catch (\RuntimeException $exception) {
             $this->addError('sendDocument'.$documentId, $exception->getMessage());
+        }
+    }
+
+    /**
+     * Add the attorney as a signer on a document so they can sign their part.
+     * This is available after the video session is completed and identity is verified.
+     */
+    public function signAsAttorney(int $documentId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role->value === 'notary', 403);
+        abort_unless((int) $this->notaryRequest->notary_user_id === (int) $user->id, 403);
+
+        $document = Document::query()
+            ->whereKey($documentId)
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->firstOrFail();
+
+        // Ensure the attorney is added as a DocumentSigner
+        $attorneySigner = $document->documentSigners()
+            ->where('user_id', $user->id)
+            ->first();
+
+        if ($attorneySigner === null) {
+            $attorneySigner = $document->documentSigners()->create([
+                'name' => $user->name,
+                'email' => $user->email,
+                'user_id' => $user->id,
+                'role_type' => \App\Enums\TemplateRoleType::Signer,
+                'signing_method' => SigningMethod::AccountVerified,
+                'status' => 'pending',
+                'signing_order' => 999,
+            ]);
+        }
+
+        // Redirect attorney to the signing page
+        $this->redirect(route('notary.sign.account.show', $attorneySigner->id), navigate: true);
+    }
+
+    /**
+     * Check if the attorney can sign (video session completed).
+     */
+    public function canAttorneySign(): bool
+    {
+        $user = Auth::user();
+        if ($user === null || $user->role->value !== 'notary') {
+            return false;
+        }
+
+        if ((int) $this->notaryRequest->notary_user_id !== (int) $user->id) {
+            return false;
+        }
+
+        // Video session must be completed
+        $hasCompletedSession = $this->notaryRequest->sessions
+            ->contains(fn ($session) => $session->status === 'completed');
+
+        if (! $hasCompletedSession) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function replaceDocument(int $documentId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        // Only allow replacement while request is in Draft status
+        if ($this->notaryRequest->status !== NotaryRequestStatus::Draft) {
+            $this->addError('replaceDocumentFile', __('Documents can only be replaced while the request is in draft status.'));
+            return;
+        }
+
+        $validated = $this->validate([
+            'replaceDocumentFile' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf', 'extensions:pdf'],
+        ]);
+
+        $document = Document::query()
+            ->whereKey($documentId)
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->firstOrFail();
+
+        try {
+            $path = $this->replaceDocumentFile->store('documents', (string) config('filesystems.docutrust_disk', 'local'));
+
+            $document->update([
+                'file_path' => $path,
+                'prepared_pdf_path' => null,
+                'final_pdf_path' => null,
+            ]);
+
+            // Also update the notary request's document_path
+            $this->notaryRequest->update(['document_path' => $path]);
+
+            // Clear any existing signature fields since the document changed
+            $document->signatureFields()->delete();
+
+            $this->replaceDocumentFile = null;
+            $this->replaceDocumentId = null;
+            $this->resetValidation(['replaceDocumentFile']);
+            $this->refreshRequest();
+            session()->flash('status', __('Document replaced successfully.'));
+        } catch (\Throwable $throwable) {
+            Log::channel('errors')->error('Notary request document replacement failed', [
+                'notary_request_id' => $this->notaryRequest->id,
+                'document_id' => $documentId,
+                'user_id' => $user->id,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            $this->addError('replaceDocumentFile', __('Unable to replace document right now. Please try again.'));
         }
     }
 
@@ -676,46 +861,8 @@ new #[Layout('components.layouts.app')] class extends Component {
      */
     private function nextDocumentAction(\Illuminate\Support\Collection $documents): ?array
     {
-        foreach ($documents as $document) {
-            if ($document->status->value !== 'draft') {
-                continue;
-            }
-
-            if (! $document->hasActionableParticipants()) {
-                return [
-                    'label' => __('Manage participants'),
-                    'description' => __('Add signers or approvers to ":title".', ['title' => $document->title]),
-                    'href' => route('documents.show', $document),
-                ];
-            }
-
-            if (! $document->hasSignatureFields() || $document->signersMissingFields()->isNotEmpty() || ! $document->workflowConfigurationIsValid()) {
-                return [
-                    'label' => __('Prepare document'),
-                    'description' => __('Finish assigning signature fields for ":title".', ['title' => $document->title]),
-                    'href' => route('documents.prepare', $document),
-                ];
-            }
-
-            if ($document->canSendForSigning()) {
-                return [
-                    'label' => __('Review ready document'),
-                    'description' => __('":title" is ready to send for signature.', ['title' => $document->title]),
-                    'href' => route('documents.show', $document),
-                ];
-            }
-        }
-
-        foreach ($documents as $document) {
-            if ($document->status->value === 'pending') {
-                return [
-                    'label' => __('Monitor signing'),
-                    'description' => __('Track participant progress for ":title".', ['title' => $document->title]),
-                    'href' => route('documents.show', $document),
-                ];
-            }
-        }
-
+        // Field preparation is handled exclusively in Step 7 (Digital Notarization)
+        // No "next action" recommendations needed for eNOTARY documents
         return null;
     }
 
@@ -734,11 +881,41 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     private function canScheduleSession(): bool
     {
-        return in_array($this->notaryRequest->status, [
+        $user = Auth::user();
+        if ($user === null || $user->role->value !== 'notary') {
+            return false;
+        }
+
+        // Must be in a valid status for scheduling
+        if (! in_array($this->notaryRequest->status, [
             NotaryRequestStatus::Submitted,
             NotaryRequestStatus::IdentityVerified,
             NotaryRequestStatus::LocationVerified,
-        ], true);
+        ], true)) {
+            return false;
+        }
+
+        // All linked documents must have all signers signed (status = pending or completed means sent)
+        $documents = $this->notaryRequest->documents;
+        if ($documents->isEmpty()) {
+            return false;
+        }
+
+        // Check that all documents have been sent and all signers have completed signing
+        foreach ($documents as $document) {
+            if (! in_array($document->status->value, ['pending', 'completed'], true)) {
+                return false;
+            }
+
+            $pendingSigners = $document->documentSigners
+                ->filter(fn ($signer) => $signer->requiresAction() && $signer->status->value !== 'signed' && $signer->status->value !== 'approved' && $signer->status->value !== 'notified');
+
+            if ($pendingSigners->isNotEmpty()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function canReviewNotary(): bool
@@ -768,66 +945,63 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         $hasSubmitted = $this->notaryRequest->submitted_at !== null || $this->notaryRequest->status !== NotaryRequestStatus::Draft;
         $hasDocuments = $documents->isNotEmpty();
-        $documentsReady = $hasDocuments
-            && $documents->every(fn (Document $document) => $document->status->value === 'completed');
-        $hasActiveSession = $this->notaryRequest->sessions->isNotEmpty();
-        $hasRegisterEntries = $this->notaryRequest->registerEntries->isNotEmpty();
+        $allSignersSigned = $hasDocuments && $documents->every(fn (Document $document) =>
+            in_array($document->status->value, ['pending', 'completed'], true) &&
+            $document->documentSigners->filter(fn ($s) => $s->requiresAction())->every(fn ($s) => in_array($s->status->value, ['signed', 'approved', 'notified'], true))
+        );
+        $hasCompletedSession = $this->notaryRequest->sessions->contains(fn ($s) => $s->status === 'completed');
+        $attorneyHasSigned = $hasDocuments && $documents->every(fn (Document $document) =>
+            $document->documentSigners->contains(fn ($s) => (int) $s->user_id === (int) $this->notaryRequest->notary_user_id && $s->status->value === 'signed')
+        );
         $isNotarized = $this->notaryRequest->status === NotaryRequestStatus::Notarized;
 
         return [
             [
-                'label' => __('Request submitted'),
-                'description' => __('Open the case and assign the operational owner.'),
-                'state' => $hasSubmitted ? 'complete' : 'current',
+                'label' => __('Upload & send'),
+                'description' => __('Attorney uploads documents, assigns signers, and sends for signing.'),
+                'state' => match (true) {
+                    $allSignersSigned || $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
+                    $hasDocuments => 'current',
+                    default => $hasSubmitted ? 'current' : 'upcoming',
+                },
             ],
             [
-                'label' => __('Identity and location'),
-                'description' => __('Record identity proof and Philippines-only verification evidence.'),
+                'label' => __('Signers sign'),
+                'description' => __('All assigned signers complete their signatures on the document.'),
                 'state' => match (true) {
+                    $allSignersSigned || $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
+                    $hasDocuments && $documents->contains(fn ($d) => $d->status->value === 'pending') => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'label' => __('Video conference'),
+                'description' => __('Attorney verifies signer identity via live video session.'),
+                'state' => match (true) {
+                    $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
                     in_array($this->notaryRequest->status, [
-                        NotaryRequestStatus::LocationVerified,
                         NotaryRequestStatus::SessionScheduled,
                         NotaryRequestStatus::SessionInProgress,
-                        NotaryRequestStatus::AttorneyApproved,
-                        NotaryRequestStatus::Notarized,
-                    ], true) => 'complete',
-                    in_array($this->notaryRequest->status, [
-                        NotaryRequestStatus::Submitted,
-                        NotaryRequestStatus::IdentityVerified,
                     ], true) => 'current',
+                    $allSignersSigned => 'current',
                     default => 'upcoming',
                 },
             ],
             [
-                'label' => __('Session and review'),
-                'description' => __('Schedule the meeting, complete live verification, and record notary review.'),
+                'label' => __('Attorney signs'),
+                'description' => __('After identity verification, the attorney signs their part of the document.'),
                 'state' => match (true) {
-                    in_array($this->notaryRequest->status, [
-                        NotaryRequestStatus::AttorneyApproved,
-                        NotaryRequestStatus::Notarized,
-                    ], true) => 'complete',
-                    in_array($this->notaryRequest->status, [
-                        NotaryRequestStatus::SessionScheduled,
-                        NotaryRequestStatus::SessionInProgress,
-                    ], true) || $hasActiveSession => 'current',
+                    $attorneyHasSigned || $isNotarized => 'complete',
+                    $hasCompletedSession => 'current',
                     default => 'upcoming',
                 },
             ],
             [
-                'label' => __('Documents and register'),
-                'description' => __('Complete signer workflows and create the notarial register entry.'),
-                'state' => match (true) {
-                    $documentsReady && $hasRegisterEntries => 'complete',
-                    $hasDocuments || $hasRegisterEntries => 'current',
-                    default => 'upcoming',
-                },
-            ],
-            [
-                'label' => __('Finalize and anchor'),
-                'description' => __('Generate final artifacts, notarize the request, and confirm immutable storage readiness.'),
+                'label' => __('Digitalize & finalize'),
+                'description' => __('Apply digital seal, generate certificates, and anchor to blockchain.'),
                 'state' => match (true) {
                     $isNotarized => 'complete',
-                    $readiness['ready'] => 'current',
+                    $attorneyHasSigned || $readiness['ready'] => 'current',
                     default => 'upcoming',
                 },
             ],
@@ -835,7 +1009,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="mx-auto flex h-full w-full max-w-6xl flex-1 flex-col gap-6 px-1 py-4">
+<div class="mx-auto flex h-full w-full max-w-7xl flex-1 flex-col gap-6 px-0 py-4 sm:px-1">
     @if (session('status'))
         <div class="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200">
             <svg class="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
@@ -855,13 +1029,32 @@ new #[Layout('components.layouts.app')] class extends Component {
                 {{ __('Requester') }}: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $notaryRequest->requester?->name ?? '-' }}</span> · {{ __('Notary') }}: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $notaryRequest->notary?->name ?? __('Unassigned') }}</span>
             </p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
             @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::Draft)
                 <flux:button variant="primary" wire:click="submitRequest">{{ __('Submit request') }}</flux:button>
             @endif
             @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::AttorneyApproved)
                 <flux:button variant="outline" wire:click="digitalizeRequest">{{ __('Apply digital seal') }}</flux:button>
                 <flux:button variant="primary" wire:click="finalizeRequest" :disabled="! $finalizationReadiness['ready']">{{ __('Finalize notarization') }}</flux:button>
+            @endif
+            @if ($isNotary)
+                @php
+                    $firstDraftDocument = $requestDocuments->first(fn ($doc) => $doc->status->value === 'draft');
+                @endphp
+                @if ($firstDraftDocument)
+                    <flux:button variant="outline" :href="route('notary.documents.prepare', $firstDraftDocument)" wire:navigate>{{ __('Prepare signature fields') }}</flux:button>
+                @endif
+                @if ($canAttorneySign)
+                    @php
+                        $unsignedDoc = $requestDocuments->first(fn ($doc) => ! $doc->documentSigners->contains(fn ($s) => (int) $s->user_id === (int) auth()->id() && $s->status->value === 'signed'));
+                    @endphp
+                    @if ($unsignedDoc)
+                        <flux:button variant="primary" wire:click="signAsAttorney({{ $unsignedDoc->id }})">{{ __('Sign as Attorney') }}</flux:button>
+                    @endif
+                @endif
+                @if ($notaryRequest->status === NotaryRequestStatus::AttorneyApproved)
+                    <flux:button variant="primary" wire:click="digitalizeRequest">{{ __('Apply Digital Seal') }}</flux:button>
+                @endif
             @endif
             @if ($canManageLifecycle && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
                 <flux:button variant="outline" wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notary request? This cannot be undone.') }}">{{ __('Cancel request') }}</flux:button>
@@ -878,8 +1071,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         @endif
     </div>
 
-    <div class="grid gap-6 xl:grid-cols-3">
-        <div class="space-y-6 xl:col-span-2">
+    <div class="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
+        <div class="min-w-0 space-y-6">
             <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
                 <div class="flex items-center justify-between gap-4">
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Workflow') }}</h2>
@@ -945,308 +1138,6 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
 
             <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
-                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Signers & eNOTARY intake') }}</h2>
-                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Principal signers attached to this case. Identity documents require email OTP confirmation before upload.') }}</p>
-                <div class="mt-4 space-y-3">
-                    @forelse ($requestSigners as $signer)
-                        <div class="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                            <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ $signer->full_name }}</div>
-                            <div class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $signer->email }} @if ($signer->phone) • {{ $signer->phone }} @endif</div>
-                            @if ($notaryRequest->status === NotaryRequestStatus::Submitted && $canManageLifecycle)
-                                <div class="mt-4 space-y-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-                                    <flux:button size="sm" variant="outline" type="button" wire:click="sendSignerIdentityOtp({{ $signer->id }})">{{ __('Send email OTP') }}</flux:button>
-                                    <flux:field>
-                                        <flux:label>{{ __('OTP code') }}</flux:label>
-                                        <div class="flex flex-wrap items-end gap-2">
-                                            <flux:input class="max-w-xs" type="text" wire:model="identityOtpCode" placeholder="{{ __('Enter code') }}" />
-                                            <flux:button size="sm" variant="primary" type="button" wire:click="verifySignerIdentityOtp({{ $signer->id }})">{{ __('Verify OTP') }}</flux:button>
-                                        </div>
-                                        <flux:error name="identityOtp" />
-                                        <flux:error name="identityOtpCode" />
-                                    </flux:field>
-                                    <div class="grid gap-3 sm:grid-cols-2">
-                                        <flux:field>
-                                            <flux:label>{{ __('ID type') }}</flux:label>
-                                            <select wire:model="pendingIdType" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                                                <option value="passport">{{ __('Passport') }}</option>
-                                                <option value="drivers_license">{{ __('Driver license') }}</option>
-                                                <option value="national_id">{{ __('National ID') }}</option>
-                                                <option value="other">{{ __('Other') }}</option>
-                                            </select>
-                                        </flux:field>
-                                        <flux:field>
-                                            <flux:label>{{ __('ID number') }}</flux:label>
-                                            <flux:input type="text" wire:model="pendingIdNumber" />
-                                            <flux:error name="pendingIdNumber" />
-                                        </flux:field>
-                                    </div>
-                                    <flux:field>
-                                        <flux:label>{{ __('Government ID scan') }}</flux:label>
-                                        <input type="file" wire:model="idImageFile" accept=".pdf,.jpg,.jpeg,.png" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
-                                        <flux:error name="idImageFile" />
-                                    </flux:field>
-                                    <flux:field>
-                                        <flux:label>{{ __('Selfie (optional)') }}</flux:label>
-                                        <input type="file" wire:model="selfieImageFile" accept=".jpg,.jpeg,.png" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
-                                        <flux:error name="selfieImageFile" />
-                                    </flux:field>
-                                    <flux:button size="sm" variant="primary" type="button" wire:click="saveSignerIdentityDocuments({{ $signer->id }})">{{ __('Submit ID for review') }}</flux:button>
-                                </div>
-                            @endif
-                        </div>
-                    @empty
-                        <div class="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">{{ __('No signers were attached at creation. You can still proceed using linked documents for participants.') }}</div>
-                    @endforelse
-                </div>
-
-                @if ($isNotary && $pendingIdentityReviews->isNotEmpty())
-                    <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
-                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Pending identity review') }}</h3>
-                        <div class="mt-3 space-y-3">
-                            @foreach ($pendingIdentityReviews as $review)
-                                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/40 dark:bg-amber-950/20">
-                                    <div class="font-medium text-amber-950 dark:text-amber-100">{{ $review->signer?->full_name }}</div>
-                                    <div class="mt-1 text-amber-900/80 dark:text-amber-200/80">{{ __('ID type') }}: {{ $review->id_type }} • {{ __('Number') }}: {{ $review->id_number }}</div>
-                                    <div class="mt-3 flex flex-wrap gap-2">
-                                        <flux:button size="sm" variant="primary" type="button" wire:click="approveIdentityRecord({{ $review->id }})">{{ __('Approve') }}</flux:button>
-                                        <flux:button size="sm" variant="outline" type="button" wire:click="$set('identityRejectId', {{ $review->id }})">{{ __('Reject') }}</flux:button>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                    </div>
-                @endif
-
-                @if ($identityRejectId)
-                    <div class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-950/20">
-                        <flux:field>
-                            <flux:label>{{ __('Rejection reason') }}</flux:label>
-                            <flux:textarea wire:model="identityRejectReason" rows="3" />
-                            <flux:error name="identityRejectReason" />
-                        </flux:field>
-                        <flux:button class="mt-3" variant="outline" type="button" wire:click="rejectIdentityRecord">{{ __('Confirm rejection') }}</flux:button>
-                        <flux:error name="rejectIdentity" />
-                    </div>
-                @endif
-
-                <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
-                    <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Philippines location check') }}</h3>
-                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Uses your browser coordinates together with server-side IP intelligence. Failed checks flag the request automatically.') }}</p>
-                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                        <flux:field>
-                            <flux:label>{{ __('Latitude (optional)') }}</flux:label>
-                            <flux:input type="text" wire:model="geoLatitude" />
-                        </flux:field>
-                        <flux:field>
-                            <flux:label>{{ __('Longitude (optional)') }}</flux:label>
-                            <flux:input type="text" wire:model="geoLongitude" />
-                        </flux:field>
-                        <flux:field class="sm:col-span-2">
-                            <flux:label>{{ __('Signer (optional)') }}</flux:label>
-                            <select wire:model="geoSignerId" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                                <option value="">{{ __('Entire request') }}</option>
-                                @foreach ($requestSigners as $signer)
-                                    <option value="{{ $signer->id }}">{{ $signer->full_name }}</option>
-                                @endforeach
-                            </select>
-                        </flux:field>
-                    </div>
-                    <flux:button class="mt-3" variant="outline" type="button" wire:click="runBrowserGeoVerification">{{ __('Run location verification') }}</flux:button>
-                    <flux:error name="runBrowserGeoVerification" />
-                </div>
-
-                @if ($geoHistory->isNotEmpty())
-                    <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
-                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Recent geo checks') }}</h3>
-                        <div class="mt-3 space-y-2 text-xs text-zinc-600 dark:text-zinc-300">
-                            @foreach ($geoHistory as $log)
-                                <div class="flex flex-wrap justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700">
-                                    <span>{{ $log->verified_at?->toDateTimeString() ?? '-' }}</span>
-                                    <span class="font-medium">{{ $log->verification_status->value }}</span>
-                                    <span>{{ $log->country ?? '—' }} @if ($log->city) • {{ $log->city }} @endif</span>
-                                </div>
-                            @endforeach
-                        </div>
-                    </div>
-                @endif
-            </div>
-
-            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
-                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Documents') }}</h2>
-                @if ($canManageLifecycle)
-                    <div class="mt-4 flex flex-col gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/30">
-                        <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload a new document for this request') }}</div>
-                        <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
-                            <flux:field>
-                                <flux:label>{{ __('Document title') }}</flux:label>
-                                <flux:input wire:model="newDocumentTitle" type="text" placeholder="{{ __('e.g. Affidavit of support') }}" />
-                                <flux:error name="newDocumentTitle" />
-                            </flux:field>
-                            <flux:field>
-                                <flux:label>{{ __('PDF file') }}</flux:label>
-                                <input
-                                    type="file"
-                                    wire:model="newDocumentFile"
-                                    accept="application/pdf,.pdf"
-                                    class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                                />
-                                <div wire:loading wire:target="newDocumentFile" class="mt-2 text-xs text-teal-600 dark:text-teal-400">{{ __('Uploading...') }}</div>
-                                <flux:error name="newDocumentFile" />
-                            </flux:field>
-                            <flux:button variant="primary" type="button" wire:click="createDocument">{{ __('Upload document') }}</flux:button>
-                        </div>
-                    </div>
-
-                    <div class="mt-4 flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/30">
-                        <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Link an existing document') }}</div>
-                        <div class="flex flex-col gap-3 sm:flex-row">
-                            <select wire:model="attachDocumentId" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 sm:flex-1">
-                                <option value="">{{ __('Select a document') }}</option>
-                                @foreach ($attachableDocuments as $documentOption)
-                                    @continue($documentOption->notary_request_id === $notaryRequest->id)
-                                    <option value="{{ $documentOption->id }}">{{ $documentOption->title }} ({{ $documentOption->status->value }})</option>
-                                @endforeach
-                            </select>
-                            <flux:button variant="outline" type="button" wire:click="attachDocument">{{ __('Attach document') }}</flux:button>
-                        </div>
-                        <flux:error name="attachDocumentId" />
-                    </div>
-                @endif
-                <div class="mt-4 space-y-3">
-                    @forelse ($requestDocuments as $document)
-                        @php
-                            $artifactState = collect($finalizationReadiness['documents'])->firstWhere('document_id', $document->id);
-                            $workflowState = $documentWorkflowStates[$document->id] ?? null;
-                        @endphp
-                        <div class="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                            <div class="flex items-center justify-between gap-3">
-                                <a href="{{ route('documents.show', $document) }}" wire:navigate class="min-w-0 flex-1">
-                                    <div class="truncate font-medium text-zinc-800 dark:text-zinc-200">{{ $document->title }}</div>
-                                    <div class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $document->status->value }}</div>
-                                    @if (is_array($workflowState))
-                                        <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                            {{ trans_choice(':count signer|:count signers', $workflowState['participant_counts']['signers'], ['count' => $workflowState['participant_counts']['signers']]) }}
-                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
-                                            {{ trans_choice(':count approver|:count approvers', $workflowState['participant_counts']['approvers'], ['count' => $workflowState['participant_counts']['approvers']]) }}
-                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
-                                            {{ trans_choice(':count recipient|:count recipients', $workflowState['participant_counts']['recipients'], ['count' => $workflowState['participant_counts']['recipients']]) }}
-                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
-                                            {{ trans_choice(':count field|:count fields', $workflowState['field_count'], ['count' => $workflowState['field_count']]) }}
-                                        </div>
-                                        <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                            {{ trans_choice(':count pending|:count pending', $workflowState['participant_counts']['pending'], ['count' => $workflowState['participant_counts']['pending']]) }}
-                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
-                                            {{ trans_choice(':count signed|:count signed', $workflowState['participant_counts']['signed'], ['count' => $workflowState['participant_counts']['signed']]) }}
-                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
-                                            {{ trans_choice(':count approved|:count approved', $workflowState['participant_counts']['approved'], ['count' => $workflowState['participant_counts']['approved']]) }}
-                                        </div>
-                                    @endif
-                                    @if (is_array($artifactState))
-                                        <div class="mt-2 flex flex-wrap gap-2">
-                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_final_pdf'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Final PDF') }}</span>
-                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_certificate'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Certificate') }}</span>
-                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_document_hash'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Hash') }}</span>
-                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_blockchain_transaction'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Blockchain') }}</span>
-                                        </div>
-                                        @if ($artifactState['issues'] !== [])
-                                            <div class="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                                                {{ implode(' ', $artifactState['issues']) }}
-                                            </div>
-                                        @endif
-                                    @endif
-                                </a>
-                                @if ($canManageLifecycle)
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <flux:button variant="ghost" :href="route('documents.show', $document)" wire:navigate>{{ __('Manage participants') }}</flux:button>
-                                        @if ($document->status->value === 'draft')
-                                            <flux:button variant="outline" :href="route('documents.prepare', $document)" wire:navigate :disabled="! ($workflowState['can_prepare'] ?? false)">{{ __('Prepare') }}</flux:button>
-                                            <flux:button variant="outline" type="button" wire:click="sendLinkedDocument({{ $document->id }})" :disabled="! ($workflowState['can_send'] ?? false)">{{ __('Send') }}</flux:button>
-                                        @elseif ($document->status->value === 'completed')
-                                            @if (! ($artifactState['has_certificate'] ?? false))
-                                                <flux:button variant="outline" type="button" wire:click="generateDocumentCertificate({{ $document->id }})">{{ __('Generate certificate') }}</flux:button>
-                                            @endif
-                                            @if (! ($artifactState['has_blockchain_transaction'] ?? false))
-                                                <flux:button variant="outline" type="button" wire:click="refreshBlockchainProof({{ $document->id }})">{{ __('Refresh blockchain') }}</flux:button>
-                                            @endif
-                                        @endif
-                                        <flux:button variant="ghost" type="button" wire:click="detachDocument({{ $document->id }})">{{ __('Remove') }}</flux:button>
-                                    </div>
-                                @endif
-                            </div>
-                            @if ($canManageLifecycle)
-                                @error('sendDocument'.$document->id)
-                                    <div class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
-                                        {{ $message }}
-                                    </div>
-                                @enderror
-                            @endif
-                            @if ($canManageLifecycle)
-                                @error('artifactDocument'.$document->id)
-                                    <div class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
-                                        {{ $message }}
-                                    </div>
-                                @enderror
-                            @endif
-                            @if (is_array($workflowState) && $document->status->value === 'draft' && $workflowState['missing_signers'] !== [])
-                                <div class="mt-3 text-xs text-amber-700 dark:text-amber-300">
-                                    {{ __('Missing fields for: :signers', ['signers' => implode(', ', $workflowState['missing_signers'])]) }}
-                                </div>
-                            @endif
-                            @if (is_array($workflowState) && is_string($workflowState['blocking_reason']) && $workflowState['blocking_reason'] !== '' && $document->status->value === 'draft')
-                                <div class="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                                    {{ $workflowState['blocking_reason'] }}
-                                </div>
-                            @endif
-                            @if (is_array($workflowState) && $workflowState['account_link_blockers'] !== [])
-                                <div class="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                                    {{ __('Account-linked signer setup is incomplete for: :signers', ['signers' => implode(', ', $workflowState['account_link_blockers'])]) }}
-                                </div>
-                            @endif
-                        </div>
-                    @empty
-                        <div class="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">{{ __('No documents linked yet.') }}</div>
-                    @endforelse
-                </div>
-            </div>
-
-            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
-                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Finalization readiness') }}</h2>
-                @if ($finalizationReadiness['ready'])
-                    <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
-                        {{ __('All linked documents have the required notarization artifacts.') }}
-                    </div>
-                @else
-                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                        <div class="font-medium">{{ __('This request is not ready to finalize yet.') }}</div>
-                        <ul class="mt-2 list-disc pl-5">
-                            @foreach ($finalizationReadiness['issues'] as $issue)
-                                <li>{{ $issue }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                @endif
-            </div>
-
-            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
-                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Journal') }}</h2>
-                <div class="mt-4 space-y-4">
-                    @forelse ($journalEntries as $entry)
-                        <div class="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                            <div class="flex items-center justify-between gap-4">
-                                <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ str_replace('_', ' ', $entry->entry_type) }}</div>
-                                <div class="text-xs text-zinc-400 dark:text-zinc-500">{{ $entry->recorded_at?->toDateTimeString() ?? '-' }}</div>
-                            </div>
-                            <div class="mt-2 text-zinc-600 dark:text-zinc-300">{{ $entry->summary }}</div>
-                        </div>
-                    @empty
-                        <div class="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">{{ __('No journal entries yet.') }}</div>
-                    @endforelse
-                </div>
-            </div>
-        </div>
-
-        <div class="space-y-6">
-            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Session scheduling') }}</h2>
                 @if ($canScheduleSession)
                     <div class="mt-4 space-y-4">
@@ -1273,7 +1164,11 @@ new #[Layout('components.layouts.app')] class extends Component {
                     </div>
                 @else
                     <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                        {{ __('Session scheduling becomes available after identity or location verification.') }}
+                        @if (!$isNotary)
+                            {{ __('Only the assigned notary can schedule video sessions.') }}
+                        @else
+                            {{ __('Video session scheduling becomes available after all signers have completed signing.') }}
+                        @endif
                     </div>
                 @endif
                 @if ($recentSessions->isNotEmpty())
@@ -1282,8 +1177,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                         @foreach ($recentSessions as $session)
                             <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                                 {{-- Session header --}}
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center gap-2.5">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div class="flex min-w-0 items-center gap-2.5">
                                         @if ($session->status === 'in_progress')
                                             <span class="flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
                                         @elseif ($session->status === 'completed')
@@ -1291,12 +1186,12 @@ new #[Layout('components.layouts.app')] class extends Component {
                                         @else
                                             <span class="flex h-2 w-2 rounded-full bg-zinc-300 dark:bg-zinc-600"></span>
                                         @endif
-                                        <div>
-                                            <span class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ ucfirst($session->provider_name) }}</span>
-                                            <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-500">{{ $session->scheduled_for?->format('M j, g:i A') ?? '-' }}</span>
+                                        <div class="min-w-0">
+                                            <span class="block truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ ucfirst($session->provider_name) }}</span>
+                                            <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500 sm:mt-0">{{ $session->scheduled_for?->format('M j, g:i A') ?? '-' }}</span>
                                         </div>
                                     </div>
-                                    <span class="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ $session->status }}</span>
+                                    <span class="inline-flex w-fit rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ $session->status }}</span>
                                 </div>
 
                                 {{-- Scheduled: Start button (notary only) --}}
@@ -1366,6 +1261,378 @@ new #[Layout('components.layouts.app')] class extends Component {
                 @endif
             </div>
 
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Signers & eNOTARY intake') }}</h2>
+                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Principal signers attached to this case. Identity documents require email OTP confirmation before upload.') }}</p>
+                <div class="mt-4 space-y-3">
+                    @forelse ($requestSigners as $signer)
+                        <div class="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ $signer->full_name }}</div>
+                                    <div class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $signer->email }} @if ($signer->phone) • {{ $signer->phone }} @endif</div>
+                                    @if ($signer->role && $signer->role !== 'signer')
+                                        <span class="mt-1 inline-block rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ ucfirst($signer->role) }}</span>
+                                    @endif
+                                </div>
+                                @if ($isNotary && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
+                                    <button type="button" wire:click="removeSigner({{ $signer->id }})" wire:confirm="{{ __('Remove this signer?') }}"
+                                        class="rounded-lg p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 dark:hover:text-red-400">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
+                                    </button>
+                                @endif
+                            </div>
+                            @if ($notaryRequest->status === NotaryRequestStatus::Submitted && $canManageLifecycle)
+                                <div class="mt-4 space-y-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+                                    <flux:button size="sm" variant="outline" type="button" wire:click="sendSignerIdentityOtp({{ $signer->id }})">{{ __('Send email OTP') }}</flux:button>
+                                    <flux:field>
+                                        <flux:label>{{ __('OTP code') }}</flux:label>
+                                        <div class="flex flex-wrap items-end gap-2">
+                                            <flux:input class="max-w-xs" type="text" wire:model="identityOtpCode" placeholder="{{ __('Enter code') }}" />
+                                            <flux:button size="sm" variant="primary" type="button" wire:click="verifySignerIdentityOtp({{ $signer->id }})">{{ __('Verify OTP') }}</flux:button>
+                                        </div>
+                                        <flux:error name="identityOtp" />
+                                        <flux:error name="identityOtpCode" />
+                                    </flux:field>
+                                    <div class="grid gap-3 sm:grid-cols-2">
+                                        <flux:field>
+                                            <flux:label>{{ __('ID type') }}</flux:label>
+                                            <select wire:model="pendingIdType" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                                                <option value="passport">{{ __('Passport') }}</option>
+                                                <option value="drivers_license">{{ __('Driver license') }}</option>
+                                                <option value="national_id">{{ __('National ID') }}</option>
+                                                <option value="other">{{ __('Other') }}</option>
+                                            </select>
+                                        </flux:field>
+                                        <flux:field>
+                                            <flux:label>{{ __('ID number') }}</flux:label>
+                                            <flux:input type="text" wire:model="pendingIdNumber" />
+                                            <flux:error name="pendingIdNumber" />
+                                        </flux:field>
+                                    </div>
+                                    <flux:field>
+                                        <flux:label>{{ __('Government ID scan') }}</flux:label>
+                                        <input type="file" wire:model="idImageFile" accept=".pdf,.jpg,.jpeg,.png" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+                                        <flux:error name="idImageFile" />
+                                    </flux:field>
+                                    <flux:field>
+                                        <flux:label>{{ __('Selfie (optional)') }}</flux:label>
+                                        <input type="file" wire:model="selfieImageFile" accept=".jpg,.jpeg,.png" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+                                        <flux:error name="selfieImageFile" />
+                                    </flux:field>
+                                    <flux:button size="sm" variant="primary" type="button" wire:click="saveSignerIdentityDocuments({{ $signer->id }})">{{ __('Submit ID for review') }}</flux:button>
+                                </div>
+                            @endif
+                        </div>
+                    @empty
+                        <div class="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">{{ __('No signers added yet. Add signers below to proceed.') }}</div>
+                    @endforelse
+                </div>
+
+                {{-- Add Signer Form (Attorney only) --}}
+                @if ($isNotary && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
+                    <div class="mt-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Add a signer') }}</h3>
+                        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                            <flux:field class="sm:col-span-2">
+                                <flux:label>{{ __('Full name') }} <span class="text-rose-500">*</span></flux:label>
+                                <flux:input type="text" wire:model="newSignerName" placeholder="{{ __('Juan Dela Cruz') }}" />
+                                <flux:error name="newSignerName" />
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>{{ __('Email') }} <span class="text-rose-500">*</span></flux:label>
+                                <flux:input type="email" wire:model="newSignerEmail" placeholder="{{ __('juan@example.com') }}" />
+                                <flux:error name="newSignerEmail" />
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>{{ __('Phone') }}</flux:label>
+                                <flux:input type="text" wire:model="newSignerPhone" placeholder="{{ __('+63 9XX XXX XXXX') }}" />
+                                <flux:error name="newSignerPhone" />
+                            </flux:field>
+                            <flux:field class="sm:col-span-2">
+                                <flux:label>{{ __('Address') }}</flux:label>
+                                <flux:input type="text" wire:model="newSignerAddress" placeholder="{{ __('Complete address') }}" />
+                                <flux:error name="newSignerAddress" />
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>{{ __('Role in document') }}</flux:label>
+                                <select wire:model="newSignerRole" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                                    <option value="signer">{{ __('Signer') }}</option>
+                                    <option value="witness">{{ __('Witness') }}</option>
+                                    <option value="affiant">{{ __('Affiant') }}</option>
+                                    <option value="principal">{{ __('Principal') }}</option>
+                                </select>
+                                <flux:error name="newSignerRole" />
+                            </flux:field>
+                        </div>
+                        <div class="mt-4">
+                            <flux:button variant="outline" type="button" wire:click="addSigner">{{ __('Add signer') }}</flux:button>
+                        </div>
+                    </div>
+                @endif
+
+                @if ($isNotary && $pendingIdentityReviews->isNotEmpty())
+                    <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Pending identity review') }}</h3>
+                        <div class="mt-3 space-y-3">
+                            @foreach ($pendingIdentityReviews as $review)
+                                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/40 dark:bg-amber-950/20">
+                                    <div class="font-medium text-amber-950 dark:text-amber-100">{{ $review->signer?->full_name }}</div>
+                                    <div class="mt-1 text-amber-900/80 dark:text-amber-200/80">{{ __('ID type') }}: {{ $review->id_type }} • {{ __('Number') }}: {{ $review->id_number }}</div>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <flux:button size="sm" variant="primary" type="button" wire:click="approveIdentityRecord({{ $review->id }})">{{ __('Approve') }}</flux:button>
+                                        <flux:button size="sm" variant="outline" type="button" wire:click="$set('identityRejectId', {{ $review->id }})">{{ __('Reject') }}</flux:button>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                @if ($identityRejectId)
+                    <div class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-950/20">
+                        <flux:field>
+                            <flux:label>{{ __('Rejection reason') }}</flux:label>
+                            <flux:textarea wire:model="identityRejectReason" rows="3" />
+                            <flux:error name="identityRejectReason" />
+                        </flux:field>
+                        <flux:button class="mt-3" variant="outline" type="button" wire:click="rejectIdentityRecord">{{ __('Confirm rejection') }}</flux:button>
+                        <flux:error name="rejectIdentity" />
+                    </div>
+                @endif
+
+                <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
+                    @if (! $isNotary)
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Philippines location check') }}</h3>
+                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Uses your browser coordinates together with server-side IP intelligence. Failed checks flag the request automatically.') }}</p>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        <flux:field>
+                            <flux:label>{{ __('Latitude (optional)') }}</flux:label>
+                            <flux:input type="text" wire:model="geoLatitude" />
+                        </flux:field>
+                        <flux:field>
+                            <flux:label>{{ __('Longitude (optional)') }}</flux:label>
+                            <flux:input type="text" wire:model="geoLongitude" />
+                        </flux:field>
+                        <flux:field class="sm:col-span-2">
+                            <flux:label>{{ __('Signer (optional)') }}</flux:label>
+                            <select wire:model="geoSignerId" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                                <option value="">{{ __('Entire request') }}</option>
+                                @foreach ($requestSigners as $signer)
+                                    <option value="{{ $signer->id }}">{{ $signer->full_name }}</option>
+                                @endforeach
+                            </select>
+                        </flux:field>
+                    </div>
+                    <flux:button class="mt-3" variant="outline" type="button" wire:click="runBrowserGeoVerification">{{ __('Run location verification') }}</flux:button>
+                    <flux:error name="runBrowserGeoVerification" />
+                </div>
+
+                @if ($geoHistory->isNotEmpty())
+                    <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Recent geo checks') }}</h3>
+                        <div class="mt-3 space-y-2 text-xs text-zinc-600 dark:text-zinc-300">
+                            @foreach ($geoHistory as $log)
+                                <div class="flex flex-wrap justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700">
+                                    <span>{{ $log->verified_at?->toDateTimeString() ?? '-' }}</span>
+                                    <span class="font-medium">{{ $log->verification_status->value }}</span>
+                                    <span>{{ $log->country ?? '—' }} @if ($log->city) • {{ $log->city }} @endif</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+                @endif
+            </div>
+
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Documents') }}</h2>
+                <div class="mt-4 space-y-3">
+                    @forelse ($requestDocuments as $document)
+                        @php
+                            $artifactState = collect($finalizationReadiness['documents'])->firstWhere('document_id', $document->id);
+                            $workflowState = $documentWorkflowStates[$document->id] ?? null;
+                        @endphp
+                        <div class="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                <a href="{{ route('documents.show', $document) }}" wire:navigate class="min-w-0 flex-1">
+                                    <div class="truncate font-medium text-zinc-800 dark:text-zinc-200">{{ $document->title }}</div>
+                                    <div class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $document->status->value }}</div>
+                                    @if (is_array($workflowState))
+                                        <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                            {{ trans_choice(':count signer|:count signers', $workflowState['participant_counts']['signers'], ['count' => $workflowState['participant_counts']['signers']]) }}
+                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
+                                            {{ trans_choice(':count approver|:count approvers', $workflowState['participant_counts']['approvers'], ['count' => $workflowState['participant_counts']['approvers']]) }}
+                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
+                                            {{ trans_choice(':count recipient|:count recipients', $workflowState['participant_counts']['recipients'], ['count' => $workflowState['participant_counts']['recipients']]) }}
+                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
+                                            {{ trans_choice(':count field|:count fields', $workflowState['field_count'], ['count' => $workflowState['field_count']]) }}
+                                        </div>
+                                        <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                            {{ trans_choice(':count pending|:count pending', $workflowState['participant_counts']['pending'], ['count' => $workflowState['participant_counts']['pending']]) }}
+                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
+                                            {{ trans_choice(':count signed|:count signed', $workflowState['participant_counts']['signed'], ['count' => $workflowState['participant_counts']['signed']]) }}
+                                            <span class="mx-1 text-zinc-300 dark:text-zinc-600">•</span>
+                                            {{ trans_choice(':count approved|:count approved', $workflowState['participant_counts']['approved'], ['count' => $workflowState['participant_counts']['approved']]) }}
+                                        </div>
+                                    @endif
+                                    @if (is_array($artifactState))
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_final_pdf'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Final PDF') }}</span>
+                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_certificate'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Certificate') }}</span>
+                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_document_hash'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Hash') }}</span>
+                                            <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_blockchain_transaction'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Blockchain') }}</span>
+                                        </div>
+                                        @if ($artifactState['issues'] !== [])
+                                            <div class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                                                {{ implode(' ', $artifactState['issues']) }}
+                                            </div>
+                                        @endif
+                                    @endif
+                                </a>
+                                @if ($canManageLifecycle || $isNotary)
+                                    <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+                                        @if ($document->status->value === 'draft' && $isNotary)
+                                            <flux:button class="w-full sm:w-auto" variant="outline" :href="route('notary.documents.prepare', $document)" wire:navigate>{{ __('Prepare fields') }}</flux:button>
+                                            @if (is_array($workflowState) && $workflowState['can_send'])
+                                                <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="sendLinkedDocument({{ $document->id }})" wire:confirm="{{ __('Send this document to signers for signing?') }}">{{ __('Send to signers') }}</flux:button>
+                                            @endif
+                                        @elseif ($document->status->value === 'pending')
+                                            <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300">
+                                                <svg class="h-3 w-3 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
+                                                {{ __('Awaiting signer signatures') }}
+                                            </span>
+                                        @elseif ($document->status->value === 'completed')
+                                            @if ($isNotary && $canAttorneySign)
+                                                @php
+                                                    $attorneyHasSigned = $document->documentSigners->contains(fn ($s) => (int) $s->user_id === (int) auth()->id() && $s->status->value === 'signed');
+                                                @endphp
+                                                @if (! $attorneyHasSigned)
+                                                    <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="signAsAttorney({{ $document->id }})">{{ __('Sign as Attorney') }}</flux:button>
+                                                @else
+                                                    <span class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                                        <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
+                                                        {{ __('Attorney signed') }}
+                                                    </span>
+                                                @endif
+                                            @endif
+                                            @if (! ($artifactState['has_certificate'] ?? false))
+                                                <flux:button class="w-full sm:w-auto" variant="outline" type="button" wire:click="generateDocumentCertificate({{ $document->id }})">{{ __('Generate certificate') }}</flux:button>
+                                            @endif
+                                            @if (! ($artifactState['has_blockchain_transaction'] ?? false))
+                                                <flux:button class="w-full sm:w-auto" variant="outline" type="button" wire:click="refreshBlockchainProof({{ $document->id }})">{{ __('Refresh blockchain') }}</flux:button>
+                                            @endif
+                                        @endif
+                                    </div>
+                                @endif
+                            </div>
+                            @if ($canManageLifecycle)
+                                @error('sendDocument'.$document->id)
+                                    <div class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+                                        {{ $message }}
+                                    </div>
+                                @enderror
+                            @endif
+                            @if ($canManageLifecycle)
+                                @error('artifactDocument'.$document->id)
+                                    <div class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+                                        {{ $message }}
+                                    </div>
+                                @enderror
+                            @endif
+                            @if (is_array($workflowState) && $document->status->value === 'draft' && $workflowState['missing_signers'] !== [])
+                                <div class="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                                    {{ __('Missing fields for: :signers', ['signers' => implode(', ', $workflowState['missing_signers'])]) }}
+                                </div>
+                            @endif
+                            @if (is_array($workflowState) && is_string($workflowState['blocking_reason']) && $workflowState['blocking_reason'] !== '' && $document->status->value === 'draft')
+                                <div class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                                    {{ $workflowState['blocking_reason'] }}
+                                </div>
+                            @endif
+                            @if (is_array($workflowState) && $workflowState['account_link_blockers'] !== [])
+                                <div class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                                    {{ __('Account-linked signer setup is incomplete for: :signers', ['signers' => implode(', ', $workflowState['account_link_blockers'])]) }}
+                                </div>
+                            @endif
+                            @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::Draft && $document->status->value === 'draft')
+                                <div class="mt-3 flex flex-col gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 sm:flex-row sm:items-center dark:border-zinc-700 dark:bg-zinc-800/40">
+                                    <input
+                                        type="file"
+                                        wire:model="replaceDocumentFile"
+                                        accept="application/pdf,.pdf"
+                                        class="w-full flex-1 text-xs text-zinc-600 dark:text-zinc-400"
+                                    />
+                                    <flux:button class="w-full sm:w-auto" variant="outline" size="sm" type="button" wire:click="replaceDocument({{ $document->id }})" wire:loading.attr="disabled" wire:target="replaceDocumentFile">{{ __('Replace') }}</flux:button>
+                                </div>
+                                <div wire:loading wire:target="replaceDocumentFile" class="mt-1 text-xs text-teal-600 dark:text-teal-400">{{ __('Uploading...') }}</div>
+                                <flux:error name="replaceDocumentFile" />
+                            @endif
+                        </div>
+                    @empty
+                        <div class="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">{{ __('No documents linked yet.') }}</div>
+                    @endforelse
+                </div>
+
+                {{-- Upload Document Form (Attorney / Admin) --}}
+                @if (($isNotary || $canManageLifecycle) && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
+                    <div class="mt-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
+                        <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload a new document for this request') }}</div>
+                        <div class="mt-3 space-y-3">
+                            <flux:field>
+                                <flux:label>{{ __('Document title') }} <span class="text-rose-500">*</span></flux:label>
+                                <flux:input wire:model="newDocumentTitle" type="text" placeholder="{{ __('e.g. Affidavit of support') }}" />
+                                <flux:error name="newDocumentTitle" />
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>{{ __('PDF file') }} <span class="text-rose-500">*</span></flux:label>
+                                <input type="file" wire:model="newDocumentFile" accept="application/pdf,.pdf" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+                                <flux:error name="newDocumentFile" />
+                            </flux:field>
+                            <div wire:loading wire:target="newDocumentFile" class="text-xs text-teal-600 dark:text-teal-400">{{ __('Uploading...') }}</div>
+                            <flux:button variant="primary" type="button" wire:click="createDocument" wire:loading.attr="disabled" wire:target="newDocumentFile,createDocument">{{ __('Upload document') }}</flux:button>
+                        </div>
+                    </div>
+                @endif
+            </div>
+
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Finalization readiness') }}</h2>
+                @if ($finalizationReadiness['ready'])
+                    <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        {{ __('All linked documents have the required notarization artifacts.') }}
+                    </div>
+                @else
+                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                        <div class="font-medium">{{ __('This request is not ready to finalize yet.') }}</div>
+                        <ul class="mt-2 list-disc pl-5">
+                            @foreach ($finalizationReadiness['issues'] as $issue)
+                                <li>{{ $issue }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+            </div>
+
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Journal') }}</h2>
+                <div class="mt-4 space-y-4">
+                    @forelse ($journalEntries as $entry)
+                        <div class="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                            <div class="flex items-center justify-between gap-4">
+                                <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ str_replace('_', ' ', $entry->entry_type) }}</div>
+                                <div class="text-xs text-zinc-400 dark:text-zinc-500">{{ $entry->recorded_at?->toDateTimeString() ?? '-' }}</div>
+                            </div>
+                            <div class="mt-2 text-zinc-600 dark:text-zinc-300">{{ $entry->summary }}</div>
+                        </div>
+                    @empty
+                        <div class="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">{{ __('No journal entries yet.') }}</div>
+                    @endforelse
+                </div>
+            </div>
+        </div>
+
+        <div class="self-start space-y-6 2xl:sticky 2xl:top-4">
             <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Verification steps') }}</h2>
                 <div class="mt-4 space-y-3">

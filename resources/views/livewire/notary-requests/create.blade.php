@@ -80,19 +80,43 @@ new #[Layout('components.layouts.app')] class extends Component {
         $user = Auth::user();
         abort_unless($user !== null, 401);
 
-        $rules = StoreNotaryClientCaseRequest::rules($user);
-        $notaryUserId = null;
+        $rules = [
+            'title' => ['required', 'string', 'max:255'],
+            'requestType' => ['required', 'string', 'max:64'],
+            'remarks' => ['nullable', 'string', 'max:2000'],
+        ];
 
-        if (trim((string) $this->notaryUserId) === '') {
-            unset($rules['notaryUserId']);
-            $validated = $this->validate($rules);
-        } else {
-            $validated = $this->validate($rules);
+        // Attorney can upload documents and add signers during creation
+        $isNotary = $user->role === UserRole::Notary;
+
+        if ($isNotary) {
+            $rules['caseDocument'] = ['nullable', 'file', 'mimes:pdf', 'max:10240'];
+            $rules['signers'] = ['nullable', 'array'];
+            $rules['signers.*.full_name'] = ['required_with:signers', 'string', 'max:255'];
+            $rules['signers.*.email'] = ['required_with:signers', 'email', 'max:255'];
+            $rules['signers.*.phone'] = ['nullable', 'string', 'max:64'];
+            $rules['signers.*.address'] = ['nullable', 'string', 'max:500'];
+            $rules['signers.*.role'] = ['nullable', 'string', 'max:64'];
+        }
+
+        $notaryUserId = null;
+        if (trim((string) $this->notaryUserId) !== '') {
+            $rules['notaryUserId'] = ['required', 'exists:users,id'];
+        }
+
+        $validated = $this->validate($rules);
+
+        if (isset($validated['notaryUserId'])) {
             $notaryUserId = (int) $validated['notaryUserId'];
         }
 
+        // For attorney creating their own request, they are the notary
+        if ($isNotary && $notaryUserId === null) {
+            $notaryUserId = $user->id;
+        }
+
         $documentPath = null;
-        if ($this->caseDocument !== null) {
+        if ($isNotary && $this->caseDocument !== null) {
             $documentPath = $this->caseDocument->store('notary-requests', (string) config('filesystems.docutrust_disk', 'local'));
         }
 
@@ -107,20 +131,40 @@ new #[Layout('components.layouts.app')] class extends Component {
             ],
         ]);
 
-        foreach ($validated['signers'] as $signerRow) {
-            NotarySigner::query()->create([
+        // Create a Document record if attorney uploaded one
+        if ($isNotary && $documentPath !== null) {
+            $document = $user->documents()->create([
                 'notary_request_id' => $request->id,
-                'full_name' => trim((string) $signerRow['full_name']),
-                'email' => strtolower(trim((string) $signerRow['email'])),
-                'phone' => trim((string) $signerRow['phone']) !== '' ? trim((string) $signerRow['phone']) : null,
-                'address' => trim((string) $signerRow['address']) !== '' ? trim((string) $signerRow['address']) : null,
-                'role' => trim((string) $signerRow['role']) !== '' ? trim((string) $signerRow['role']) : 'signer',
+                'title' => trim($validated['title']),
+                'file_path' => $documentPath,
+                'status' => \App\Enums\DocumentStatus::Draft,
             ]);
         }
 
-        session()->flash('status', __('eNOTARY case created. Upload identity documents on the request page, then submit for verification.'));
+        // Create signers if attorney provided them
+        if ($isNotary && ! empty($validated['signers'])) {
+            foreach ($validated['signers'] as $signerRow) {
+                if (trim((string) ($signerRow['full_name'] ?? '')) === '') {
+                    continue;
+                }
+                NotarySigner::query()->create([
+                    'notary_request_id' => $request->id,
+                    'full_name' => trim((string) $signerRow['full_name']),
+                    'email' => strtolower(trim((string) $signerRow['email'])),
+                    'phone' => trim((string) ($signerRow['phone'] ?? '')) !== '' ? trim((string) $signerRow['phone']) : null,
+                    'address' => trim((string) ($signerRow['address'] ?? '')) !== '' ? trim((string) $signerRow['address']) : null,
+                    'role' => trim((string) ($signerRow['role'] ?? '')) !== '' ? trim((string) $signerRow['role']) : 'signer',
+                ]);
+            }
+        }
 
-        $this->redirect(route($user->role === UserRole::Notary ? 'notary.requests.show' : 'notary-requests.show', $request, absolute: false), navigate: true);
+        if ($isNotary) {
+            session()->flash('status', __('eNOTARY case created. You can upload documents and prepare signature fields from the request page.'));
+        } else {
+            session()->flash('status', __('eNOTARY request created. The assigned attorney will upload documents and manage the signing process.'));
+        }
+
+        $this->redirect(route($isNotary ? 'notary.requests.show' : 'notary-requests.show', $request, absolute: false), navigate: true);
     }
 }; ?>
 
@@ -198,7 +242,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
         </div>
 
-        {{-- Section 2: Document Upload --}}
+        {{-- Section 2: Document Upload (Attorney only) --}}
+        @if ($isNotaryView)
         <div class="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
             <div class="flex items-center gap-3 border-b border-zinc-100 bg-zinc-50/50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-800/30">
                 <span class="flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold text-white shadow-sm" style="background-color: #18181b;">2</span>
@@ -209,7 +254,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
             <div class="p-6 sm:p-8">
                 <flux:field>
-                    <flux:label>{{ __('Primary instrument (PDF)') }} <span class="text-rose-500">*</span></flux:label>
+                    <flux:label>{{ __('Primary instrument (PDF)') }}</flux:label>
                     <label class="group relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-200 bg-gradient-to-b from-zinc-50/80 to-white px-6 py-12 transition-all duration-200 hover:border-indigo-400 hover:from-indigo-50/50 hover:to-white hover:shadow-sm dark:border-zinc-700 dark:from-zinc-800/80 dark:to-zinc-900 dark:hover:border-indigo-500 dark:hover:from-indigo-950/20 dark:hover:to-zinc-900">
                         <input
                             type="file"
@@ -249,10 +294,13 @@ new #[Layout('components.layouts.app')] class extends Component {
                     @endif
                     <flux:error name="caseDocument" />
                 </flux:field>
+                <p class="mt-3 text-xs text-zinc-400 dark:text-zinc-500">{{ __('You can also upload documents later from the request page.') }}</p>
             </div>
         </div>
+        @endif
 
-        {{-- Section 3: Signers --}}
+        {{-- Section 3: Signers (Attorney only — clients don't assign signers) --}}
+        @if ($isNotaryView)
         <div class="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
             <div class="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-800/30">
                 <div class="flex items-center gap-3">
@@ -337,6 +385,20 @@ new #[Layout('components.layouts.app')] class extends Component {
                 <flux:error name="signers" />
             </div>
         </div>
+        @endif
+
+        {{-- Info note for clients --}}
+        @if (! $isNotaryView)
+        <div class="rounded-2xl border border-sky-200 bg-sky-50 px-6 py-4 dark:border-sky-900/40 dark:bg-sky-950/20">
+            <div class="flex items-start gap-3">
+                <svg class="mt-0.5 h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"/></svg>
+                <div>
+                    <p class="text-sm font-medium text-sky-800 dark:text-sky-200">{{ __('What happens next?') }}</p>
+                    <p class="mt-1 text-sm text-sky-700 dark:text-sky-300">{{ __('After you create this request, the assigned attorney will upload the documents, assign signers, and send the document for signing. You will receive a signing link via email when it is your turn to sign.') }}</p>
+                </div>
+            </div>
+        </div>
+        @endif
 
         {{-- Submit footer --}}
         <div class="sticky bottom-4 z-10 rounded-2xl border border-zinc-200/80 bg-white/90 px-6 py-4 shadow-lg shadow-zinc-900/5 backdrop-blur-xl dark:border-zinc-700/60 dark:bg-zinc-900/90 dark:shadow-none">

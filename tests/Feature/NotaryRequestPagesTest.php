@@ -32,20 +32,12 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($admin);
 
+        // Admin (non-notary) only provides case info — no signers or documents
         LivewireVolt::test('notary-requests.create')
             ->set('title', 'Board resolution acknowledgment')
             ->set('requestType', 'acknowledgment')
             ->set('notaryUserId', (string) $notary->id)
             ->set('remarks', 'Bring government ID and board secretary certificate.')
-            ->set('signers', [
-                [
-                    'full_name' => 'Jane Signer',
-                    'email' => 'jane-signer@example.com',
-                    'phone' => '',
-                    'address' => '123 Example St',
-                    'role' => 'signer',
-                ],
-            ])
             ->call('save')
             ->assertHasNoErrors();
 
@@ -53,11 +45,6 @@ class NotaryRequestPagesTest extends TestCase
             'title' => 'Board resolution acknowledgment',
             'notary_user_id' => $notary->id,
             'organization_id' => $admin->organization_id,
-        ]);
-
-        $this->assertDatabaseHas('notary_signers', [
-            'full_name' => 'Jane Signer',
-            'email' => 'jane-signer@example.com',
         ]);
     }
 
@@ -273,12 +260,15 @@ class NotaryRequestPagesTest extends TestCase
     {
         Storage::fake('local');
 
-        $admin = User::factory()->create();
-        $request = NotaryRequest::factory()->for($admin)->create();
+        // Only the assigned attorney (notary) can send eNOTARY documents
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+        ]);
 
         Storage::disk('local')->put('documents/sendable.pdf', '%PDF-1.4 test pdf');
 
-        $document = Document::factory()->for($admin)->create([
+        $document = Document::factory()->for($notary)->create([
             'notary_request_id' => $request->id,
             'title' => 'Sendable packet',
             'file_path' => 'documents/sendable.pdf',
@@ -293,7 +283,7 @@ class NotaryRequestPagesTest extends TestCase
             'signer_id' => $signer->id,
         ]);
 
-        $this->actingAs($admin);
+        $this->actingAs($notary);
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->call('sendLinkedDocument', $document->id)
@@ -342,8 +332,7 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('1 recipient')
             ->assertSee('1 pending')
             ->assertSee('1 signed')
-            ->assertSee('1 approved')
-            ->assertSee('Manage participants');
+            ->assertSee('1 approved');
     }
 
     public function test_linked_document_blocking_reason_is_visible_on_notary_request_page(): void
@@ -364,7 +353,7 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Add at least one signer or approver.');
     }
 
-    public function test_next_recommended_action_is_visible_for_blocked_draft_document(): void
+    public function test_next_recommended_action_is_not_shown_for_enotary_documents(): void
     {
         $admin = User::factory()->create();
         $request = NotaryRequest::factory()->for($admin)->create();
@@ -375,12 +364,11 @@ class NotaryRequestPagesTest extends TestCase
             'status' => DocumentStatus::Draft,
         ]);
 
+        // eNOTARY documents no longer show "Next recommended action" — the attorney manages the flow
         $this->actingAs($admin)
             ->get(route('notary-requests.show', $request))
             ->assertOk()
-            ->assertSee('Next recommended action')
-            ->assertSee('Add signers or approvers to &quot;Needs participants first&quot;.', false)
-            ->assertSee('Manage participants');
+            ->assertDontSee('Next recommended action');
     }
 
     public function test_notary_draft_request_hides_review_and_register_actions_until_workflow_advances(): void
@@ -393,21 +381,18 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($notary)
             ->get(route('notary.requests.show', $request))
             ->assertOk()
-            ->assertSee('Workflow guide')
-            ->assertSee('Request submitted')
-            ->assertSee('Identity and location')
-            ->assertSee('Session and review')
-            ->assertSee('Documents and register')
-            ->assertSee('Finalize and anchor')
+            ->assertSee('Workflow')
+            ->assertSee('Upload &amp; send', false)
+            ->assertSee('Signers sign')
+            ->assertSee('Video conference')
+            ->assertSee('Attorney signs')
+            ->assertSee('Digitalize &amp; finalize', false)
             ->assertSee('Notary review')
             ->assertSee('Notary review is available only after identity, location, or session verification has started.')
             ->assertDontSee('Approve request')
             ->assertSee('Notarial register')
             ->assertSee('Register entry creation becomes available after attorney approval.')
-            ->assertDontSee('Create register entry')
-            ->assertSee('Session scheduling becomes available after identity or location verification.')
-            ->assertSee('Verification actions appear after the request is submitted.')
-            ->assertDontSee('Mark location verified');
+            ->assertDontSee('Create register entry');
     }
 
     public function test_notary_cannot_open_register_entry_page_before_attorney_approval(): void
