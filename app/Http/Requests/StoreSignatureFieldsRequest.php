@@ -34,9 +34,24 @@ class StoreSignatureFieldsRequest extends FormRequest
         /** @var Document $document */
         $document = $this->route('document');
 
-        return $this->user() !== null
-            && $this->user()->can('update', $document)
-            && $document->status === DocumentStatus::Draft;
+        if ($this->user() === null || ! $this->user()->can('update', $document)) {
+            return false;
+        }
+
+        // Allow Draft status (normal flow)
+        if ($document->status === DocumentStatus::Draft) {
+            return true;
+        }
+
+        // Allow Pending status for eNOTARY attorney signing phase
+        if ($document->status === DocumentStatus::Pending
+            && $document->notary_request_id !== null
+            && $this->user()->role->value === 'notary'
+            && (int) $document->notaryRequest->notary_user_id === (int) $this->user()->id) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
