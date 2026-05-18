@@ -60,12 +60,19 @@ class DocumentPrepareController extends Controller
 
         $firstSignerId = $signers->first()['id'] ?? null;
 
+        $user = auth()->user();
+        $isAttorneySigningPhase = $document->notary_request_id !== null
+            && $user?->role->value === 'notary'
+            && $document->status === DocumentStatus::Pending
+            && $document->documentSigners()->where('user_id', $user->id)->exists();
+
         return view('documents.prepare', [
             'document' => $document,
             'pdfUrl' => $this->resolveStreamUrl($document),
             'firstSignerId' => $firstSignerId,
             'signers' => $signers,
-            'canSend' => $document->canSendForSigning(),
+            'canSend' => ! $isAttorneySigningPhase && $document->canSendForSigning(),
+            'isAttorneySigningPhase' => $isAttorneySigningPhase,
             'initialFields' => $document->signatureFields()
                 ->orderBy('id')
                 ->get()
@@ -93,13 +100,27 @@ class DocumentPrepareController extends Controller
         }
 
         $ip = (string) $request->ip();
+        $user = auth()->user();
+        $isAttorneySigningPhase = $document->notary_request_id !== null
+            && $user?->role->value === 'notary'
+            && $document->status === DocumentStatus::Pending
+            && $document->documentSigners()->where('user_id', $user->id)->exists();
 
-        DB::transaction(function () use ($document, $fields, $ip): void {
-            $document->update([
-                'prepared_pdf_path' => null,
-                'final_pdf_path' => null,
-            ]);
-            $document->signatureFields()->delete();
+        DB::transaction(function () use ($document, $fields, $ip, $isAttorneySigningPhase, $user): void {
+            if ($isAttorneySigningPhase) {
+                // Attorney signing phase: only delete attorney's fields, keep client fields intact
+                $attorneySigner = $document->documentSigners()->where('user_id', $user->id)->first();
+                if ($attorneySigner) {
+                    $document->signatureFields()->where('signer_id', $attorneySigner->id)->delete();
+                }
+            } else {
+                // Normal flow: reset everything
+                $document->update([
+                    'prepared_pdf_path' => null,
+                    'final_pdf_path' => null,
+                ]);
+                $document->signatureFields()->delete();
+            }
 
             foreach ($fields as $field) {
                 SignatureField::query()->create([
@@ -113,13 +134,8 @@ class DocumentPrepareController extends Controller
             }
         });
 
-        $redirectRoute = auth()->user()?->role->value === 'notary'
-            ? 'notary.documents.prepare'
-            : 'documents.prepare';
-
-        // For eNOTARY documents: after attorney saves their fields, redirect to signing page
-        if ($document->notary_request_id !== null && auth()->user()?->role->value === 'notary') {
-            $user = auth()->user();
+        // For eNOTARY attorney signing phase: redirect to signing page
+        if ($isAttorneySigningPhase) {
             $attorneySigner = $document->documentSigners()
                 ->where('user_id', $user->id)
                 ->first();
@@ -130,6 +146,10 @@ class DocumentPrepareController extends Controller
                     ->with('status', __('Signature fields saved. Please sign the document.'));
             }
         }
+
+        $redirectRoute = $user?->role->value === 'notary'
+            ? 'notary.documents.prepare'
+            : 'documents.prepare';
 
         return redirect()
             ->route($redirectRoute, $document)

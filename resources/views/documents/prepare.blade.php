@@ -84,7 +84,17 @@
 
                             <form method="POST" action="{{ route(auth()->user()?->role->value === 'notary' ? 'notary.documents.send' : 'documents.send', $document) }}" class="contents">
                                 @csrf
-                                @if ($document->notary_request_id !== null)
+                                @if ($isAttorneySigningPhase ?? false)
+                                    {{-- Attorney signing phase: Save & Sign button (submits fields form via JS, then redirects to signing) --}}
+                                    <button
+                                        type="button"
+                                        id="btn-save-and-sign"
+                                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                        @if (! $firstSignerId) disabled @endif
+                                    >
+                                        {{ __('Save & Sign') }}
+                                    </button>
+                                @elseif ($document->notary_request_id !== null)
                                     <button
                                         type="submit"
                                         id="btn-send-to-signer"
@@ -228,6 +238,19 @@
         </script>
 
         @stack('scripts')
+        @if ($isAttorneySigningPhase ?? false)
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const saveAndSignBtn = document.getElementById('btn-save-and-sign');
+                const saveBtn = document.getElementById('btn-save-fields');
+                if (saveAndSignBtn && saveBtn) {
+                    saveAndSignBtn.addEventListener('click', function() {
+                        saveBtn.click();
+                    });
+                }
+            });
+        </script>
+        @endif
         @fluxScripts
     </body>
 </html>
