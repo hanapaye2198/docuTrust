@@ -99,7 +99,10 @@ class SignDocumentController extends Controller
 
         $document = $signer->document;
 
-        return PublicPdfStream::inlineResponse($document->sourcePdfPath() ?: $document->activeSigningPdfPath());
+        // Use the prepared PDF (with existing signatures) if available, otherwise fall back to source
+        $path = $document->activeSigningPdfPath() ?: $document->sourcePdfPath();
+
+        return PublicPdfStream::inlineResponse($path);
     }
 
     public function sign(string $token): RedirectResponse|Response
@@ -989,7 +992,10 @@ class SignDocumentController extends Controller
         return view('sign.show', [
             'signer' => $signer,
             'pdfUrl' => $authenticated
-                ? route('sign.account.document.pdf', ['signerId' => $signer->id])
+                ? route(
+                    Auth::user()?->role->value === 'notary' ? 'notary.sign.account.document.pdf' : 'sign.account.document.pdf',
+                    ['signerId' => $signer->id]
+                )
                 : route('sign.document.pdf', $this->signerRouteToken($signer)),
             'documentHasSignatureFields' => ($document->signature_fields_count > 0),
             'fieldsJson' => $fieldsForSigner->map(fn (SignatureField $f) => [
