@@ -19,6 +19,7 @@ final class NotaryJitsiRoomService
     private string $baseUrl;
     private ?string $appId;
     private ?string $appSecret;
+    private ?string $apiKeyId;
     private string $domain;
 
     public function __construct()
@@ -26,8 +27,10 @@ final class NotaryJitsiRoomService
         $this->baseUrl = rtrim((string) config('docutrust.notary.jitsi_base_url', 'https://meet.jit.si'), '/');
         $appId = (string) config('docutrust.notary.jitsi_app_id', '');
         $appSecret = (string) config('docutrust.notary.jitsi_app_secret', '');
+        $apiKeyId = (string) config('docutrust.notary.jitsi_api_key_id', '');
         $this->appId = $appId !== '' ? $appId : null;
         $this->appSecret = $appSecret !== '' ? $appSecret : null;
+        $this->apiKeyId = $apiKeyId !== '' ? $apiKeyId : null;
         $this->domain = parse_url($this->baseUrl, PHP_URL_HOST) ?: 'meet.jit.si';
     }
 
@@ -113,15 +116,21 @@ final class NotaryJitsiRoomService
     public function getIframeConfig(NotarySession $session, User $user, bool $isModerator = false): array
     {
         $roomName = $session->room_name ?? $this->buildRoomName($session->notaryRequest);
+        $isJaas = $this->appId !== null && str_starts_with($this->appId, 'vpaas-magic-cookie-');
 
         // Only generate JWT if credentials are configured
         $jwt = ($this->appId !== null && $this->appSecret !== null)
             ? $this->generateJwtForUser($roomName, $user, $isModerator)
             : null;
 
+        // JaaS requires roomName in format: <AppID>/<room>
+        $iframeRoomName = $isJaas
+            ? $this->appId . '/' . $roomName
+            : $roomName;
+
         return [
             'domain' => $this->domain,
-            'roomName' => $roomName,
+            'roomName' => $iframeRoomName,
             'jwt' => $jwt,
             'configOverwrite' => $this->getRoomConfig($isModerator),
             'interfaceConfigOverwrite' => $this->getInterfaceConfig(),
@@ -150,18 +159,15 @@ final class NotaryJitsiRoomService
             'sub' => $isJaas ? $this->appId : $this->domain,
             'aud' => $isJaas ? 'jitsi' : 'jitsi',
             'room' => $isJaas ? '*' : $roomName,
-            'iat' => $now,
+            'iat' => $now - 60,
             'exp' => $now + ($ttlMinutes * 60),
-            'nbf' => $now - 10,
+            'nbf' => $now - 60,
             'context' => [
                 'features' => [
                     'livestreaming' => false,
                     'recording' => true,
                     'transcription' => false,
                     'outbound-call' => false,
-                ],
-                'room' => [
-                    'regex' => false,
                 ],
             ],
         ];
@@ -183,28 +189,24 @@ final class NotaryJitsiRoomService
 
         $payload = [
             'iss' => 'chat',
-            'sub' => $isJaas ? $this->appId : $this->domain,
             'aud' => 'jitsi',
-            'room' => $isJaas ? '*' : $roomName,
-            'iat' => $now,
             'exp' => $now + ($ttlMinutes * 60),
-            'nbf' => $now - 10,
+            'nbf' => $now - 60,
+            'room' => $isJaas ? '*' : $roomName,
+            'sub' => $isJaas ? $this->appId : $this->domain,
             'context' => [
                 'user' => [
-                    'id' => (string) $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'avatar' => '',
                     'moderator' => $isModerator ? 'true' : 'false',
+                    'email' => $user->email,
+                    'name' => $user->name,
+                    'avatar' => '',
+                    'id' => (string) $user->id,
                 ],
                 'features' => [
-                    'livestreaming' => false,
-                    'recording' => $isModerator,
-                    'transcription' => false,
-                    'outbound-call' => false,
-                ],
-                'room' => [
-                    'regex' => false,
+                    'recording' => $isModerator ? 'true' : 'false',
+                    'livestreaming' => 'false',
+                    'transcription' => 'false',
+                    'outbound-call' => 'false',
                 ],
             ],
         ];
@@ -217,11 +219,13 @@ final class NotaryJitsiRoomService
      */
     private function getRoomConfig(bool $isModerator): array
     {
+        $hasJwtAuth = $this->appId !== null && $this->appSecret !== null;
+
         return [
             // Security
             'requireDisplayName' => true,
-            'enableLobby' => true,
-            'lobbyEnabled' => true,
+            'enableLobby' => $hasJwtAuth,
+            'lobbyEnabled' => false,
 
             // Audio/Video
             'startWithAudioMuted' => false,
@@ -234,7 +238,7 @@ final class NotaryJitsiRoomService
 
             // Disable unnecessary features for notary sessions
             'enableWelcomePage' => false,
-            'prejoinPageEnabled' => true,
+            'prejoinPageEnabled' => false,
             'disableDeepLinking' => true,
             'enableClosePage' => false,
 
@@ -292,75 +296,35 @@ final class NotaryJitsiRoomService
 
     /**
      * Encode a JWT payload.
-     * Uses RS256 if the secret looks like an RSA key, otherwise HS256.
+     * Uses firebase/php-jwt library for reliable JWT generation.
      */
     private function encodeJwt(array $payload): string
     {
-        $isRsaKey = str_contains($this->appSecret, 'MIIE') || str_contains($this->appSecret, 'BEGIN');
-
-        if ($isRsaKey) {
-            return $this->encodeJwtRs256($payload);
-        }
-
-        return $this->encodeJwtHs256($payload);
-    }
-
-    /**
-     * Encode JWT with RS256 (for JaaS / 8x8 private key).
-     */
-    private function encodeJwtRs256(array $payload): string
-    {
-        $header = ['alg' => 'RS256', 'typ' => 'JWT', 'kid' => $this->appId . '/generated-key'];
-
-        $segments = [
-            $this->base64UrlEncode(json_encode($header)),
-            $this->base64UrlEncode(json_encode($payload)),
-        ];
-
-        $signingInput = implode('.', $segments);
-
-        // Reconstruct PEM if it was stored as raw base64
         $pem = $this->appSecret;
+        // Handle escaped newlines from .env (literal \n characters)
+        if (str_contains($pem, '\\n')) {
+            $pem = str_replace('\\n', "\n", $pem);
+        }
         if (!str_contains($pem, '-----BEGIN')) {
             $pem = "-----BEGIN PRIVATE KEY-----\n" . chunk_split($pem, 64, "\n") . "-----END PRIVATE KEY-----";
         }
 
-        $privateKey = openssl_pkey_get_private($pem);
-        if ($privateKey === false) {
-            throw new \RuntimeException('Invalid Jitsi private key. Check DOCUTRUST_NOTARY_JITSI_APP_SECRET.');
+        $isJaas = str_starts_with($this->appId, 'vpaas-magic-cookie-');
+
+        if ($isJaas) {
+            $kid = $this->apiKeyId
+                ? $this->appId . '/' . $this->apiKeyId
+                : $this->appId . '/generated-key';
+
+            return \Firebase\JWT\JWT::encode($payload, $pem, 'RS256', $kid);
         }
 
-        $signature = '';
-        if (!openssl_sign($signingInput, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
-            throw new \RuntimeException('Failed to sign Jitsi JWT.');
+        // For self-hosted with shared secret (HS256)
+        $isRsaKey = str_contains($pem, 'PRIVATE KEY');
+        if ($isRsaKey) {
+            return \Firebase\JWT\JWT::encode($payload, $pem, 'RS256');
         }
 
-        $segments[] = $this->base64UrlEncode($signature);
-
-        return implode('.', $segments);
-    }
-
-    /**
-     * Encode JWT with HS256 (for self-hosted Jitsi with shared secret).
-     */
-    private function encodeJwtHs256(array $payload): string
-    {
-        $header = ['alg' => 'HS256', 'typ' => 'JWT'];
-
-        $segments = [
-            $this->base64UrlEncode(json_encode($header)),
-            $this->base64UrlEncode(json_encode($payload)),
-        ];
-
-        $signingInput = implode('.', $segments);
-        $signature = hash_hmac('sha256', $signingInput, $this->appSecret, true);
-        $segments[] = $this->base64UrlEncode($signature);
-
-        return implode('.', $segments);
-    }
-
-    private function base64UrlEncode(string $data): string
-    {
-        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+        return \Firebase\JWT\JWT::encode($payload, $this->appSecret, 'HS256');
     }
 }
