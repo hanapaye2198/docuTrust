@@ -73,42 +73,49 @@
                         </div>
 
                         <div class="mt-4 grid grid-cols-2 gap-2">
-                            <button
-                                type="button"
-                                id="btn-save-fields"
-                                class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-teal-500 dark:hover:bg-teal-600"
-                                @if (! $firstSignerId) disabled @endif
-                            >
-                                {{ __('Save') }}
-                            </button>
+                            @if ($isAttorneySigningPhase ?? false)
+                                {{-- Attorney signing phase: single "Save & Sign" button (full width) --}}
+                                <button
+                                    type="button"
+                                    id="btn-save-fields"
+                                    class="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    @if (! $firstSignerId) disabled @endif
+                                >
+                                    {{ __('Save & Sign') }}
+                                </button>
+                            @else
+                                <button
+                                    type="button"
+                                    id="btn-save-fields"
+                                    class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-teal-500 dark:hover:bg-teal-600"
+                                    @if (! $firstSignerId) disabled @endif
+                                >
+                                    {{ __('Save') }}
+                                </button>
 
-                            <form method="POST" action="{{ route(auth()->user()?->role->value === 'notary' ? 'notary.documents.send' : 'documents.send', $document) }}" class="contents">
-                                @csrf
-                                @if ($isAttorneySigningPhase ?? false)
-                                    {{-- Attorney signing phase: Save button already redirects to signing page --}}
-                                    <span class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-100 px-4 py-2.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
-                                        {{ __('Save → Sign') }}
-                                    </span>
-                                @elseif ($document->notary_request_id !== null)
-                                    <button
-                                        type="submit"
-                                        id="btn-send-to-signer"
-                                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                                        @if (! $canSend) disabled @endif
-                                    >
-                                        {{ __('Send to Signers') }}
-                                    </button>
-                                @else
-                                    <button
-                                        type="submit"
-                                        id="btn-send-to-signer"
-                                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                                        @if (! $canSend) disabled @endif
-                                    >
-                                        {{ __('Send') }}
-                                    </button>
-                                @endif
-                            </form>
+                                <form method="POST" action="{{ route(auth()->user()?->role->value === 'notary' ? 'notary.documents.send' : 'documents.send', $document) }}" class="contents">
+                                    @csrf
+                                    @if ($document->notary_request_id !== null)
+                                        <button
+                                            type="submit"
+                                            id="btn-send-to-signer"
+                                            class="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                                            @if (! $canSend) disabled @endif
+                                        >
+                                            {{ __('Send to Signers') }}
+                                        </button>
+                                    @else
+                                        <button
+                                            type="submit"
+                                            id="btn-send-to-signer"
+                                            class="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                                            @if (! $canSend) disabled @endif
+                                        >
+                                            {{ __('Send') }}
+                                        </button>
+                                    @endif
+                                </form>
+                            @endif
                         </div>
                     </section>
 
