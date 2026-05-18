@@ -64,10 +64,18 @@ new #[Layout('components.layouts.app')] class extends Component
         </div>
 
         @push('scripts')
-        <script src="https://meet.jit.si/external_api.js"></script>
+        <script src="https://8x8.vc/vpaas-magic-cookie-6f5394927a4a4904812f628ebbf691a3/external_api.js"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
                 const config = @json($jitsiConfig);
+
+                console.log('[DocuTrust] Jitsi config:', JSON.stringify({
+                    domain: config.domain,
+                    roomName: config.roomName,
+                    hasJwt: !!config.jwt,
+                    jwtLength: config.jwt ? config.jwt.length : 0,
+                    jwtKid: config.jwt ? JSON.parse(atob(config.jwt.split('.')[0])).kid : 'none'
+                }));
 
                 const options = {
                     roomName: config.roomName,
@@ -76,7 +84,10 @@ new #[Layout('components.layouts.app')] class extends Component
                     height: '100%',
                     configOverwrite: config.configOverwrite || {},
                     interfaceConfigOverwrite: config.interfaceConfigOverwrite || {},
-                    userInfo: config.userInfo || {},
+                    iframeProps: {
+                        allow: 'camera; microphone; display-capture; autoplay; clipboard-write; fullscreen',
+                        allowFullScreen: true,
+                    },
                 };
 
                 // Add JWT if available
@@ -85,6 +96,12 @@ new #[Layout('components.layouts.app')] class extends Component
                 }
 
                 const api = new JitsiMeetExternalAPI(config.domain, options);
+
+                // Ensure camera/microphone permissions on the iframe
+                const iframe = api.getIFrame();
+                if (iframe) {
+                    iframe.allow = 'camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *';
+                }
 
                 // Event listeners
                 api.addEventListener('readyToClose', function() {

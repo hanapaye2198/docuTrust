@@ -64,6 +64,13 @@ class NotaryDigitalizationService
             }
         }
 
+        // Step 4: Apply attorney's written signature to documents
+        if ($credential !== null && $credential->signature_image_path !== null && $credential->signature_image_path !== '') {
+            foreach ($request->documents as $document) {
+                $this->applyAttorneySignatureToDocument($request, $document, $credential);
+            }
+        }
+
         NotaryJournal::query()->create([
             'notary_request_id' => $request->id,
             'notary_user_id' => $request->notary_user_id,
@@ -73,6 +80,9 @@ class NotaryDigitalizationService
                 'documents_processed' => $request->documents->count(),
                 'register_entries_processed' => $request->registerEntries->count(),
                 'completed_at' => now()->timezone('Asia/Manila')->toDateTimeString(),
+                'attorney_signature_applied' => $credential !== null && $credential->signature_image_path !== null,
+                'attorney_credential_id' => $credential?->id,
+                'attorney_commission_number' => $credential?->commission_number,
             ],
             'recorded_at' => now(),
         ]);
@@ -122,6 +132,36 @@ class NotaryDigitalizationService
             Log::channel('errors')->warning('Notary seal application failed', [
                 'notary_request_id' => $request->id,
                 'document_id' => $document->id,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+    }
+
+    private function applyAttorneySignatureToDocument(NotaryRequest $request, $document, NotaryCredential $credential): void
+    {
+        $entry = $request->registerEntries->first(fn ($e) => $e->document_id === $document->id);
+        if ($entry === null) {
+            $entry = $request->registerEntries->first();
+        }
+
+        if ($entry === null) {
+            return;
+        }
+
+        $sourcePath = $document->final_pdf_path ?: $document->prepared_pdf_path ?: $document->sourcePdfPath();
+        if ($sourcePath === null || $sourcePath === '') {
+            return;
+        }
+
+        try {
+            $this->notarySealService->applyNotarySeal($sourcePath, $credential, $entry);
+        } catch (Throwable $throwable) {
+            Log::channel('errors')->warning('Attorney signature application failed', [
+                'notary_request_id' => $request->id,
+                'document_id' => $document->id,
+                'credential_id' => $credential->id,
+                'signature_image_path' => $credential->signature_image_path,
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);

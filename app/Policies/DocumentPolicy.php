@@ -14,6 +14,14 @@ class DocumentPolicy
 
     public function view(User $user, Document $document): bool
     {
+        // Allow the assigned attorney to view eNOTARY documents
+        if ($document->notary_request_id !== null) {
+            $notaryRequest = $document->notaryRequest;
+            if ($notaryRequest !== null && $notaryRequest->notary_user_id === $user->id) {
+                return true;
+            }
+        }
+
         if ($user->organization_id === null || $document->organization_id === null) {
             return false;
         }
@@ -38,6 +46,14 @@ class DocumentPolicy
 
     public function update(User $user, Document $document): bool
     {
+        // Allow the assigned attorney to update eNOTARY documents (for field preparation)
+        if ($document->notary_request_id !== null) {
+            $notaryRequest = $document->notaryRequest;
+            if ($notaryRequest !== null && $notaryRequest->notary_user_id === $user->id) {
+                return true;
+            }
+        }
+
         return $this->view($user, $document);
     }
 

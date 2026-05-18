@@ -45,6 +45,7 @@ return [
         'jitsi_base_url' => env('DOCUTRUST_NOTARY_JITSI_BASE_URL', 'https://meet.jit.si'),
         'jitsi_app_id' => env('DOCUTRUST_NOTARY_JITSI_APP_ID'),
         'jitsi_app_secret' => env('DOCUTRUST_NOTARY_JITSI_APP_SECRET'),
+        'jitsi_api_key_id' => env('DOCUTRUST_NOTARY_JITSI_API_KEY_ID'),
         'verification_checklist' => [
             'face_matches_id',
             'id_valid_not_expired',

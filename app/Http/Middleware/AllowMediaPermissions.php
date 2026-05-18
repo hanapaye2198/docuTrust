@@ -16,7 +16,10 @@ class AllowMediaPermissions
     {
         $response = $next($request);
 
-        $response->headers->set('Permissions-Policy', 'camera=*, microphone=*, display-capture=*');
+        $response->headers->set(
+            'Permissions-Policy',
+            'camera=(self "https://8x8.vc" "https://meet.jit.si"), microphone=(self "https://8x8.vc" "https://meet.jit.si"), display-capture=(self "https://8x8.vc" "https://meet.jit.si")'
+        );
 
         return $response;
     }

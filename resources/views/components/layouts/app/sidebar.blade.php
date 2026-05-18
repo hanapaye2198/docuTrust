@@ -90,11 +90,11 @@
                 @if (auth()->user()->canAccessWorkspaceTools())
                     <flux:sidebar.item
                         icon="clipboard-document-list"
-                        :href="route('notary-requests.create')"
+                        :href="route('notary-requests.index')"
                         :current="request()->routeIs('notary-requests.*')"
-                        :tooltip="__('Request Notarization')"
+                        :tooltip="__('Notary Requests')"
                         wire:navigate
-                    >{{ __('Request Notarization') }}</flux:sidebar.item>
+                    >{{ __('Notary Requests') }}</flux:sidebar.item>
 
                     <flux:sidebar.item
                         icon="layout-grid"

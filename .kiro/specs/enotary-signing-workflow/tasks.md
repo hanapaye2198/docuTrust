@@ -1,0 +1,137 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - eNOTARY Document Workflow Defects
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the five defects exist in the current code
+  - **Scoped PBT Approach**: Scope the property to concrete failing cases for each defect:
+    - Defect 1.1: Client creates notary request → system redirects to `documents.prepare` instead of `notary-requests.show`
+    - Defect 1.2: Non-attorney user accesses `DocumentPrepareController::show()` for document with `notary_request_id` set → system returns 200 instead of 403
+    - Defect 1.3: `SendDocumentForSignatureService::send()` called on document with `notary_request_id` set → no RuntimeException thrown
+    - Defect 1.4: `NotaryDigitalizationService::digitalize()` completes → journal entry lacks `attorney_signature_applied` and `attorney_credential_id`
+    - Defect 1.5: Notary request show page renders "Send" action for linked eNOTARY documents
+  - Test assertions should match Expected Behavior Properties from design:
+    - `DocumentPrepareController::show()` returns 403 for non-attorney on eNOTARY documents
+    - `SendDocumentForSignatureService::send()` throws RuntimeException with "notarization ceremony" message for eNOTARY documents
+    - `NotaryDigitalizationService::digitalize()` records `attorney_signature_applied = true` and `attorney_credential_id` in journal `legal_assertions`
+    - Client redirect after notary request creation goes to `notary-requests.show` route
+  - Create test file: `tests/Feature/EnotaryBugConditionTest.php`
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found to understand root cause
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Standard Document Workflow Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs (documents where `notary_request_id IS NULL`):
+    - Observe: Authorized user accessing `DocumentPrepareController::show()` for standard document returns 200
+    - Observe: `SendDocumentForSignatureService::send()` transitions standard document from Draft to Pending
+    - Observe: `NotaryDigitalizationService::digitalize()` applies seal, generates QR, generates certificates, anchors to blockchain, creates journal entry
+    - Observe: Standard document preparation allows any authorized user (org member) to place fields
+  - Write property-based tests capturing observed behavior patterns:
+    - For all documents where `notary_request_id IS NULL`, any user passing `DocumentPolicy::update()` can access `documents.prepare` (200 response)
+    - For all standard documents in Draft status with valid participants and fields, `SendDocumentForSignatureService::send()` succeeds and transitions to Pending
+    - For all notary requests processed through `digitalize()`, seal is applied, QR codes generated, certificates generated, blockchain anchored, and journal entry created with `documents_processed` and `register_entries_processed` counts
+  - Create test file: `tests/Feature/EnotaryPreservationTest.php`
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.5, 3.6_
+
+- [x] 3. Fix eNOTARY signing workflow defects
+
+  - [x] 3.1 Add eNOTARY access guard to `DocumentPrepareController::show()`
+    - After the existing `$this->authorize('update', $document)` call, add check: if `$document->notary_request_id !== null`, load the notary request and verify `auth()->id() === $document->notaryRequest->notary_user_id`
+    - If the authenticated user is NOT the assigned attorney, `abort(403)`
+    - This ensures only the attorney can prepare/place signature fields on eNOTARY documents
+    - File: `app/Http/Controllers/DocumentPrepareController.php`, method: `show()`
+    - _Bug_Condition: isBugCondition(input) where input.action = "prepare_access" AND document.notary_request_id IS NOT NULL AND user.id != notaryRequest.notary_user_id_
+    - _Expected_Behavior: Returns 403 Forbidden for non-attorney users on eNOTARY documents_
+    - _Preservation: Documents with notary_request_id = NULL continue to allow any authorized user access_
+    - _Requirements: 2.2, 3.1, 3.6_
+
+  - [x] 3.2 Add eNOTARY send guard to `DocumentPrepareController::send()`
+    - Before calling `$sender->send($document)`, check if `$document->notary_request_id !== null`
+    - If so, redirect back with error message: "eNOTARY documents must be signed during the notarization ceremony"
+    - File: `app/Http/Controllers/DocumentPrepareController.php`, method: `send()`
+    - _Bug_Condition: isBugCondition(input) where input.action = "send_document" AND document.notary_request_id IS NOT NULL_
+    - _Expected_Behavior: Redirect back with error message preventing send_
+    - _Preservation: Documents with notary_request_id = NULL continue to be sendable_
+    - _Requirements: 2.3, 3.2_
+
+  - [x] 3.3 Add eNOTARY guard to `SendDocumentForSignatureService::send()`
+    - At the top of the `send()` method (after refresh/load), add check: if `$document->notary_request_id !== null`, throw `RuntimeException` with message indicating eNOTARY documents must be signed during the notarization ceremony
+    - This provides defense-in-depth beyond the controller guard
+    - File: `app/Services/SendDocumentForSignatureService.php`, method: `send()`
+    - _Bug_Condition: isBugCondition(input) where input.action = "send_document" AND document.notary_request_id IS NOT NULL_
+    - _Expected_Behavior: Throws RuntimeException with message containing "notarization ceremony"_
+    - _Preservation: Documents with notary_request_id = NULL continue through send flow unchanged_
+    - _Requirements: 2.3, 3.2_
+
+  - [x] 3.4 Capture attorney's written signature in `NotaryDigitalizationService::digitalize()`
+    - After applying the notary seal (Step 3), add a new step that:
+      - Uses the already-resolved `NotaryCredential` from `resolveCredential()`
+      - Reads the `signature_image_path` from the credential
+      - Applies the attorney's written signature to each document (similar to seal application)
+      - Records `attorney_credential_id`, `attorney_commission_number`, and `attorney_signature_applied = true` in the journal entry's `legal_assertions` array
+    - Update the `NotaryJournal::create()` call to include attorney credential fingerprint data
+    - File: `app/Services/NotaryDigitalizationService.php`, method: `digitalize()`
+    - _Bug_Condition: isBugCondition(input) where input.action = "digitalize" AND attorney credential exists_
+    - _Expected_Behavior: journal.legal_assertions.attorney_signature_applied == true AND journal.legal_assertions.attorney_credential_id IS NOT NULL_
+    - _Preservation: Existing digitalization steps (seal, QR, certificates, blockchain, timestamp) continue unchanged_
+    - _Requirements: 2.4, 3.5_
+
+  - [x] 3.5 Fix client redirect after notary request creation
+    - In the Livewire `create.blade.php` component, change the post-creation redirect for client users from `route('documents.prepare', $document)` to the notary request show page route
+    - Add success flash message indicating the request was created and the attorney will prepare signature fields
+    - File: `resources/views/livewire/notary-requests/create.blade.php`
+    - _Bug_Condition: isBugCondition(input) where input.action = "client_redirect" AND document.notary_request_id IS NOT NULL_
+    - _Expected_Behavior: Redirects to notary-requests.show route (not documents.prepare)_
+    - _Preservation: Attorney (notary role) creating a notary request continues to redirect to notary request show page_
+    - _Requirements: 2.1, 3.3, 3.4_
+
+  - [x] 3.6 Remove Send action from notary request show page
+    - In the Livewire `show.blade.php` component, remove or conditionally hide the "Send" button/action for documents linked to the current notary request
+    - Since all documents on this page are eNOTARY documents, the `sendLinkedDocument()` method should be guarded or the UI element removed
+    - The UI should not offer the standard send flow — signing is handled exclusively through the `digitalizeRequest()` action (Step 7)
+    - File: `resources/views/livewire/notary-requests/show.blade.php`
+    - _Bug_Condition: isBugCondition(input) where input.action = "show_send_action" AND document.notary_request_id IS NOT NULL_
+    - _Expected_Behavior: "Send" button is NOT rendered for eNOTARY documents_
+    - _Preservation: No impact on standard documents module (separate pages)_
+    - _Requirements: 2.5_
+
+  - [x] 3.7 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - eNOTARY Document Workflow Defects
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied:
+      - `DocumentPrepareController::show()` returns 403 for non-attorney on eNOTARY documents
+      - `SendDocumentForSignatureService::send()` throws RuntimeException for eNOTARY documents
+      - `NotaryDigitalizationService::digitalize()` records attorney signature and credential fingerprint
+      - Client redirect goes to notary request show page
+      - Send action is not rendered on notary request show page
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+
+  - [x] 3.8 Verify preservation tests still pass
+    - **Property 2: Preservation** - Standard Document Workflow Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all preservation tests still pass after fix:
+      - Standard documents still accessible via `documents.prepare` for authorized users
+      - Standard documents still sendable via `SendDocumentForSignatureService`
+      - Digitalization still applies seal, QR, certificates, blockchain anchoring
+    - _Requirements: 3.1, 3.2, 3.5, 3.6_
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run full test suite: `php artisan test`
+  - Ensure all bug condition exploration tests pass (confirming fix works)
+  - Ensure all preservation tests pass (confirming no regressions)
+  - Ensure no existing tests are broken by the changes
+  - Ask the user if questions arise

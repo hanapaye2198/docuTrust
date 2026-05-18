@@ -2,6 +2,9 @@
     use App\Enums\DocumentSignerStatus;
     use App\Enums\DocumentStatus;
 
+    $isNotaryUser = auth()->user()?->role->value === 'notary';
+    $accountRoutePrefix = $isNotaryUser ? 'notary.sign.account' : 'sign.account';
+
     $showFieldViewer = count($fieldsJson) > 0;
 
     $showFieldEditing =
@@ -218,7 +221,7 @@
                     </div>
 
                     <form method="POST" action="{{ $authenticatedSigning
-                        ? route('sign.account.unlock', ['signerId' => $signer->id])
+                        ? route($accountRoutePrefix . '.unlock', ['signerId' => $signer->id])
                         : route('sign.unlock', $signer->access_token ?? $signer->id) }}" class="flex flex-col gap-4">
                         @csrf
                         <label class="flex flex-col gap-2">
@@ -349,7 +352,7 @@
                     </div>
                 </div>
                 <form id="sign-form" method="POST" action="{{ $authenticatedSigning
-                    ? route('sign.account.signature.store', ['signerId' => $signer->id])
+                    ? route($accountRoutePrefix . '.signature.store', ['signerId' => $signer->id])
                     : route('sign.signature.store', $signer->access_token ?? $signer->id) }}" class="flex flex-col gap-3 border-t border-zinc-200/90 bg-zinc-50/40 px-6 py-4 dark:border-zinc-700 dark:bg-zinc-950/40">
                     @csrf
                     <input type="hidden" name="signature_field_id" id="modal-field-id" value="" />
@@ -368,7 +371,7 @@
         @elseif ($showLegacySign)
             <div class="ui-signsurface p-8">
                 <form method="POST" action="{{ $authenticatedSigning
-                    ? route('sign.account.store', ['signerId' => $signer->id])
+                    ? route($accountRoutePrefix . '.store', ['signerId' => $signer->id])
                     : route('sign.store', $signer->access_token ?? $signer->id) }}" class="flex flex-col gap-4">
                     @csrf
                     <p class="text-center text-sm text-zinc-600 dark:text-zinc-400">
@@ -413,10 +416,10 @@
                         'providerName' => config('services.remote_signing.provider_name', 'remote_managed'),
                         'canStart' => $showFieldEditing || $showLegacySign,
                         'startUrl' => $authenticatedSigning
-                            ? route('sign.account.trust.authorize', ['signerId' => $signer->id])
+                            ? route($accountRoutePrefix . '.trust.authorize', ['signerId' => $signer->id])
                             : route('sign.trust.authorize', $signer->access_token ?? $signer->id),
                         'pollUrlTemplate' => $authenticatedSigning
-                            ? route('sign.account.trust.authorize.poll', [
+                            ? route($accountRoutePrefix . '.trust.authorize.poll', [
                                 'signerId' => $signer->id,
                                 'session' => '__SESSION__',
                             ])

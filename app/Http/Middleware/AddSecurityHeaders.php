@@ -45,7 +45,7 @@ class AddSecurityHeaders
         $isEnotaryRoute = $this->isEnotaryRoute($request);
 
         if ($isEnotaryRoute) {
-            $response->headers->set('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
+            $response->headers->set('Permissions-Policy', $this->enotaryPermissionsPolicy());
             $scriptSrc .= ' https://meet.jit.si https://8x8.vc https://*.onjitsi.com';
             $connectSrc .= ' https://meet.jit.si https://*.jit.si wss://*.jit.si wss://meet.jit.si wss://8x8.vc https://8x8.vc https://*.onjitsi.com wss://*.onjitsi.com';
         } else {
@@ -81,6 +81,11 @@ class AddSecurityHeaders
             'notary-requests.session.live',
             'notary.requests.session.live',
         ]);
+    }
+
+    private function enotaryPermissionsPolicy(): string
+    {
+        return 'camera=(self "https://8x8.vc" "https://meet.jit.si"), microphone=(self "https://8x8.vc" "https://meet.jit.si"), display-capture=(self "https://8x8.vc" "https://meet.jit.si"), geolocation=(self)';
     }
 
     /**

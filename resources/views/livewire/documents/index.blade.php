@@ -70,6 +70,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $documentsQuery = Document::query()
             ->where('organization_id', $user?->organization_id)
+            ->whereNull('notary_request_id')
             ->when($isSignerView, function ($query) use ($user): void {
                 $query->where(function ($scopedQuery) use ($user): void {
                     $scopedQuery
