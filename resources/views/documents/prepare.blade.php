@@ -85,15 +85,10 @@
                             <form method="POST" action="{{ route(auth()->user()?->role->value === 'notary' ? 'notary.documents.send' : 'documents.send', $document) }}" class="contents">
                                 @csrf
                                 @if ($isAttorneySigningPhase ?? false)
-                                    {{-- Attorney signing phase: Save & Sign button (submits fields form via JS, then redirects to signing) --}}
-                                    <button
-                                        type="button"
-                                        id="btn-save-and-sign"
-                                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                        @if (! $firstSignerId) disabled @endif
-                                    >
-                                        {{ __('Save & Sign') }}
-                                    </button>
+                                    {{-- Attorney signing phase: Save button already redirects to signing page --}}
+                                    <span class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-100 px-4 py-2.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                                        {{ __('Save → Sign') }}
+                                    </span>
                                 @elseif ($document->notary_request_id !== null)
                                     <button
                                         type="submit"
@@ -238,19 +233,6 @@
         </script>
 
         @stack('scripts')
-        @if ($isAttorneySigningPhase ?? false)
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                const saveAndSignBtn = document.getElementById('btn-save-and-sign');
-                const saveBtn = document.getElementById('btn-save-fields');
-                if (saveAndSignBtn && saveBtn) {
-                    saveAndSignBtn.addEventListener('click', function() {
-                        saveBtn.click();
-                    });
-                }
-            });
-        </script>
-        @endif
         @fluxScripts
     </body>
 </html>
