@@ -66,6 +66,21 @@ class DocumentPrepareController extends Controller
             && $document->status === DocumentStatus::Pending
             && $document->documentSigners()->where('user_id', $user->id)->exists();
 
+        // In attorney signing phase, only show the attorney as available signer
+        if ($isAttorneySigningPhase) {
+            $signers = $document->documentSigners
+                ->filter(fn ($signer) => (int) $signer->user_id === (int) $user->id)
+                ->map(function ($signer): array {
+                    return [
+                        'id' => (int) $signer->id,
+                        'name' => (string) $signer->name,
+                        'email' => (string) $signer->email,
+                    ];
+                })
+                ->values();
+            $firstSignerId = $signers->first()['id'] ?? null;
+        }
+
         return view('documents.prepare', [
             'document' => $document,
             'pdfUrl' => $this->resolveStreamUrl($document),
