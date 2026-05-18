@@ -740,6 +740,39 @@ new #[Layout('components.layouts.app')] class extends Component {
         return true;
     }
 
+    /**
+     * Resend signing invitation email to a specific signer on a linked document.
+     */
+    public function resendSignerEmail(int $documentId, int $signerId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role->value === 'notary', 403);
+
+        $document = Document::query()
+            ->whereKey($documentId)
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->firstOrFail();
+
+        $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
+
+        if (! $signer->requiresAction()) {
+            $this->addError('resendEmail', __('This signer has already completed their action.'));
+            return;
+        }
+
+        $signingMethodService = app(\App\Services\SigningMethodService::class);
+
+        \App\Jobs\SendDocumentEmailJob::dispatch(
+            documentId: $document->id,
+            signerId: $signer->id,
+            recipientEmail: $signer->email,
+            type: \App\Jobs\SendDocumentEmailJob::TYPE_SENT_TO_SIGNER,
+            signUrl: $signingMethodService->signerEntryUrl($signer),
+        );
+
+        session()->flash('status', __('Signing invitation resent to :name.', ['name' => $signer->name]));
+    }
+
     public function replaceDocument(int $documentId): void
     {
         $user = Auth::user();
@@ -1493,13 +1526,30 @@ new #[Layout('components.layouts.app')] class extends Component {
                                                 <svg class="h-3 w-3 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
                                                 {{ __('Awaiting signer signatures') }}
                                             </span>
+                                            @if ($isNotary)
+                                                @foreach ($document->documentSigners->filter(fn ($s) => $s->requiresAction()) as $pendingSigner)
+                                                    <flux:button class="w-full sm:w-auto" size="sm" variant="ghost" type="button"
+                                                        wire:click="resendSignerEmail({{ $document->id }}, {{ $pendingSigner->id }})"
+                                                        wire:confirm="{{ __('Resend signing email to :name?', ['name' => $pendingSigner->name]) }}">
+                                                        {{ __('Resend to :name', ['name' => $pendingSigner->name]) }}
+                                                    </flux:button>
+                                                @endforeach
+                                            @endif
                                         @elseif ($document->status->value === 'completed')
                                             @if ($isNotary && $canAttorneySign)
                                                 @php
-                                                    $attorneyHasSigned = $document->documentSigners->contains(fn ($s) => (int) $s->user_id === (int) auth()->id() && $s->status->value === 'signed');
+                                                    $attorneySigner = $document->documentSigners->first(fn ($s) => (int) $s->user_id === (int) auth()->id());
+                                                    $attorneyHasSigned = $attorneySigner && $attorneySigner->status->value === 'signed';
                                                 @endphp
                                                 @if (! $attorneyHasSigned)
                                                     <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="signAsAttorney({{ $document->id }})">{{ __('Sign as Attorney') }}</flux:button>
+                                                    @if ($attorneySigner)
+                                                        <a href="{{ route('notary.sign.account.show', $attorneySigner->id) }}"
+                                                           class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300 dark:hover:bg-indigo-950/50 sm:w-auto">
+                                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"/></svg>
+                                                            {{ __('Open signing page') }}
+                                                        </a>
+                                                    @endif
                                                 @else
                                                     <span class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
                                                         <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
