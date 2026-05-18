@@ -680,8 +680,9 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 
     /**
-     * Add the attorney as a signer on a document so they can sign their part.
-     * This is available after the video session is completed and identity is verified.
+     * Prepare attorney signature fields on a completed document.
+     * Adds the attorney as a signer and redirects to the prepare page
+     * so they can place their signature fields on the already-signed document.
      */
     public function signAsAttorney(int $documentId): void
     {
@@ -711,8 +712,13 @@ new #[Layout('components.layouts.app')] class extends Component {
             ]);
         }
 
-        // Redirect attorney to the signing page
-        $this->redirect(route('notary.sign.account.show', $attorneySigner->id), navigate: true);
+        // Transition document to pending so the prepare page allows field placement
+        if ($document->status === \App\Enums\DocumentStatus::Completed) {
+            $document->update(['status' => \App\Enums\DocumentStatus::Pending]);
+        }
+
+        // Redirect to prepare page so attorney can place their signature fields
+        $this->redirect(route('notary.documents.prepare', $document), navigate: true);
     }
 
     /**
@@ -1522,18 +1528,37 @@ new #[Layout('components.layouts.app')] class extends Component {
                                                 <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="sendLinkedDocument({{ $document->id }})" wire:confirm="{{ __('Send this document to signers for signing?') }}">{{ __('Send to signers') }}</flux:button>
                                             @endif
                                         @elseif ($document->status->value === 'pending')
-                                            <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300">
-                                                <svg class="h-3 w-3 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
-                                                {{ __('Awaiting signer signatures') }}
-                                            </span>
-                                            @if ($isNotary)
-                                                @foreach ($document->documentSigners->filter(fn ($s) => $s->requiresAction()) as $pendingSigner)
-                                                    <flux:button class="w-full sm:w-auto" size="sm" variant="ghost" type="button"
-                                                        wire:click="resendSignerEmail({{ $document->id }}, {{ $pendingSigner->id }})"
-                                                        wire:confirm="{{ __('Resend signing email to :name?', ['name' => $pendingSigner->name]) }}">
-                                                        {{ __('Resend to :name', ['name' => $pendingSigner->name]) }}
-                                                    </flux:button>
-                                                @endforeach
+                                            @php
+                                                $isAttorneySigningPhase = $isNotary && $document->documentSigners->contains(fn ($s) => (int) $s->user_id === (int) auth()->id() && $s->status->value === 'pending');
+                                            @endphp
+                                            @if ($isAttorneySigningPhase)
+                                                {{-- Attorney signing phase: show prepare/sign links --}}
+                                                <flux:button class="w-full sm:w-auto" variant="outline" :href="route('notary.documents.prepare', $document)" wire:navigate>{{ __('Prepare Attorney Fields') }}</flux:button>
+                                                @php
+                                                    $attorneySigner = $document->documentSigners->first(fn ($s) => (int) $s->user_id === (int) auth()->id());
+                                                @endphp
+                                                @if ($attorneySigner && $document->signatureFields->where('signer_id', $attorneySigner->id)->isNotEmpty())
+                                                    <a href="{{ route('notary.sign.account.show', $attorneySigner->id) }}"
+                                                       class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:w-auto">
+                                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"/></svg>
+                                                        {{ __('Sign Document') }}
+                                                    </a>
+                                                @endif
+                                            @else
+                                                {{-- Normal pending: awaiting client signatures --}}
+                                                <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300">
+                                                    <svg class="h-3 w-3 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
+                                                    {{ __('Awaiting signer signatures') }}
+                                                </span>
+                                                @if ($isNotary)
+                                                    @foreach ($document->documentSigners->filter(fn ($s) => $s->requiresAction()) as $pendingSigner)
+                                                        <flux:button class="w-full sm:w-auto" size="sm" variant="ghost" type="button"
+                                                            wire:click="resendSignerEmail({{ $document->id }}, {{ $pendingSigner->id }})"
+                                                            wire:confirm="{{ __('Resend signing email to :name?', ['name' => $pendingSigner->name]) }}">
+                                                            {{ __('Resend to :name', ['name' => $pendingSigner->name]) }}
+                                                        </flux:button>
+                                                    @endforeach
+                                                @endif
                                             @endif
                                         @elseif ($document->status->value === 'completed')
                                             @if ($isNotary && $canAttorneySign)
@@ -1542,7 +1567,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                                     $attorneyHasSigned = $attorneySigner && $attorneySigner->status->value === 'signed';
                                                 @endphp
                                                 @if (! $attorneyHasSigned)
-                                                    <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="signAsAttorney({{ $document->id }})">{{ __('Sign as Attorney') }}</flux:button>
+                                                    <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="signAsAttorney({{ $document->id }})">{{ __('Prepare Attorney Fields') }}</flux:button>
                                                     @if ($attorneySigner)
                                                         <a href="{{ route('notary.sign.account.show', $attorneySigner->id) }}"
                                                            class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300 dark:hover:bg-indigo-950/50 sm:w-auto">

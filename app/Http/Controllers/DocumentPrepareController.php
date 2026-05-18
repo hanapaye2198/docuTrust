@@ -30,7 +30,12 @@ class DocumentPrepareController extends Controller
             $this->syncNotarySignersToDocument($document);
         }
 
-        if ($document->status !== DocumentStatus::Draft) {
+        // For eNOTARY documents, allow pending status (attorney signing phase)
+        if ($document->notary_request_id !== null && auth()->id() === $document->notaryRequest->notary_user_id) {
+            if (! in_array($document->status, [DocumentStatus::Draft, DocumentStatus::Pending], true)) {
+                abort(403);
+            }
+        } elseif ($document->status !== DocumentStatus::Draft) {
             abort(403);
         }
 
@@ -112,6 +117,20 @@ class DocumentPrepareController extends Controller
             ? 'notary.documents.prepare'
             : 'documents.prepare';
 
+        // For eNOTARY documents: after attorney saves their fields, redirect to signing page
+        if ($document->notary_request_id !== null && auth()->user()?->role->value === 'notary') {
+            $user = auth()->user();
+            $attorneySigner = $document->documentSigners()
+                ->where('user_id', $user->id)
+                ->first();
+
+            if ($attorneySigner !== null) {
+                return redirect()
+                    ->route('notary.sign.account.show', $attorneySigner->id)
+                    ->with('status', __('Signature fields saved. Please sign the document.'));
+            }
+        }
+
         return redirect()
             ->route($redirectRoute, $document)
             ->with('status', __('Signature fields saved.'));
@@ -183,11 +202,19 @@ class DocumentPrepareController extends Controller
     {
         $user = auth()->user();
 
+        // For eNOTARY attorney signing phase (document is pending after clients signed),
+        // use the prepared/final PDF so client signatures are visible
+        $useSignedPdf = $document->notary_request_id !== null
+            && $document->status === DocumentStatus::Pending
+            && ($document->prepared_pdf_path !== null || $document->final_pdf_path !== null);
+
+        $source = $useSignedPdf ? 0 : 1;
+
         // Use the notary-specific stream route for notary users
         if ($user !== null && $user->role->value === 'notary') {
-            return route('notary.documents.stream', ['document' => $document, 'source' => 1], false);
+            return route('notary.documents.stream', ['document' => $document, 'source' => $source], false);
         }
 
-        return route('documents.stream', ['document' => $document, 'source' => 1], false);
+        return route('documents.stream', ['document' => $document, 'source' => $source], false);
     }
 }
