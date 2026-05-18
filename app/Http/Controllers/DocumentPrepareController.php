@@ -65,6 +65,9 @@ class DocumentPrepareController extends Controller
             && $user?->role->value === 'notary'
             && $document->status === DocumentStatus::Pending
             && $document->documentSigners()->where('user_id', $user->id)->exists();
+        $attorneySigner = $isAttorneySigningPhase
+            ? $document->documentSigners->first(fn ($signer) => (int) $signer->user_id === (int) $user?->id)
+            : null;
 
         // In attorney signing phase, only show the attorney as available signer
         if ($isAttorneySigningPhase) {
@@ -81,6 +84,12 @@ class DocumentPrepareController extends Controller
             $firstSignerId = $signers->first()['id'] ?? null;
         }
 
+        $initialFieldsQuery = $document->signatureFields()->orderBy('id');
+
+        if ($isAttorneySigningPhase && $attorneySigner !== null) {
+            $initialFieldsQuery->where('signer_id', $attorneySigner->id);
+        }
+
         return view('documents.prepare', [
             'document' => $document,
             'pdfUrl' => $this->resolveStreamUrl($document),
@@ -88,8 +97,7 @@ class DocumentPrepareController extends Controller
             'signers' => $signers,
             'canSend' => ! $isAttorneySigningPhase && $document->canSendForSigning(),
             'isAttorneySigningPhase' => $isAttorneySigningPhase,
-            'initialFields' => $document->signatureFields()
-                ->orderBy('id')
+            'initialFields' => $initialFieldsQuery
                 ->get()
                 ->map(fn (SignatureField $f) => [
                     'id' => $f->id,
@@ -120,11 +128,25 @@ class DocumentPrepareController extends Controller
             && $user?->role->value === 'notary'
             && $document->status === DocumentStatus::Pending
             && $document->documentSigners()->where('user_id', $user->id)->exists();
+        $attorneySigner = $isAttorneySigningPhase
+            ? $document->documentSigners()->where('user_id', $user?->id)->first()
+            : null;
 
-        DB::transaction(function () use ($document, $fields, $ip, $isAttorneySigningPhase, $user): void {
+        if ($isAttorneySigningPhase) {
+            if ($attorneySigner === null) {
+                abort(422, __('Unable to resolve the attorney signer for this document.'));
+            }
+
+            foreach ($fields as $field) {
+                if ((int) $field['signer_id'] !== (int) $attorneySigner->id) {
+                    abort(422, __('Attorney signing phase only allows fields assigned to the attorney.'));
+                }
+            }
+        }
+
+        DB::transaction(function () use ($document, $fields, $ip, $isAttorneySigningPhase, $user, $attorneySigner): void {
             if ($isAttorneySigningPhase) {
                 // Attorney signing phase: only delete attorney's fields, keep client fields intact
-                $attorneySigner = $document->documentSigners()->where('user_id', $user->id)->first();
                 if ($attorneySigner) {
                     $document->signatureFields()->where('signer_id', $attorneySigner->id)->delete();
                 }
@@ -238,18 +260,25 @@ class DocumentPrepareController extends Controller
         $user = auth()->user();
 
         // For eNOTARY attorney signing phase (document is pending after clients signed),
-        // use the prepared/final PDF so client signatures are visible
-        $useSignedPdf = $document->notary_request_id !== null
+        // use a signed-only preview so completed signer marks appear in the PDF background
+        // without re-drawing their interactive fields on the prepare canvas.
+        $useSignedPreview = $document->notary_request_id !== null
             && $document->status === DocumentStatus::Pending
-            && ($document->prepared_pdf_path !== null || $document->final_pdf_path !== null);
-
-        $source = $useSignedPdf ? 0 : 1;
+            && $document->signatures()->exists();
 
         // Use the notary-specific stream route for notary users
         if ($user !== null && $user->role->value === 'notary') {
-            return route('notary.documents.stream', ['document' => $document, 'source' => $source], false);
+            return route('notary.documents.stream', [
+                'document' => $document,
+                'source' => $useSignedPreview ? 0 : 1,
+                'signed_preview' => $useSignedPreview ? 1 : 0,
+            ], false);
         }
 
-        return route('documents.stream', ['document' => $document, 'source' => $source], false);
+        return route('documents.stream', [
+            'document' => $document,
+            'source' => $useSignedPreview ? 0 : 1,
+            'signed_preview' => $useSignedPreview ? 1 : 0,
+        ], false);
     }
 }

@@ -10,6 +10,7 @@ use App\Jobs\GenerateCertificateJob;
 use App\Jobs\GenerateDocumentPdfJob;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\NotaryRequest;
 use App\Models\Signature;
 use App\Models\SignatureAuditEvent;
 use App\Models\SignatureField;
@@ -172,6 +173,91 @@ class SignatureEngineTest extends TestCase
             ->assertOk()
             ->assertSee('template-prepare-config')
             ->assertSee('source=1');
+    }
+
+    public function test_attorney_prepare_page_only_hydrates_attorney_fields_and_uses_signed_preview_stream(): void
+    {
+        Storage::fake('local');
+
+        $client = User::factory()->client()->create();
+        $notary = User::factory()->notary()->create([
+            'organization_id' => $client->organization_id,
+        ]);
+
+        $notaryRequest = NotaryRequest::factory()->create([
+            'organization_id' => $client->organization_id,
+            'user_id' => $client->id,
+            'notary_user_id' => $notary->id,
+        ]);
+
+        $path = 'documents/attorney-prepare-source.pdf';
+        $this->putValidPdf($path);
+
+        $document = Document::factory()->create([
+            'organization_id' => $client->organization_id,
+            'user_id' => $client->id,
+            'notary_request_id' => $notaryRequest->id,
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+        ]);
+
+        $clientSigner = DocumentSigner::factory()->for($document)->create([
+            'name' => 'Client Signer',
+            'email' => 'client-signer@example.test',
+        ]);
+        $attorneySigner = DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'name' => 'Attorney Signer',
+            'email' => $notary->email,
+        ]);
+
+        $clientField = SignatureField::factory()->create([
+            'document_id' => $document->id,
+            'signer_id' => $clientSigner->id,
+        ]);
+        $attorneyField = SignatureField::factory()->create([
+            'document_id' => $document->id,
+            'signer_id' => $attorneySigner->id,
+        ]);
+
+        Signature::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $clientSigner->id,
+            'signature_field_id' => $clientField->id,
+            'signature_path' => $this->storeTinySignaturePng(),
+            'signature_algorithm' => 'RSA-SHA256',
+        ]);
+
+        $this->actingAs($notary)
+            ->get(route('notary.documents.prepare', $document))
+            ->assertOk()
+            ->assertSee('signed_preview=1')
+            ->assertSee('"signer_id":'.$attorneySigner->id, false)
+            ->assertDontSee('"signer_id":'.$clientSigner->id, false)
+            ->assertSee('Attorney Signer', false)
+            ->assertDontSee('Client Signer', false);
+
+        $this->actingAs($notary)
+            ->post(route('notary.documents.signature-fields.store', $document), [
+                'fields' => [
+                    [
+                        'signer_id' => $clientSigner->id,
+                        'type' => SignatureFieldType::Signature->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => 0.1,
+                            'y' => 0.2,
+                            'width' => 0.25,
+                            'height' => 0.08,
+                        ],
+                    ],
+                ],
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount('signature_fields', 2);
+        $this->assertDatabaseHas('signature_fields', ['id' => $clientField->id]);
+        $this->assertDatabaseHas('signature_fields', ['id' => $attorneyField->id]);
     }
 
     public function test_owner_is_redirected_to_document_page_when_prepare_has_no_signers(): void

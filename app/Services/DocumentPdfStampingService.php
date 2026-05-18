@@ -28,6 +28,11 @@ class DocumentPdfStampingService
         return $this->generate($document->fresh(), 'final');
     }
 
+    public function generateSignedPreviewPdf(Document $document): ?string
+    {
+        return $this->generate($document->fresh(), 'signed_preview');
+    }
+
     private function generate(Document $document, string $mode): ?string
     {
         $sourcePath = $mode === 'final'
@@ -88,11 +93,11 @@ class DocumentPdfStampingService
 
             $disk->put($generatedPath, $pdf->Output('S'));
 
-            $attributes = $mode === 'final'
-                ? ['final_pdf_path' => $generatedPath]
-                : ['prepared_pdf_path' => $generatedPath, 'final_pdf_path' => null];
-
-            $document->update($attributes);
+            if ($mode === 'final') {
+                $document->update(['final_pdf_path' => $generatedPath]);
+            } elseif ($mode === 'prepared') {
+                $document->update(['prepared_pdf_path' => $generatedPath, 'final_pdf_path' => null]);
+            }
 
             return $generatedPath;
         } catch (Throwable $throwable) {
@@ -127,6 +132,16 @@ class DocumentPdfStampingService
 
         if ($mode === 'prepared') {
             $this->drawPreparedField($pdf, $type, $field, $x, $y, $width, $height);
+
+            return;
+        }
+
+        if ($mode === 'signed_preview') {
+            if ($signature === null) {
+                return;
+            }
+
+            $this->drawFinalField($pdf, $type, $field, $signature, $x, $y, $width, $height);
 
             return;
         }
