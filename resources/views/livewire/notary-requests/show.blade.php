@@ -886,16 +886,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             return false;
         }
 
-        // Must be in a valid status for scheduling
-        if (! in_array($this->notaryRequest->status, [
-            NotaryRequestStatus::Submitted,
-            NotaryRequestStatus::IdentityVerified,
-            NotaryRequestStatus::LocationVerified,
-        ], true)) {
-            return false;
-        }
-
-        // All linked documents must have all signers signed (status = pending or completed means sent)
+        // All linked documents must have all signers signed
         $documents = $this->notaryRequest->documents;
         if ($documents->isEmpty()) {
             return false;

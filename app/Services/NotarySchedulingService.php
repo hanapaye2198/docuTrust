@@ -25,6 +25,7 @@ class NotarySchedulingService
         ?User $attorney = null,
     ): NotarySession {
         if (! in_array($request->status, [
+            NotaryRequestStatus::Draft,
             NotaryRequestStatus::Submitted,
             NotaryRequestStatus::IdentityVerified,
             NotaryRequestStatus::LocationVerified,
