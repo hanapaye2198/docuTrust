@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Contracts\Ekyc\IdDocumentTextExtractor;
 use App\Enums\OnboardingStep;
 use App\Mail\EmailOtpVerificationMail;
 use App\Models\User;
@@ -191,11 +192,19 @@ class OnboardingFlowTest extends TestCase
     public function test_kyc_continue_stores_file_and_advances_to_mfa(): void
     {
         $user = User::factory()->signer()->create([
+            'first_name' => 'Test',
+            'last_name' => 'User',
+            'name' => 'Test User',
             'onboarding_step' => OnboardingStep::Kyc,
             'email_verified_at' => now(),
             'mobile_verified_at' => now(),
             'mfa_enabled' => false,
         ]);
+
+        $this->mock(IdDocumentTextExtractor::class)
+            ->shouldReceive('extract')
+            ->once()
+            ->andReturn('TEST USER GOVERNMENT ID');
 
         $this->actingAs($user);
 

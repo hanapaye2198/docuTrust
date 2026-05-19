@@ -24,6 +24,16 @@ class User extends Authenticatable implements MustVerifyEmail
 
     protected static function booted(): void
     {
+        static::saving(function (User $user): void {
+            if ($user->isDirty(['first_name', 'middle_name', 'last_name', 'suffix'])) {
+                $fullName = $user->buildFullName();
+
+                if ($fullName !== '') {
+                    $user->name = $fullName;
+                }
+            }
+        });
+
         static::creating(function (User $user): void {
             if ($user->organization_id !== null) {
                 return;
@@ -54,6 +64,10 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $fillable = [
         'organization_id',
         'name',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'suffix',
         'email',
         'password',
         'role',
@@ -64,9 +78,20 @@ class User extends Authenticatable implements MustVerifyEmail
         'email_otp_expires_at',
         'mobile_number',
         'mobile_verified_at',
+        'profile_photo_path',
+        'address',
+        'nationality',
+        'date_of_birth',
+        'government_id_type',
+        'government_id_number',
         'kyc_id_type',
         'kyc_file_path',
         'kyc_verified_at',
+        'selfie_verified_at',
+        'gps_permission_granted_at',
+        'signature_image_path',
+        'signature_initials',
+        'signature_type',
         'mfa_enabled',
         'two_factor_secret',
         'two_factor_recovery_codes',
@@ -108,7 +133,10 @@ class User extends Authenticatable implements MustVerifyEmail
             'two_factor_onboarding_completed_at' => 'datetime',
             'email_otp_expires_at' => 'datetime',
             'mobile_verified_at' => 'datetime',
+            'date_of_birth' => 'date',
             'kyc_verified_at' => 'datetime',
+            'selfie_verified_at' => 'datetime',
+            'gps_permission_granted_at' => 'datetime',
             'mfa_enabled' => 'boolean',
         ];
     }
@@ -149,6 +177,73 @@ class User extends Authenticatable implements MustVerifyEmail
     public function hasVerifiedEkyc(): bool
     {
         return $this->ekyc_status === EkycStatus::Verified;
+    }
+
+    public function buildFullName(): string
+    {
+        return collect([
+            $this->first_name,
+            $this->middle_name,
+            $this->last_name,
+            $this->suffix,
+        ])
+            ->filter(fn (?string $value): bool => filled($value))
+            ->map(fn (string $value): string => trim($value))
+            ->implode(' ');
+    }
+
+    public function resolvedFirstName(): string
+    {
+        if (filled($this->first_name)) {
+            return trim((string) $this->first_name);
+        }
+
+        $parts = preg_split('/\s+/', trim((string) $this->name)) ?: [];
+
+        return $parts[0] ?? '';
+    }
+
+    public function resolvedMiddleName(): string
+    {
+        if (filled($this->middle_name)) {
+            return trim((string) $this->middle_name);
+        }
+
+        $parts = preg_split('/\s+/', trim((string) $this->name)) ?: [];
+
+        if (count($parts) <= 2) {
+            return '';
+        }
+
+        array_shift($parts);
+        array_pop($parts);
+
+        return implode(' ', $parts);
+    }
+
+    public function resolvedLastName(): string
+    {
+        if (filled($this->last_name)) {
+            return trim((string) $this->last_name);
+        }
+
+        $parts = preg_split('/\s+/', trim((string) $this->name)) ?: [];
+
+        if ($parts === []) {
+            return '';
+        }
+
+        return $parts[count($parts) - 1];
+    }
+
+    public function displayFirstName(): string
+    {
+        return $this->resolvedFirstName();
+    }
+
+    public function displayLastName(): string
+    {
+        return $this->resolvedLastName();
     }
 
     public function homeRouteName(): string
@@ -312,5 +407,13 @@ class User extends Authenticatable implements MustVerifyEmail
     public function trustedDevices(): HasMany
     {
         return $this->hasMany(TrustedDevice::class)->latest('last_used_at');
+    }
+
+    /**
+     * @return HasMany<OnboardingAuditLog, $this>
+     */
+    public function onboardingAuditLogs(): HasMany
+    {
+        return $this->hasMany(OnboardingAuditLog::class)->latest('created_at');
     }
 }

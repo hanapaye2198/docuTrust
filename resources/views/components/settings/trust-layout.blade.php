@@ -3,9 +3,9 @@
         <flux:navlist>
             <flux:navlist.item href="{{ route('settings.trust-profile') }}" wire:navigate>{{ __('Trust profile') }}</flux:navlist.item>
             <flux:navlist.item href="{{ route('settings.profile') }}" wire:navigate>{{ __('Account') }}</flux:navlist.item>
-            <flux:navlist.item href="{{ route('settings.password') }}" wire:navigate>Password</flux:navlist.item>
+            <flux:navlist.item href="{{ route('settings.password') }}" wire:navigate>{{ __('Password') }}</flux:navlist.item>
             <flux:navlist.item href="{{ route('settings.security') }}" wire:navigate>{{ __('Security') }}</flux:navlist.item>
-            <flux:navlist.item href="{{ route('settings.appearance') }}" wire:navigate>Appearance</flux:navlist.item>
+            <flux:navlist.item href="{{ route('settings.appearance') }}" wire:navigate>{{ __('Appearance') }}</flux:navlist.item>
         </flux:navlist>
     </div>
 
@@ -15,7 +15,7 @@
         <flux:heading>{{ $heading ?? '' }}</flux:heading>
         <flux:subheading>{{ $subheading ?? '' }}</flux:subheading>
 
-        <div class="mt-5 w-full max-w-lg">
+        <div class="mt-5 w-full max-w-6xl">
             {{ $slot }}
         </div>
     </div>

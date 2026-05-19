@@ -25,7 +25,7 @@ class AuthenticationTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('e-Notary', escape: false);
-        $response->assertSee('Portal access', escape: false);
+        $response->assertSee('Notary workspace', escape: false);
     }
 
     public function test_legacy_e_notary_login_route_redirects_to_login_mode(): void

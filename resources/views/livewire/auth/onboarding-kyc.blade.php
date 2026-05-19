@@ -2,8 +2,12 @@
 
 use App\Enums\EkycStatus;
 use App\Enums\OnboardingStep;
+use App\Exceptions\EkycOcrUnavailableException;
+use App\Models\EkycRecord;
+use App\Services\Ekyc\EkycNameVerificationService;
 use App\Services\OnboardingAuditLogger;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -17,8 +21,10 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
     /** @var \Livewire\Features\SupportFileUploads\TemporaryUploadedFile|null */
     public $id_document = null;
 
-    public function continue(OnboardingAuditLogger $auditLogger): void
-    {
+    public function continue(
+        EkycNameVerificationService $verificationService,
+        OnboardingAuditLogger $auditLogger,
+    ): void {
         $this->validate([
             'kyc_id_type' => ['required', 'string', Rule::in(['passport', 'drivers_license', 'national_id'])],
             'id_document' => ['required', 'image', 'max:5120'],
@@ -32,6 +38,50 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
         }
 
         $path = $this->id_document->store('kyc/'.$user->id, 'local');
+        $absolutePath = Storage::disk('local')->path($path);
+
+        try {
+            $result = $verificationService->verify($user, $absolutePath);
+        } catch (EkycOcrUnavailableException $exception) {
+            Storage::disk('local')->delete($path);
+
+            $this->addError('id_document', $exception->getMessage());
+
+            return;
+        }
+
+        if (! $result->matched) {
+            EkycRecord::query()->create([
+                'user_id' => $user->id,
+                'document_type' => $this->kyc_id_type,
+                'document_path' => $path,
+                'ocr_text' => $result->ocrText,
+                'status' => EkycStatus::Rejected->value,
+                'rejection_reason' => $result->message,
+            ]);
+
+            $user->forceFill([
+                'kyc_id_type' => $this->kyc_id_type,
+                'kyc_file_path' => $path,
+                'kyc_verified_at' => null,
+                'ekyc_status' => EkycStatus::Rejected,
+            ])->save();
+
+            $auditLogger->log($user, 'ekyc_name_mismatch');
+
+            $this->addError('id_document', $result->message);
+
+            return;
+        }
+
+        EkycRecord::query()->create([
+            'user_id' => $user->id,
+            'document_type' => $this->kyc_id_type,
+            'document_path' => $path,
+            'ocr_text' => $result->ocrText,
+            'status' => EkycStatus::Verified->value,
+            'verified_at' => now(),
+        ]);
 
         $user->forceFill([
             'kyc_id_type' => $this->kyc_id_type,
@@ -66,7 +116,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
 <x-auth.onboarding-wizard-shell :active-step="3">
     <h1 class="text-2xl font-semibold tracking-tight text-[#1F2937] dark:text-zinc-100 sm:text-3xl">{{ __('Verify your Identity') }}</h1>
-    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">{{ __('Choose an ID and upload a clear photo. This helps keep signing workflows secure and compliant.') }}</p>
+    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">{{ __('Upload a clear photo of your government ID. We will check that the name on the ID matches the name on your account.') }}</p>
 
     <x-auth-session-status class="mt-4 rounded-xl border border-[#2EC4B6]/25 bg-[#2EC4B6]/10 px-4 py-3 text-center text-sm text-[#1B5E20] dark:border-teal-500/30 dark:text-teal-300" :status="session('status')" />
 
@@ -77,7 +127,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                 <flux:select.option value="drivers_license">{{ __('Driver\'s License') }}</flux:select.option>
                 <flux:select.option value="national_id">{{ __('National ID') }}</flux:select.option>
             </flux:select>
-            <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Make sure details are readable and not cropped.') }}</p>
+            <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Use the same name as when you registered: :name', ['name' => auth()->user()?->name ?? '—']) }}</p>
         </div>
 
         <div>
@@ -97,9 +147,9 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             <flux:error name="id_document" />
         </div>
 
-        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="continue" class="w-full bg-[#2EC4B6] text-white shadow-md shadow-[#2EC4B6]/25 transition hover:bg-[#1B5E20] hover:text-white">
-            <span wire:loading.remove wire:target="continue">{{ __('Continue') }}</span>
-            <span wire:loading wire:target="continue">{{ __('Uploading…') }}</span>
+        <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="continue,id_document" class="w-full bg-[#2EC4B6] text-white shadow-md shadow-[#2EC4B6]/25 transition hover:bg-[#1B5E20] hover:text-white">
+            <span wire:loading.remove wire:target="continue,id_document">{{ __('Continue') }}</span>
+            <span wire:loading wire:target="continue,id_document">{{ __('Verifying name on ID…') }}</span>
         </flux:button>
 
         <div class="relative">

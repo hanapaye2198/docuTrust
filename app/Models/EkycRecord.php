@@ -17,7 +17,9 @@ class EkycRecord extends Model
         'user_id',
         'document_type',
         'document_path',
+        'ocr_text',
         'status',
+        'rejection_reason',
         'verified_by',
         'verified_at',
     ];

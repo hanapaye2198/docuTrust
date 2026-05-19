@@ -29,9 +29,16 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        $firstName = fake()->firstName();
+        $lastName = fake()->lastName();
+
         return [
             'organization_id' => Organization::factory(),
-            'name' => fake()->name(),
+            'first_name' => $firstName,
+            'middle_name' => null,
+            'last_name' => $lastName,
+            'suffix' => null,
+            'name' => $firstName.' '.$lastName,
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'onboarding_step' => OnboardingStep::Completed,

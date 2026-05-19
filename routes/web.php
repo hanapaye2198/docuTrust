@@ -8,6 +8,8 @@ use App\Http\Controllers\EmailInfrastructureExampleController;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
+use App\Http\Controllers\TrustProfileAssetController;
+use App\Http\Middleware\AllowMediaPermissions;
 use App\Services\NotarialRegisterService;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -71,7 +73,7 @@ Route::middleware(['auth', 'role:notary'])->group(function () {
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
-    Volt::route('notary/requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary.requests.session.live')->middleware(\App\Http\Middleware\AllowMediaPermissions::class);
+    Volt::route('notary/requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary.requests.session.live')->middleware(AllowMediaPermissions::class);
     Volt::route('notary/requests/{notaryRequest}/register-entry', 'notary.register-entry')->name('notary.register-entry');
 
     // Attorney access to document preparation and field placement for eNOTARY documents
@@ -87,7 +89,7 @@ Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
     Volt::route('notary-requests', 'notary-requests.index')->name('notary-requests.index');
     Volt::route('notary-requests/create', 'notary-requests.create')->name('notary-requests.create');
     Volt::route('notary-requests/{notaryRequest}', 'notary-requests.show')->name('notary-requests.show');
-    Volt::route('notary-requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary-requests.session.live')->middleware(\App\Http\Middleware\AllowMediaPermissions::class);
+    Volt::route('notary-requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary-requests.session.live')->middleware(AllowMediaPermissions::class);
 
     Volt::route('documents', 'documents.index')->name('documents.index');
     Volt::route('documents/create', 'documents.create')->name('documents.create');
@@ -112,8 +114,11 @@ Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
 });
 
 Route::middleware(['auth'])->group(function () {
-    Route::redirect('settings', 'settings/profile');
+    Route::redirect('settings', 'settings/trust-profile');
 
+    Volt::route('settings/trust-profile', 'settings.trust-profile')->name('settings.trust-profile');
+    Route::get('settings/trust-profile/photo', [TrustProfileAssetController::class, 'photo'])->name('settings.trust-profile.photo');
+    Route::get('settings/trust-profile/signature', [TrustProfileAssetController::class, 'signature'])->name('settings.trust-profile.signature');
     Volt::route('settings/profile', 'settings.profile')->name('settings.profile');
     Volt::route('settings/password', 'settings.password')->name('settings.password');
     Volt::route('settings/security', 'settings.security')->name('settings.security');

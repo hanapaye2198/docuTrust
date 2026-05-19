@@ -54,6 +54,10 @@ class RegistrationTest extends TestCase
         $user = User::query()->where('email', 'test@example.com')->first();
         $this->assertNotNull($user);
         $this->assertSame('Test Sample User Jr.', $user->name);
+        $this->assertSame('Test', $user->first_name);
+        $this->assertSame('Sample', $user->middle_name);
+        $this->assertSame('User', $user->last_name);
+        $this->assertSame('Jr.', $user->suffix);
         $this->assertFalse((bool) $user->two_factor_enabled);
         $this->assertFalse($user->mfa_enabled);
         $this->assertNotNull($user->email_otp);

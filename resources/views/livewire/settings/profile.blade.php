@@ -72,7 +72,14 @@ new class extends Component {
 <section class="w-full">
     @include('partials.settings-heading')
 
-    <x-settings.layout heading="Profile" subheading="Update your name and email address">
+    <x-settings.layout heading="{{ __('Account') }}" subheading="{{ __('Name and email used to sign in') }}">
+        <div class="mb-6 rounded-xl border border-teal-200/80 bg-teal-50/80 px-4 py-3 text-sm dark:border-teal-900/40 dark:bg-teal-950/30">
+            <a href="{{ route('settings.trust-profile') }}" wire:navigate class="font-medium text-teal-800 hover:underline dark:text-teal-300">
+                {{ __('Open trust & verification center →') }}
+            </a>
+            <p class="mt-1 text-zinc-600 dark:text-zinc-400">{{ __('Identity, MFA, signatures, and eNOTARY readiness live there.') }}</p>
+        </div>
+
         <form wire:submit="updateProfileInformation" class="my-6 w-full space-y-6">
             <flux:input wire:model="name" label="{{ __('Name') }}" type="text" name="name" required autofocus autocomplete="name" />
 

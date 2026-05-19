@@ -7,10 +7,11 @@
 
 @php
     use App\Enums\UserRole;
-    $notifications = auth()->user()->appNotifications()->limit(8)->get();
-    $unreadCount = auth()->user()->appNotifications()->whereNull('read_at')->count();
+    $authUser = auth()->user();
+    $notifications = $authUser->appNotifications()->limit(8)->get();
+    $unreadCount = $authUser->appNotifications()->whereNull('read_at')->count();
     $hasBreadcrumbs = $breadcrumbs !== [];
-    $canWorkspaceTools = auth()->user()->canAccessWorkspaceTools();
+    $canWorkspaceTools = $authUser->canAccessWorkspaceTools();
 @endphp
 
 <div class="flex w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white/90 shadow-sm shadow-zinc-950/5 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/85 dark:shadow-black/30">
@@ -97,55 +98,8 @@
             </flux:dropdown>
         </div>
 
-        <flux:dropdown class="lg:hidden" position="bottom" align="end">
-            <flux:profile :initials="auth()->user()->initials()" icon-trailing="chevron-down" />
+        <x-user.profile-menu :user="$authUser" class="shrink-0" />
 
-            <flux:menu>
-                <flux:menu.radio.group>
-                    <div class="p-0 text-sm font-normal">
-                        <div class="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                            <span class="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-lg">
-                                <span
-                                    class="flex h-full w-full items-center justify-center rounded-lg bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white"
-                                >
-                                    {{ auth()->user()->initials() }}
-                                </span>
-                            </span>
-
-                            <div class="grid flex-1 text-left text-sm leading-tight">
-                                <span class="truncate font-semibold">{{ auth()->user()->name }}</span>
-                                <span class="truncate text-xs">{{ auth()->user()->email }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </flux:menu.radio.group>
-
-                <flux:menu.separator />
-
-                <flux:menu.radio.group>
-                    <flux:menu.item :href="route('settings.profile')" icon="cog" wire:navigate>Settings</flux:menu.item>
-                </flux:menu.radio.group>
-
-                <flux:menu.separator />
-
-                <form method="POST" action="{{ route('logout') }}" class="w-full">
-                    @csrf
-                    <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full">
-                        {{ __('Log Out') }}
-                    </flux:menu.item>
-                </form>
-            </flux:menu>
-        </flux:dropdown>
-
-        <div class="hidden min-w-0 items-center gap-3 lg:flex">
-            <a
-                href="{{ route('settings.profile') }}"
-                wire:navigate
-                class="cursor-pointer truncate rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1.5 text-base font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
-            >
-                {{ auth()->user()->name }}
-            </a>
-        </div>
     </div>
 
     @if ($hasBreadcrumbs)

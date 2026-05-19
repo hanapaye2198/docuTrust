@@ -51,6 +51,10 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
         $user = User::query()->create([
             'name' => $fullName,
+            'first_name' => $validated['first_name'],
+            'middle_name' => $validated['middle_name'] ?? null,
+            'last_name' => $validated['last_name'],
+            'suffix' => $validated['suffix'] ?? null,
             'email' => $validated['email'],
             'password' => $validated['password'],
             'role' => UserRole::Client,

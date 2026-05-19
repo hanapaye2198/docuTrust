@@ -79,6 +79,16 @@
     }
 }
 
+@keyframes login-shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
 @layer base {
 
     *,
@@ -217,6 +227,34 @@
 
     [data-flux-sidebar] [data-flux-profile] span.mx-2 {
         @apply text-base;
+    }
+
+    .login-shell[data-mode='enotary'] .login-accent-bar {
+        @apply from-[#123629] to-[#c6a666];
+    }
+
+    .login-shell[data-mode='standard'] .login-accent-bar {
+        @apply from-[#2EC4B6] to-[#1B5E20];
+    }
+
+    .login-shell[data-mode='enotary'] .login-auth-input:focus,
+    .login-shell[data-mode='enotary'] .login-auth-input:focus-visible {
+        border-color: #1c7c54;
+        --tw-ring-color: rgb(28 124 84 / 0.25);
+    }
+
+    .login-shell[data-mode='enotary'] .login-remember-checkbox {
+        accent-color: #1c7c54;
+    }
+
+    .login-shell .login-shimmer {
+        animation: login-shimmer 1.5s ease-in-out infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .login-shell .login-shimmer {
+            animation: none;
+        }
     }
 }
 

@@ -133,55 +133,6 @@
                 @endif
             </flux:sidebar.nav>
 
-            <flux:spacer />
-
-            {{-- ── User menu ── --}}
-            <flux:dropdown position="bottom" align="start">
-                <flux:sidebar.profile
-                    class="rounded-xl px-2 py-2 transition hover:bg-zinc-50 dark:hover:bg-white/5
-                        [&_[data-flux-profile-name]]:text-[13px]
-                        [&_[data-flux-profile-name]]:font-semibold
-                        [&_[data-flux-profile-name]]:text-zinc-800
-                        dark:[&_[data-flux-profile-name]]:text-zinc-200"
-                    :name="auth()->user()->name"
-                    :initials="auth()->user()->initials()"
-                    avatar:size="sm"
-                    icon-trailing="chevrons-up-down"
-                />
-
-                <flux:menu class="w-[260px]">
-                    <flux:menu.radio.group>
-                        <div class="p-0 text-base font-normal">
-                            <div class="flex items-center gap-3 px-2 py-2.5 text-left">
-                                <span class="relative flex h-9 w-9 shrink-0 overflow-hidden rounded-lg">
-                                    <span class="flex h-full w-full items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-sm font-bold text-white">
-                                        {{ auth()->user()->initials() }}
-                                    </span>
-                                </span>
-                                <div class="grid flex-1 text-left leading-tight">
-                                    <span class="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ auth()->user()->name }}</span>
-                                    <span class="truncate text-xs text-zinc-400 dark:text-zinc-500">{{ auth()->user()->email }}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </flux:menu.radio.group>
-
-                    <flux:menu.separator />
-
-                    <flux:menu.radio.group>
-                        <flux:menu.item href="/settings/profile" icon="cog" wire:navigate>{{ __('Settings') }}</flux:menu.item>
-                    </flux:menu.radio.group>
-
-                    <flux:menu.separator />
-
-                    <form method="POST" action="{{ route('logout') }}" class="w-full">
-                        @csrf
-                        <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full text-rose-600 dark:text-rose-400">
-                            {{ __('Log Out') }}
-                        </flux:menu.item>
-                    </form>
-                </flux:menu>
-            </flux:dropdown>
         </flux:sidebar>
 
         {{ $slot }}
