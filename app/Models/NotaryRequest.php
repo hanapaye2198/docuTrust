@@ -190,6 +190,13 @@ class NotaryRequest extends Model
         ])->save();
     }
 
+    public function markDigitalized(): void
+    {
+        $this->forceFill([
+            'status' => NotaryRequestStatus::Digitalized,
+        ])->save();
+    }
+
     public function markRejected(string $reason): void
     {
         $this->forceFill([

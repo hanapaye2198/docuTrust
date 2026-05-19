@@ -13,6 +13,7 @@ enum NotaryRequestStatus: string
     case SessionCompleted = 'session_completed';
     case AttorneySigning = 'attorney_signing';
     case AttorneyApproved = 'attorney_approved';
+    case Digitalized = 'digitalized';
     case Notarized = 'notarized';
     case Rejected = 'rejected';
     case Failed = 'failed';

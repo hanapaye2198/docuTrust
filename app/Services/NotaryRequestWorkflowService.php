@@ -64,6 +64,7 @@ class NotaryRequestWorkflowService
 
         return in_array($request->status, [
             NotaryRequestStatus::AttorneyApproved,
+            NotaryRequestStatus::Digitalized,
             NotaryRequestStatus::Notarized,
         ], true);
     }
@@ -85,6 +86,10 @@ class NotaryRequestWorkflowService
 
     public function canDigitalize(NotaryRequest $request): bool
     {
+        if (in_array($request->status, [NotaryRequestStatus::Digitalized, NotaryRequestStatus::Notarized], true)) {
+            return false;
+        }
+
         if (! $this->hasAttorneySignedAllDocuments($request)) {
             return false;
         }
@@ -290,17 +295,14 @@ class NotaryRequestWorkflowService
 
     public function finalize(NotaryRequest $request): NotaryRequest
     {
-        if ($request->status !== NotaryRequestStatus::AttorneyApproved) {
-            throw new RuntimeException(__('Attorney approval is required before notarization can be finalized.'));
+        if ($request->status !== NotaryRequestStatus::Digitalized) {
+            throw new RuntimeException(__('Digital notarization is required before notarization can be finalized.'));
         }
 
         $readiness = $this->finalizationReadiness($request);
         if (! $readiness['ready']) {
             throw new RuntimeException($readiness['issues'][0] ?? __('This notary request is not ready for finalization.'));
         }
-
-        // Auto-trigger digital notarization (seal, QR, certificates) before marking as notarized
-        app(NotaryDigitalizationService::class)->digitalize($request);
 
         $request->markNotarized();
 
@@ -326,6 +328,8 @@ class NotaryRequestWorkflowService
 
         app(NotaryDigitalizationService::class)->digitalize($request->fresh());
 
+        $request->fresh()->markDigitalized();
+
         return $request->fresh();
     }
 
@@ -346,6 +350,8 @@ class NotaryRequestWorkflowService
         $document->update([
             'notary_request_id' => $request->id,
         ]);
+
+        app(NotaryParticipantSyncService::class)->syncRequestSignersToDocument($document);
 
         NotaryJournal::query()->create([
             'notary_request_id' => $request->id,
@@ -393,6 +399,7 @@ class NotaryRequestWorkflowService
     {
         if (in_array($request->status, [
             NotaryRequestStatus::Notarized,
+            NotaryRequestStatus::Digitalized,
             NotaryRequestStatus::Rejected,
             NotaryRequestStatus::Failed,
             NotaryRequestStatus::Cancelled,

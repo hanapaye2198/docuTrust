@@ -295,7 +295,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <option value="location_verified">{{ __('Location verified') }}</option>
                     <option value="session_scheduled">{{ __('Session scheduled') }}</option>
                     <option value="session_in_progress">{{ __('Session in progress') }}</option>
+                    <option value="session_completed">{{ __('Session completed') }}</option>
+                    <option value="attorney_signing">{{ __('Attorney signing') }}</option>
                     <option value="attorney_approved">{{ __('Attorney approved') }}</option>
+                    <option value="digitalized">{{ __('Digitalized') }}</option>
                     <option value="notarized">{{ __('Notarized') }}</option>
                     <option value="rejected">{{ __('Rejected') }}</option>
                     <option value="failed">{{ __('Failed') }}</option>
@@ -350,8 +353,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 'draft' => 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
                                 'submitted' => 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
                                 'identity_verified', 'location_verified' => 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300',
-                                'session_scheduled', 'session_in_progress' => 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+                                'session_scheduled', 'session_in_progress', 'session_completed' => 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+                                'attorney_signing' => 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300',
                                 'attorney_approved' => 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+                                'digitalized' => 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300',
                                 'notarized' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
                                 'rejected' => 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
                                 'failed' => 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',

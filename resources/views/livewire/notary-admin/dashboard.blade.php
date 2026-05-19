@@ -14,7 +14,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         // NotaryAdmin sees ALL requests globally (single admin manages all organizations)
         $awaitingFinalization = NotaryRequest::query()
-            ->where('status', NotaryRequestStatus::AttorneyApproved)
+            ->where('status', NotaryRequestStatus::Digitalized)
             ->with(['requester', 'notary', 'documents', 'organization'])
             ->latest('approved_at')
             ->get();
@@ -31,14 +31,26 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->groupBy('status')
             ->pluck('total', 'status');
 
+        $inProgressStatuses = [
+            NotaryRequestStatus::Submitted->value,
+            NotaryRequestStatus::IdentityVerified->value,
+            NotaryRequestStatus::LocationVerified->value,
+            NotaryRequestStatus::SessionScheduled->value,
+            NotaryRequestStatus::SessionInProgress->value,
+            NotaryRequestStatus::SessionCompleted->value,
+            NotaryRequestStatus::AttorneySigning->value,
+            NotaryRequestStatus::AttorneyApproved->value,
+        ];
+
         return [
             'awaitingFinalization' => $awaitingFinalization,
             'recentlyNotarized' => $recentlyNotarized,
             'totalByStatus' => $totalByStatus,
             'totalRequests' => $totalByStatus->sum(),
             'totalNotarized' => (int) ($totalByStatus[NotaryRequestStatus::Notarized->value] ?? 0),
-            'totalPending' => (int) ($totalByStatus[NotaryRequestStatus::AttorneyApproved->value] ?? 0),
-            'totalSubmitted' => (int) ($totalByStatus[NotaryRequestStatus::Submitted->value] ?? 0),
+            'totalPending' => (int) ($totalByStatus[NotaryRequestStatus::Digitalized->value] ?? 0),
+            'totalInProgress' => collect($inProgressStatuses)
+                ->sum(fn (string $status): int => (int) ($totalByStatus[$status] ?? 0)),
         ];
     }
 }; ?>
@@ -71,8 +83,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             <p class="mt-2 text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $totalNotarized }}</p>
         </div>
         <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
-            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Submitted (In Progress)') }}</p>
-            <p class="mt-2 text-3xl font-bold tabular-nums text-blue-600 dark:text-blue-400">{{ $totalSubmitted }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('In Progress') }}</p>
+            <p class="mt-2 text-3xl font-bold tabular-nums text-blue-600 dark:text-blue-400">{{ $totalInProgress }}</p>
         </div>
     </div>
 

@@ -87,6 +87,9 @@ class NotaryDigitalizationService
                 'register_entries_processed' => $request->registerEntries->count(),
                 'completed_at' => now()->timezone('Asia/Manila')->toDateTimeString(),
                 'notary_seal_applied' => $credential !== null,
+                'attorney_signature_applied' => $credential !== null
+                    && is_string($credential->signature_image_path)
+                    && $credential->signature_image_path !== '',
                 'qr_codes_attached' => $request->registerEntries->count(),
                 'certificates_generated' => $request->registerEntries->count(),
                 'documents_timestamped' => $request->documents->count(),

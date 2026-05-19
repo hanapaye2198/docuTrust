@@ -4,6 +4,7 @@ use App\Enums\UserRole;
 use App\Http\Requests\StoreNotaryClientCaseRequest;
 use App\Models\NotarySigner;
 use App\Models\User;
+use App\Services\NotaryParticipantSyncService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -132,6 +133,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         ]);
 
         // Create a Document record if attorney uploaded one
+        $document = null;
         if ($isNotary && $documentPath !== null) {
             $document = $user->documents()->create([
                 'notary_request_id' => $request->id,
@@ -156,6 +158,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                     'role' => trim((string) ($signerRow['role'] ?? '')) !== '' ? trim((string) $signerRow['role']) : 'signer',
                 ]);
             }
+        }
+
+        if ($document !== null) {
+            app(NotaryParticipantSyncService::class)->syncRequestSignersToDocument($document);
         }
 
         if ($isNotary) {

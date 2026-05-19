@@ -164,6 +164,21 @@ class NotaryEnotaryFlowTest extends TestCase
         $request->refresh();
         $this->assertSame(NotaryRequestStatus::AttorneyApproved, $request->status);
 
+        $this->mock(\App\Services\NotarySealService::class, function ($mock) {
+            $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
+            $mock->shouldReceive('applyNotarySeal')->andReturn('documents/notarized/mock-final.pdf');
+        });
+        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+            $mock->shouldReceive('generate')->andReturnNull();
+        });
+        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) use ($document) {
+            $mock->shouldReceive('ensureReady')->andReturn($document);
+        });
+
+        $workflowService->digitalize($request->fresh());
+        $request->refresh();
+        $this->assertSame(NotaryRequestStatus::Digitalized, $request->status);
+
         // Verify journal entry was created
         $this->assertDatabaseHas('notary_journals', [
             'notary_request_id' => $request->id,

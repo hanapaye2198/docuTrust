@@ -15,6 +15,10 @@ class SendDocumentForSignatureService
 {
     public function send(Document $document): void
     {
+        if ($document->notary_request_id !== null) {
+            app(NotaryParticipantSyncService::class)->syncRequestSignersToDocument($document);
+        }
+
         $document->refresh()->load(['documentSigners', 'signatureFields']);
 
         if ($document->usesSequentialSigningWorkflow()) {

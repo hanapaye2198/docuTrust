@@ -112,6 +112,10 @@ class NotaryRequestWorkflowTest extends TestCase
             'entry_type' => 'approval',
         ]);
 
+        $workflowService->digitalize($request->fresh());
+
+        $this->assertSame(NotaryRequestStatus::Digitalized, $request->fresh()->status);
+
         $workflowService->finalize($request->fresh());
 
         $this->assertSame(DocumentStatus::Completed, $document->fresh()->status);
@@ -126,7 +130,7 @@ class NotaryRequestWorkflowTest extends TestCase
 
         $request = NotaryRequest::factory()->for($requester)->create([
             'notary_user_id' => $notary->id,
-            'status' => NotaryRequestStatus::AttorneyApproved,
+            'status' => NotaryRequestStatus::Digitalized,
         ]);
 
         Document::factory()->for($requester)->create([
@@ -174,5 +178,20 @@ class NotaryRequestWorkflowTest extends TestCase
         $this->expectException(\RuntimeException::class);
 
         app(NotaryRequestWorkflowService::class)->approve($request);
+    }
+
+    public function test_notary_request_cannot_finalize_before_digitalization(): void
+    {
+        $requester = User::factory()->create();
+        $notary = User::factory()->create();
+
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneyApproved,
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+
+        app(NotaryRequestWorkflowService::class)->finalize($request);
     }
 }

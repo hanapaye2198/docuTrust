@@ -8,6 +8,7 @@ use App\Enums\TemplateRoleType;
 use App\Http\Requests\StoreSignatureFieldsRequest;
 use App\Models\Document;
 use App\Models\SignatureField;
+use App\Services\NotaryParticipantSyncService;
 use App\Services\SendDocumentForSignatureService;
 use App\Services\SignatureAuditLogger;
 use Illuminate\Http\RedirectResponse;
@@ -27,7 +28,7 @@ class DocumentPrepareController extends Controller
             }
 
             // Auto-sync NotarySigner records into DocumentSigner for field placement
-            $this->syncNotarySignersToDocument($document);
+            app(NotaryParticipantSyncService::class)->syncRequestSignersToDocument($document);
         }
 
         // For eNOTARY documents, allow pending status (attorney signing phase)
@@ -218,41 +219,6 @@ class DocumentPrepareController extends Controller
         return redirect()
             ->route('documents.show', $document)
             ->with('status', __('Document sent for signature.'));
-    }
-
-    /**
-     * Sync NotarySigner records from the notary request into DocumentSigner records
-     * so the attorney can assign signature fields to each party using the standard
-     * field preparation UI.
-     */
-    private function syncNotarySignersToDocument(Document $document): void
-    {
-        $notaryRequest = $document->notaryRequest;
-        if ($notaryRequest === null) {
-            return;
-        }
-
-        $notarySigners = $notaryRequest->signers;
-        if ($notarySigners->isEmpty()) {
-            return;
-        }
-
-        // Only sync if the document doesn't already have signers
-        if ($document->documentSigners()->exists()) {
-            return;
-        }
-
-        $order = 1;
-        foreach ($notarySigners as $notarySigner) {
-            $document->documentSigners()->create([
-                'name' => $notarySigner->full_name,
-                'email' => $notarySigner->email,
-                'role_type' => TemplateRoleType::Signer,
-                'signing_method' => SigningMethod::EmailLink,
-                'status' => 'pending',
-                'signing_order' => $order++,
-            ]);
-        }
     }
 
     private function resolveStreamUrl(Document $document): string

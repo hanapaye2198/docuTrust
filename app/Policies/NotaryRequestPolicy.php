@@ -48,7 +48,7 @@ class NotaryRequestPolicy
 
     public function update(User $user, NotaryRequest $notaryRequest): bool
     {
-        if (in_array($notaryRequest->status, [NotaryRequestStatus::Notarized, NotaryRequestStatus::Cancelled], true)) {
+        if (in_array($notaryRequest->status, [NotaryRequestStatus::Digitalized, NotaryRequestStatus::Notarized, NotaryRequestStatus::Cancelled], true)) {
             return false;
         }
 
@@ -79,7 +79,7 @@ class NotaryRequestPolicy
 
     public function finalize(User $user, NotaryRequest $notaryRequest): bool
     {
-        if ($notaryRequest->status !== NotaryRequestStatus::AttorneyApproved) {
+        if ($notaryRequest->status !== NotaryRequestStatus::Digitalized) {
             return false;
         }
 
@@ -98,7 +98,7 @@ class NotaryRequestPolicy
 
     public function delete(User $user, NotaryRequest $notaryRequest): bool
     {
-        if (in_array($notaryRequest->status, [NotaryRequestStatus::Notarized, NotaryRequestStatus::Cancelled], true)) {
+        if (in_array($notaryRequest->status, [NotaryRequestStatus::Digitalized, NotaryRequestStatus::Notarized, NotaryRequestStatus::Cancelled], true)) {
             return false;
         }
 

@@ -10,6 +10,7 @@ use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
 use App\Models\NotaryRequest;
+use App\Models\NotarySigner;
 use App\Models\SignatureField;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -232,6 +233,44 @@ class NotaryRequestPagesTest extends TestCase
         ]);
     }
 
+    public function test_attaching_document_to_enotary_request_syncs_existing_request_signers(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+        ]);
+
+        NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'First Party',
+            'email' => 'first@example.test',
+        ]);
+        NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Second Party',
+            'email' => 'second@example.test',
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'status' => DocumentStatus::Draft,
+            'title' => 'Attachable packet',
+        ]);
+
+        $this->actingAs($notary);
+
+        \Livewire\Livewire::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('attachDocumentId', (string) $document->id)
+            ->call('attachDocument')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('document_signers', [
+            'document_id' => $document->id,
+            'email' => 'first@example.test',
+        ]);
+        $this->assertDatabaseHas('document_signers', [
+            'document_id' => $document->id,
+            'email' => 'second@example.test',
+        ]);
+    }
+
     public function test_admin_can_upload_document_directly_from_notary_request_page(): void
     {
         Storage::fake('local');
@@ -292,6 +331,81 @@ class NotaryRequestPagesTest extends TestCase
         $document->refresh();
         $this->assertSame(DocumentStatus::Pending, $document->status);
         $this->assertNotNull($document->sent_at);
+    }
+
+    public function test_adding_request_signer_backfills_existing_enotary_document_signers(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+        ]);
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Draft,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => 'Existing Signer',
+            'email' => 'existing@example.test',
+            'signing_order' => 1,
+        ]);
+
+        $this->actingAs($notary);
+
+        \Livewire\Livewire::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('newSignerName', 'Late Added Signer')
+            ->set('newSignerEmail', 'late@example.test')
+            ->set('newSignerPhone', '')
+            ->set('newSignerAddress', '')
+            ->set('newSignerRole', 'signer')
+            ->call('addSigner')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('document_signers', [
+            'document_id' => $document->id,
+            'email' => 'late@example.test',
+            'name' => 'Late Added Signer',
+        ]);
+    }
+
+    public function test_removing_request_signer_cleans_up_matching_draft_document_signer_and_fields(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+        ]);
+        $requestSigner = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Removable Signer',
+            'email' => 'remove-me@example.test',
+        ]);
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Draft,
+        ]);
+        $documentSigner = DocumentSigner::factory()->for($document)->create([
+            'name' => 'Removable Signer',
+            'email' => 'remove-me@example.test',
+            'signing_order' => 1,
+        ]);
+        SignatureField::factory()->for($document)->create([
+            'signer_id' => $documentSigner->id,
+        ]);
+
+        $this->actingAs($notary);
+
+        \Livewire\Livewire::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('removeSigner', $requestSigner->id)
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseMissing('notary_signers', [
+            'id' => $requestSigner->id,
+        ]);
+        $this->assertDatabaseMissing('document_signers', [
+            'id' => $documentSigner->id,
+        ]);
+        $this->assertDatabaseMissing('signature_fields', [
+            'signer_id' => $documentSigner->id,
+        ]);
     }
 
     public function test_linked_document_participant_summary_is_visible_on_notary_request_page(): void

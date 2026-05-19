@@ -17,6 +17,7 @@ use App\Services\IdentityVerificationService;
 use App\Services\LocationVerificationService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
+use App\Services\NotaryParticipantSyncService;
 use App\Services\OtpService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -569,6 +570,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             'role' => trim($validated['newSignerRole']),
         ]);
 
+        app(NotaryParticipantSyncService::class)->syncRequestSignersToDocuments($this->notaryRequest->fresh());
+
         $this->newSignerName = '';
         $this->newSignerEmail = '';
         $this->newSignerPhone = '';
@@ -592,9 +595,13 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->whereKey($signerId)
             ->firstOrFail();
 
-        $signer->delete();
-        $this->refreshRequest();
-        session()->flash('status', __('Signer removed.'));
+        try {
+            app(NotaryParticipantSyncService::class)->removeRequestSigner($signer);
+            $this->refreshRequest();
+            session()->flash('status', __('Signer removed.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('removeSigner', $exception->getMessage());
+        }
     }
 
     public function createDocument(): void
@@ -939,6 +946,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         $hasRegisterEntry = $this->notaryRequest->registerEntries->isNotEmpty();
         $isNotarized = $this->notaryRequest->status === NotaryRequestStatus::Notarized;
         $isAttorneyApproved = $this->notaryRequest->status === NotaryRequestStatus::AttorneyApproved;
+        $isDigitalized = $this->notaryRequest->status === NotaryRequestStatus::Digitalized;
 
         return [
             [
@@ -1000,6 +1008,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 'description' => __('Applies notary seal, attaches QR code, generates certificates, and timestamps document.'),
                 'state' => match (true) {
                     $isNotarized => 'complete',
+                    $isDigitalized => 'complete',
                     $hasRegisterEntry && ($attorneyHasSigned || $isAttorneyApproved) => 'current',
                     default => 'upcoming',
                 },
@@ -1032,7 +1041,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::Draft)
                 <flux:button variant="primary" wire:click="submitRequest">{{ __('Submit request') }}</flux:button>
             @endif
-            @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::AttorneyApproved)
+            @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::Digitalized)
                 @if (Auth::user()?->role->value === 'notary_admin')
                     <flux:button variant="primary" wire:click="finalizeRequest" :disabled="! $finalizationReadiness['ready']">{{ __('Finalize notarization') }}</flux:button>
                 @endif
@@ -1061,11 +1070,11 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <flux:button variant="primary" :href="route('notary.register-entry', $notaryRequest)" wire:navigate>{{ __('Create Register Entry') }}</flux:button>
                 @endif
                 {{-- Apply Digital Notarization: After attorney signs + register entry exists, before finalization --}}
-                @if ($attorneyHasSignedDoc && $hasRegisterEntry && $notaryRequest->status !== NotaryRequestStatus::Notarized)
+                @if ($attorneyHasSignedDoc && $hasRegisterEntry && ! in_array($notaryRequest->status, [NotaryRequestStatus::Digitalized, NotaryRequestStatus::Notarized], true))
                     <flux:button variant="primary" wire:click="digitalizeRequest">{{ __('Apply Digital Notarization') }}</flux:button>
                 @endif
             @endif
-            @if ($canManageLifecycle && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
+            @if ($canManageLifecycle && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
                 <flux:button variant="outline" wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notary request? This cannot be undone.') }}">{{ __('Cancel request') }}</flux:button>
             @endif
             {{-- Client/Admin actions when notarized --}}
@@ -1429,7 +1438,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                         <span class="mt-1 inline-block rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ ucfirst($signer->role) }}</span>
                                     @endif
                                 </div>
-                                @if ($isNotary && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
+                                @if ($isNotary && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
                                     <button type="button" wire:click="removeSigner({{ $signer->id }})" wire:confirm="{{ __('Remove this signer?') }}"
                                         class="rounded-lg p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 dark:hover:text-red-400">
                                         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
@@ -1484,7 +1493,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 </div>
 
                 {{-- Add Signer Form (Attorney only) --}}
-                @if ($isNotary && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
+                @if ($isNotary && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
                     <div class="mt-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
                         <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Add a signer') }}</h3>
                         <div class="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1788,7 +1797,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 </div>
 
                 {{-- Upload Document Form (Attorney / Admin) --}}
-                @if (($isNotary || $canManageLifecycle) && ! in_array($notaryRequest->status->value, ['notarized', 'rejected', 'failed', 'cancelled'], true))
+                @if (($isNotary || $canManageLifecycle) && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
                     <div class="mt-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
                         <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload a new document for this request') }}</div>
                         <div class="mt-3 space-y-3">
