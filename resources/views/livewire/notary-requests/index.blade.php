@@ -52,12 +52,14 @@ new #[Layout('components.layouts.app')] class extends Component {
         abort_unless($user !== null, 401);
 
         $isNotaryView = $user->role->value === 'notary';
+        $isNotaryAdmin = $user->role->value === 'notary_admin';
 
         $requestsCollection = NotaryRequest::query()
-            ->with(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash'])
+            ->with(['requester', 'notary', 'organization', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash'])
             ->when($isNotaryView, function (Builder $builder) use ($user): void {
                 $builder->where('notary_user_id', $user->id);
-            }, function (Builder $builder) use ($user): void {
+            })
+            ->when(!$isNotaryView && !$isNotaryAdmin, function (Builder $builder) use ($user): void {
                 $builder->where('organization_id', $user->organization_id);
             })
             ->when($this->search !== '', function (Builder $builder): void {
@@ -184,6 +186,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'requests' => $requests,
             'requestSummaries' => $requestSummaries,
             'isNotaryView' => $isNotaryView,
+            'isNotaryAdmin' => $isNotaryAdmin,
             'requestCount' => $filteredRequests->count(),
             'openCount' => $filteredRequests->filter(fn (NotaryRequest $request) => ! in_array($request->status->value, ['rejected', 'failed', 'notarized', 'cancelled'], true))->count(),
             'closedCount' => $filteredRequests->filter(fn (NotaryRequest $request) => in_array($request->status->value, ['rejected', 'failed', 'notarized', 'cancelled'], true))->count(),
@@ -374,6 +377,9 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium capitalize {{ $statusColor }}">{{ str_replace('_', ' ', $request->status->value) }}</span>
                             </td>
                             <td class="hidden px-5 py-4 lg:table-cell">
+                                @if ($isNotaryAdmin)
+                                    <div class="text-xs text-zinc-400 dark:text-zinc-500">{{ $request->organization?->name ?? '—' }}</div>
+                                @endif
                                 <div class="text-sm text-zinc-700 dark:text-zinc-300">{{ $request->requester?->name ?? '-' }}</div>
                                 <div class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">
                                     {{ __('Notary:') }} {{ $request->notary?->name ?? __('Unassigned') }}

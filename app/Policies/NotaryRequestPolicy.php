@@ -25,6 +25,11 @@ class NotaryRequestPolicy
             return true;
         }
 
+        // NotaryAdmin can view ALL requests globally (single admin manages all organizations)
+        if ($user->role === UserRole::NotaryAdmin) {
+            return true;
+        }
+
         if ($user->role === UserRole::Notary) {
             return $notaryRequest->notary_user_id === $user->id;
         }
@@ -82,8 +87,8 @@ class NotaryRequestPolicy
             return true;
         }
 
-        return $user->organization_id === $notaryRequest->organization_id
-            && $user->role === UserRole::NotaryAdmin;
+        // NotaryAdmin can finalize ANY request globally (single admin manages all organizations)
+        return $user->role === UserRole::NotaryAdmin;
     }
 
     public function cancel(User $user, NotaryRequest $notaryRequest): bool

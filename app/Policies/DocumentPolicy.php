@@ -17,8 +17,15 @@ class DocumentPolicy
         // Allow the assigned attorney to view eNOTARY documents
         if ($document->notary_request_id !== null) {
             $notaryRequest = $document->notaryRequest;
-            if ($notaryRequest !== null && $notaryRequest->notary_user_id === $user->id) {
-                return true;
+            if ($notaryRequest !== null) {
+                // Attorney assigned to the request
+                if ($notaryRequest->notary_user_id === $user->id) {
+                    return true;
+                }
+                // Client who requested notarization can view their documents
+                if ($notaryRequest->user_id === $user->id) {
+                    return true;
+                }
             }
         }
 

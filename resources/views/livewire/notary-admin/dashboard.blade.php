@@ -12,25 +12,21 @@ new #[Layout('components.layouts.app')] class extends Component {
         $user = Auth::user();
         abort_unless($user !== null, 401);
 
-        $organizationId = $user->organization_id;
-
+        // NotaryAdmin sees ALL requests globally (single admin manages all organizations)
         $awaitingFinalization = NotaryRequest::query()
-            ->where('organization_id', $organizationId)
             ->where('status', NotaryRequestStatus::AttorneyApproved)
-            ->with(['requester', 'notary', 'documents'])
+            ->with(['requester', 'notary', 'documents', 'organization'])
             ->latest('approved_at')
             ->get();
 
         $recentlyNotarized = NotaryRequest::query()
-            ->where('organization_id', $organizationId)
             ->where('status', NotaryRequestStatus::Notarized)
-            ->with(['requester', 'notary'])
+            ->with(['requester', 'notary', 'organization'])
             ->latest('completed_at')
             ->limit(10)
             ->get();
 
         $totalByStatus = NotaryRequest::query()
-            ->where('organization_id', $organizationId)
             ->selectRaw('status, COUNT(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');
@@ -96,6 +92,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <div class="min-w-0 flex-1">
                             <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ $request->title }}</div>
                             <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                {{ __('Organization') }}: {{ $request->organization?->name ?? '—' }}
+                                <span class="mx-1.5 text-zinc-300 dark:text-zinc-600">•</span>
                                 {{ __('Client') }}: {{ $request->requester?->name ?? '—' }}
                                 <span class="mx-1.5 text-zinc-300 dark:text-zinc-600">•</span>
                                 {{ __('Attorney') }}: {{ $request->notary?->name ?? '—' }}
@@ -130,6 +128,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <div class="min-w-0 flex-1">
                             <div class="truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $request->title }}</div>
                             <div class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">
+                                {{ __('Organization') }}: {{ $request->organization?->name ?? '—' }}
+                                <span class="mx-1.5 text-zinc-300 dark:text-zinc-600">•</span>
                                 {{ $request->completed_at?->format('M j, Y g:i A') ?? '—' }}
                             </div>
                         </div>

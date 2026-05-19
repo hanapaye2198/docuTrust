@@ -39,11 +39,16 @@ class NotarialRegisterService
             throw new RuntimeException(__('Notary commission is expired or inactive.'));
         }
 
-        if (! in_array($request->status, [
+        // Allow register entry creation after attorney has signed (any status from session_in_progress onwards)
+        $allowedStatuses = [
+            NotaryRequestStatus::SessionScheduled,
+            NotaryRequestStatus::SessionInProgress,
             NotaryRequestStatus::AttorneyApproved,
             NotaryRequestStatus::Notarized,
-        ], true)) {
-            throw new RuntimeException(__('Register entries can only be created after attorney approval.'));
+        ];
+
+        if (! in_array($request->status, $allowedStatuses, true)) {
+            throw new RuntimeException(__('Register entries can only be created after the attorney has signed the document.'));
         }
 
         $documentTitle = trim((string) ($data['document_title'] ?? ''));

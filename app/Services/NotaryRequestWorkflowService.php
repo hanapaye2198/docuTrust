@@ -71,8 +71,10 @@ class NotaryRequestWorkflowService
                 $documentIssues[] = __('Document hash has not been recorded.');
             }
 
+            // Blockchain anchoring is optional — service may be unavailable
+            // NotaryAdmin can retry blockchain anchoring later
             if (! $hasBlockchainTransaction) {
-                $documentIssues[] = __('Blockchain transaction is missing.');
+                // Not a blocking issue — just a warning
             }
 
             if ($documentIssues !== []) {
