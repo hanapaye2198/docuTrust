@@ -40,7 +40,8 @@ class NotaryDigitalizationService
             }
         }
 
-        // Step 1b: Apply attorney's written signature to documents
+        // Step 1b: The attorney's signature is already embedded by the document signing flow.
+        // Digital notarization should not restamp the same document with another seal pass.
         if ($credential !== null && $credential->signature_image_path !== null && $credential->signature_image_path !== '') {
             foreach ($request->documents as $document) {
                 $this->applyAttorneySignatureToDocument($request, $document, $credential);
@@ -128,7 +129,7 @@ class NotaryDigitalizationService
         }
     }
 
-    private function applyNotarySealToDocument(NotaryRequest $request, $document, NotaryCredential $credential): void
+    private function applyNotarySealToDocument(NotaryRequest $request, Document $document, NotaryCredential $credential): void
     {
         $entry = $request->registerEntries->first(fn ($e) => $e->document_id === $document->id);
         if ($entry === null) {
@@ -145,7 +146,13 @@ class NotaryDigitalizationService
         }
 
         try {
-            $this->notarySealService->applyNotarySeal($sourcePath, $credential, $entry);
+            $notarizedPath = $this->notarySealService->applyNotarySeal($sourcePath, $credential, $entry);
+
+            if (is_string($notarizedPath) && $notarizedPath !== '') {
+                $document->forceFill([
+                    'final_pdf_path' => $notarizedPath,
+                ])->save();
+            }
         } catch (Throwable $throwable) {
             Log::channel('errors')->warning('Notary seal application failed', [
                 'notary_request_id' => $request->id,
@@ -156,24 +163,12 @@ class NotaryDigitalizationService
         }
     }
 
-    private function applyAttorneySignatureToDocument(NotaryRequest $request, $document, NotaryCredential $credential): void
+    private function applyAttorneySignatureToDocument(NotaryRequest $request, Document $document, NotaryCredential $credential): void
     {
-        $entry = $request->registerEntries->first(fn ($e) => $e->document_id === $document->id);
-        if ($entry === null) {
-            $entry = $request->registerEntries->first();
-        }
-
-        if ($entry === null) {
-            return;
-        }
-
-        $sourcePath = $document->final_pdf_path ?: $document->prepared_pdf_path ?: $document->sourcePdfPath();
-        if ($sourcePath === null || $sourcePath === '') {
-            return;
-        }
-
         try {
-            $this->notarySealService->applyNotarySeal($sourcePath, $credential, $entry);
+            // The signed document already contains the attorney's applied signature fields.
+            // Digital notarization should preserve that output and add the notarial artifact layer only once.
+            return;
         } catch (Throwable $throwable) {
             Log::channel('errors')->warning('Attorney signature application failed', [
                 'notary_request_id' => $request->id,

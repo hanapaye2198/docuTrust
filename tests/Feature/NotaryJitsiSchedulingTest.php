@@ -2,7 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DocumentSignerStatus;
+use App\Enums\DocumentStatus;
 use App\Enums\NotaryRequestStatus;
+use App\Models\Document;
+use App\Models\DocumentSigner;
 use App\Models\NotaryRequest;
 use App\Models\User;
 use App\Services\NotarySchedulingService;
@@ -17,7 +21,15 @@ class NotaryJitsiSchedulingTest extends TestCase
     {
         $requester = User::factory()->create();
         $request = NotaryRequest::factory()->for($requester)->create([
-            'status' => NotaryRequestStatus::IdentityVerified,
+            'status' => NotaryRequestStatus::LocationVerified,
+        ]);
+        $document = Document::factory()->for($requester)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Signed,
+            'signing_order' => 1,
         ]);
 
         $session = app(NotarySchedulingService::class)->schedule(
@@ -27,6 +39,6 @@ class NotaryJitsiSchedulingTest extends TestCase
         );
 
         $this->assertStringStartsWith('docutrust-'.$request->id.'-', (string) $session->room_name);
-        $this->assertStringContainsString('meet.jit.si', (string) $session->meeting_url);
+        $this->assertStringContainsString('8x8.vc', (string) $session->meeting_url);
     }
 }

@@ -7,6 +7,7 @@ use App\Models\NotaryRequest;
 use App\Services\NotarialCertificateService;
 use App\Services\NotarialRegisterService;
 use App\Services\NotarySealService;
+use App\Services\NotaryRequestWorkflowService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -37,21 +38,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         abort_unless($user !== null && $user->role === UserRole::Notary, 403);
         abort_unless($notaryRequest->notary_user_id === $user->id, 403);
 
-        // Load relationships needed for authorization check
-        $notaryRequest->loadMissing(['documents.documentSigners', 'sessions']);
-
-        // Allow register entry creation after video session is completed
-        // The attorney can create the entry after signing, before digitalization
-        $attorneyHasSigned = $notaryRequest->documents->isNotEmpty() && $notaryRequest->documents->every(fn ($doc) =>
-            $doc->documentSigners->contains(fn ($s) => (int) $s->user_id === (int) $user->id && $s->status->value === 'signed')
-        );
-
-        // Allow if: attorney has signed OR status is AttorneyApproved/Notarized
         abort_unless(
-            $attorneyHasSigned || in_array($notaryRequest->status, [
-                NotaryRequestStatus::AttorneyApproved,
-                NotaryRequestStatus::Notarized,
-            ], true),
+            app(NotaryRequestWorkflowService::class)->canCreateRegisterEntry($notaryRequest),
             403,
             __('Register entry can only be created after the attorney has signed the document.')
         );

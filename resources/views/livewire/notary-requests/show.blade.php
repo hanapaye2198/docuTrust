@@ -509,42 +509,8 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function digitalizeRequest(): void
     {
-        $user = Auth::user();
-        abort_unless($user !== null, 401);
-
-        // Ensure the attorney has signed all linked documents before digitalization
-        foreach ($this->notaryRequest->documents as $document) {
-            $attorneySigner = $document->documentSigners
-                ->first(fn ($signer) => (int) $signer->user_id === (int) $user->id);
-
-            if ($attorneySigner === null || $attorneySigner->status->value !== 'signed') {
-                $this->addError('digitalizeRequest', __('You must sign all documents before applying digital notarization.'));
-                return;
-            }
-        }
-
-        // Ensure register entry exists before digitalization
-        if ($this->notaryRequest->registerEntries->isEmpty()) {
-            $this->addError('digitalizeRequest', __('You must create a notarial register entry before applying digital notarization.'));
-            return;
-        }
-
         try {
-            // Mark all linked documents as Completed before digitalization
-            foreach ($this->notaryRequest->documents as $document) {
-                if ($document->status->value !== 'completed') {
-                    $document->update(['status' => \App\Enums\DocumentStatus::Completed]);
-                }
-            }
-
-            // Run digital notarization: seal, QR, certificate, timestamp
-            app(\App\Services\NotaryDigitalizationService::class)->digitalize($this->notaryRequest);
-
-            // Mark request as AttorneyApproved (ready for NotaryAdmin finalization)
-            if ($this->notaryRequest->status !== NotaryRequestStatus::AttorneyApproved) {
-                $this->notaryRequest->markApproved();
-            }
-
+            app(NotaryRequestWorkflowService::class)->digitalize($this->notaryRequest);
             $this->refreshRequest();
             session()->flash('status', __('Digital notarization completed: notary seal applied, QR code attached, certificate generated, document timestamped. The Notary Admin will now finalize the request.'));
         } catch (\RuntimeException $exception) {
@@ -705,6 +671,13 @@ new #[Layout('components.layouts.app')] class extends Component {
         $user = Auth::user();
         abort_unless($user !== null && $user->role->value === 'notary', 403);
         abort_unless((int) $this->notaryRequest->notary_user_id === (int) $user->id, 403);
+        try {
+            app(NotaryRequestWorkflowService::class)->beginAttorneySigning($this->notaryRequest);
+        } catch (\RuntimeException $exception) {
+            $this->addError('signAsAttorney', $exception->getMessage());
+
+            return;
+        }
 
         $document = Document::query()
             ->whereKey($documentId)
@@ -751,15 +724,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             return false;
         }
 
-        // Video session must be completed
-        $hasCompletedSession = $this->notaryRequest->sessions
-            ->contains(fn ($session) => $session->status === 'completed');
-
-        if (! $hasCompletedSession) {
-            return false;
-        }
-
-        return true;
+        return app(NotaryRequestWorkflowService::class)->canBeginAttorneySigning($this->notaryRequest);
     }
 
     /**
@@ -941,45 +906,17 @@ new #[Layout('components.layouts.app')] class extends Component {
             return false;
         }
 
-        // All linked documents must have all signers signed
-        $documents = $this->notaryRequest->documents;
-        if ($documents->isEmpty()) {
-            return false;
-        }
-
-        // Check that all documents have been sent and all signers have completed signing
-        foreach ($documents as $document) {
-            if (! in_array($document->status->value, ['pending', 'completed'], true)) {
-                return false;
-            }
-
-            $pendingSigners = $document->documentSigners
-                ->filter(fn ($signer) => $signer->requiresAction() && $signer->status->value !== 'signed' && $signer->status->value !== 'approved' && $signer->status->value !== 'notified');
-
-            if ($pendingSigners->isNotEmpty()) {
-                return false;
-            }
-        }
-
-        return true;
+        return app(NotaryRequestWorkflowService::class)->canScheduleSession($this->notaryRequest);
     }
 
     private function canReviewNotary(): bool
     {
-        return in_array($this->notaryRequest->status, [
-            NotaryRequestStatus::SessionScheduled,
-            NotaryRequestStatus::SessionInProgress,
-            NotaryRequestStatus::LocationVerified,
-            NotaryRequestStatus::IdentityVerified,
-        ], true);
+        return app(NotaryRequestWorkflowService::class)->canApprove($this->notaryRequest);
     }
 
     private function canCreateRegisterEntry(): bool
     {
-        return in_array($this->notaryRequest->status, [
-            NotaryRequestStatus::AttorneyApproved,
-            NotaryRequestStatus::Notarized,
-        ], true);
+        return app(NotaryRequestWorkflowService::class)->canCreateRegisterEntry($this->notaryRequest);
     }
 
     /**
@@ -993,7 +930,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         $hasDocuments = $documents->isNotEmpty();
         $allSignersSigned = $hasDocuments && $documents->every(fn (Document $document) =>
             in_array($document->status->value, ['pending', 'completed'], true) &&
-            $document->documentSigners->filter(fn ($s) => $s->requiresAction())->every(fn ($s) => in_array($s->status->value, ['signed', 'approved', 'notified'], true))
+            $document->documentSigners->filter(fn ($s) => $s->requiresAction() && (int) $s->user_id !== (int) $this->notaryRequest->notary_user_id)->every(fn ($s) => in_array($s->status->value, ['signed', 'approved'], true))
         );
         $hasCompletedSession = $this->notaryRequest->sessions->contains(fn ($s) => $s->status === 'completed');
         $attorneyHasSigned = $hasDocuments && $documents->every(fn (Document $document) =>
@@ -1030,6 +967,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     in_array($this->notaryRequest->status, [
                         NotaryRequestStatus::SessionScheduled,
                         NotaryRequestStatus::SessionInProgress,
+                        NotaryRequestStatus::SessionCompleted,
                     ], true) => 'current',
                     $allSignersSigned => 'current',
                     default => 'upcoming',
@@ -1040,7 +978,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                 'description' => __('After identity verification, the attorney signs their part of the document.'),
                 'state' => match (true) {
                     $attorneyHasSigned || $isNotarized => 'complete',
-                    $hasCompletedSession => 'current',
+                    in_array($this->notaryRequest->status, [
+                        NotaryRequestStatus::SessionCompleted,
+                        NotaryRequestStatus::AttorneySigning,
+                    ], true) => 'current',
                     default => 'upcoming',
                 },
             ],

@@ -13,6 +13,10 @@ use RuntimeException;
 
 class NotarialRegisterService
 {
+    public function __construct(
+        private readonly NotaryRequestWorkflowService $notaryRequestWorkflowService,
+    ) {}
+
     /**
      * Create a new notarial register entry for a notary request.
      *
@@ -39,15 +43,7 @@ class NotarialRegisterService
             throw new RuntimeException(__('Notary commission is expired or inactive.'));
         }
 
-        // Allow register entry creation after attorney has signed (any status from session_in_progress onwards)
-        $allowedStatuses = [
-            NotaryRequestStatus::SessionScheduled,
-            NotaryRequestStatus::SessionInProgress,
-            NotaryRequestStatus::AttorneyApproved,
-            NotaryRequestStatus::Notarized,
-        ];
-
-        if (! in_array($request->status, $allowedStatuses, true)) {
+        if (! $this->notaryRequestWorkflowService->canCreateRegisterEntry($request)) {
             throw new RuntimeException(__('Register entries can only be created after the attorney has signed the document.'));
         }
 

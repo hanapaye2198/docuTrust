@@ -10,6 +10,8 @@ enum NotaryRequestStatus: string
     case LocationVerified = 'location_verified';
     case SessionScheduled = 'session_scheduled';
     case SessionInProgress = 'session_in_progress';
+    case SessionCompleted = 'session_completed';
+    case AttorneySigning = 'attorney_signing';
     case AttorneyApproved = 'attorney_approved';
     case Notarized = 'notarized';
     case Rejected = 'rejected';

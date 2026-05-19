@@ -176,6 +176,20 @@ class NotaryRequest extends Model
         ])->save();
     }
 
+    public function markSessionCompleted(): void
+    {
+        $this->forceFill([
+            'status' => NotaryRequestStatus::SessionCompleted,
+        ])->save();
+    }
+
+    public function markAttorneySigning(): void
+    {
+        $this->forceFill([
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ])->save();
+    }
+
     public function markRejected(string $reason): void
     {
         $this->forceFill([

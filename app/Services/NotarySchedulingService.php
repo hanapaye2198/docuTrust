@@ -14,6 +14,7 @@ class NotarySchedulingService
 {
     public function __construct(
         private readonly NotaryJitsiRoomService $jitsiRoomService,
+        private readonly NotaryRequestWorkflowService $notaryRequestWorkflowService,
     ) {}
 
     public function schedule(
@@ -24,12 +25,7 @@ class NotarySchedulingService
         ?string $roomName = null,
         ?User $attorney = null,
     ): NotarySession {
-        if (! in_array($request->status, [
-            NotaryRequestStatus::Draft,
-            NotaryRequestStatus::Submitted,
-            NotaryRequestStatus::IdentityVerified,
-            NotaryRequestStatus::LocationVerified,
-        ], true)) {
+        if (! $this->notaryRequestWorkflowService->canScheduleSession($request)) {
             throw new RuntimeException(__('This notary request cannot be scheduled right now.'));
         }
 
@@ -157,6 +153,10 @@ class NotarySchedulingService
                 'all_checks_passed' => $this->allChecksPassed($verificationChecklist),
             ],
             'recorded_at' => now(),
+        ]);
+
+        $session->notaryRequest()?->update([
+            'status' => NotaryRequestStatus::SessionCompleted,
         ]);
 
         return $session->fresh();

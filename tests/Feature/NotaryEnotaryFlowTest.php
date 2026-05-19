@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\NotaryRequestStatus;
 use App\Enums\UserRole;
+use App\Models\Document;
+use App\Models\DocumentSigner;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
@@ -36,6 +38,21 @@ class NotaryEnotaryFlowTest extends TestCase
         ]);
 
         $this->assertSame(NotaryRequestStatus::Draft, $request->status);
+
+        $document = Document::factory()->for($requester)->create([
+            'notary_request_id' => $request->id,
+            'status' => \App\Enums\DocumentStatus::Completed,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'signing_order' => 1,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'email' => $notary->email,
+            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'signing_order' => 999,
+        ]);
 
         // Submit the request
         $workflowService = app(NotaryRequestWorkflowService::class);
@@ -105,18 +122,11 @@ class NotaryEnotaryFlowTest extends TestCase
             'signer_in_philippines' => true,
             'id_shown_on_camera' => true,
         ]);
+        $request->refresh();
+        $this->assertSame(NotaryRequestStatus::SessionCompleted, $request->status);
         $this->assertSame('completed', $session->status);
         $this->assertNotNull($session->verification_checklist);
         $this->assertTrue($session->verification_checklist['face_matches_id']);
-
-        // Attorney approval
-        $workflowService->approve($request->fresh(), [
-            'identity_matched' => true,
-            'voluntary_consent' => true,
-            'jurisdiction_valid' => true,
-        ]);
-        $request->refresh();
-        $this->assertSame(NotaryRequestStatus::AttorneyApproved, $request->status);
 
         // Step 6: Notarial Register Entry
         $credential = NotaryCredential::factory()->for($notary)->create();
@@ -144,6 +154,15 @@ class NotaryEnotaryFlowTest extends TestCase
         $this->assertSame(500.00, (float) $entry->fees);
         $this->assertNotNull($entry->qr_verification_token);
         $this->assertNotNull($entry->notarized_at);
+
+        // Attorney approval
+        $workflowService->approve($request->fresh(), [
+            'identity_matched' => true,
+            'voluntary_consent' => true,
+            'jurisdiction_valid' => true,
+        ]);
+        $request->refresh();
+        $this->assertSame(NotaryRequestStatus::AttorneyApproved, $request->status);
 
         // Verify journal entry was created
         $this->assertDatabaseHas('notary_journals', [
@@ -325,7 +344,16 @@ class NotaryEnotaryFlowTest extends TestCase
         $notary = User::factory()->for($requester->organization)->create(['role' => UserRole::Notary]);
         $request = NotaryRequest::factory()->for($requester)->create([
             'notary_user_id' => $notary->id,
-            'status' => NotaryRequestStatus::IdentityVerified,
+            'status' => NotaryRequestStatus::LocationVerified,
+        ]);
+
+        $document = Document::factory()->for($requester)->create([
+            'notary_request_id' => $request->id,
+            'status' => \App\Enums\DocumentStatus::Completed,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'signing_order' => 1,
         ]);
 
         $schedulingService = app(NotarySchedulingService::class);
@@ -339,6 +367,46 @@ class NotaryEnotaryFlowTest extends TestCase
             'notary_request_id' => $request->id,
             'entry_type' => 'session_confirmed',
         ]);
+    }
+
+    public function test_digitalization_requires_completed_documents_and_never_force_completes_them(): void
+    {
+        $requester = User::factory()->create();
+        $notary = User::factory()->for($requester->organization)->create(['role' => UserRole::Notary]);
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionCompleted,
+        ]);
+
+        $document = Document::factory()->for($requester)->create([
+            'notary_request_id' => $request->id,
+            'status' => \App\Enums\DocumentStatus::Pending,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'signing_order' => 1,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'email' => $notary->email,
+            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'signing_order' => 999,
+        ]);
+
+        $credential = NotaryCredential::factory()->for($notary)->create();
+        NotarialRegisterEntry::factory()->create([
+            'notary_request_id' => $request->id,
+            'notary_credential_id' => $credential->id,
+            'document_id' => $document->id,
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+
+        try {
+            app(NotaryRequestWorkflowService::class)->digitalize($request);
+        } finally {
+            $this->assertSame(\App\Enums\DocumentStatus::Pending, $document->fresh()->status);
+        }
     }
 
     public function test_geolocation_service_detects_private_ips(): void

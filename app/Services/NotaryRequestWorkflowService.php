@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Enums\DocumentStatus;
 use App\Enums\NotaryRequestStatus;
+use App\Enums\TemplateRoleType;
 use App\Events\NotaryRequestApproved;
 use App\Events\NotaryRequestNotarized;
 use App\Events\NotaryRequestSubmitted;
+use App\Models\DocumentSigner;
 use App\Models\Document;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
@@ -14,6 +16,127 @@ use RuntimeException;
 
 class NotaryRequestWorkflowService
 {
+    public function canScheduleSession(NotaryRequest $request): bool
+    {
+        return $request->status === NotaryRequestStatus::LocationVerified
+            && $this->documentsReadyForSession($request);
+    }
+
+    public function hasCompletedSession(NotaryRequest $request): bool
+    {
+        $request->loadMissing('sessions');
+
+        return $request->sessions->contains(fn ($session): bool => $session->status === 'completed');
+    }
+
+    public function canBeginAttorneySigning(NotaryRequest $request): bool
+    {
+        if (! $this->hasCompletedSession($request)) {
+            return false;
+        }
+
+        return $this->documentsReadyForSession($request);
+    }
+
+    public function hasAttorneySignedAllDocuments(NotaryRequest $request): bool
+    {
+        $request->loadMissing('documents.documentSigners');
+
+        if ($request->documents->isEmpty() || $request->notary_user_id === null) {
+            return false;
+        }
+
+        return $request->documents->every(function (Document $document) use ($request): bool {
+            return $document->documentSigners->contains(
+                fn (DocumentSigner $signer): bool =>
+                    (int) $signer->user_id === (int) $request->notary_user_id
+                    && $signer->role_type === TemplateRoleType::Signer
+                    && $signer->status->isCompleted()
+            );
+        });
+    }
+
+    public function canCreateRegisterEntry(NotaryRequest $request): bool
+    {
+        if ($this->hasAttorneySignedAllDocuments($request)) {
+            return true;
+        }
+
+        return in_array($request->status, [
+            NotaryRequestStatus::AttorneyApproved,
+            NotaryRequestStatus::Notarized,
+        ], true);
+    }
+
+    public function canApprove(NotaryRequest $request): bool
+    {
+        if (! $this->hasCompletedSession($request)) {
+            return false;
+        }
+
+        if (! $this->hasAttorneySignedAllDocuments($request)) {
+            return false;
+        }
+
+        $request->loadMissing('registerEntries');
+
+        return $request->registerEntries->isNotEmpty();
+    }
+
+    public function canDigitalize(NotaryRequest $request): bool
+    {
+        if (! $this->hasAttorneySignedAllDocuments($request)) {
+            return false;
+        }
+
+        if (! $this->canCreateRegisterEntry($request)) {
+            return false;
+        }
+
+        $request->loadMissing('documents');
+
+        return $request->documents->isNotEmpty()
+            && $request->documents->every(fn (Document $document): bool => $document->status === DocumentStatus::Completed);
+    }
+
+    public function beginAttorneySigning(NotaryRequest $request): NotaryRequest
+    {
+        if (! $this->canBeginAttorneySigning($request)) {
+            throw new RuntimeException(__('Attorney signing can begin only after signer completion and the completed verification session.'));
+        }
+
+        if ($request->status !== NotaryRequestStatus::AttorneySigning) {
+            $request->markAttorneySigning();
+        }
+
+        return $request->fresh();
+    }
+
+    private function documentsReadyForSession(NotaryRequest $request): bool
+    {
+        $request->loadMissing(['documents.documentSigners']);
+
+        if ($request->documents->isEmpty()) {
+            return false;
+        }
+
+        return $request->documents->every(function (Document $document) use ($request): bool {
+            if (! in_array($document->status, [DocumentStatus::Pending, DocumentStatus::Completed], true)) {
+                return false;
+            }
+
+            return $document->documentSigners
+                ->filter(function (DocumentSigner $signer) use ($request): bool {
+                    if (! $signer->requiresAction()) {
+                        return false;
+                    }
+
+                    return (int) $signer->user_id !== (int) $request->notary_user_id;
+                })
+                ->every(fn (DocumentSigner $signer): bool => $signer->status->isCompleted());
+        });
+    }
+
     /**
      * @return array{
      *   ready: bool,
@@ -117,12 +240,7 @@ class NotaryRequestWorkflowService
 
     public function approve(NotaryRequest $request, array $legalAssertions = [], ?string $summary = null): NotaryRequest
     {
-        if (! in_array($request->status, [
-            NotaryRequestStatus::SessionScheduled,
-            NotaryRequestStatus::SessionInProgress,
-            NotaryRequestStatus::LocationVerified,
-            NotaryRequestStatus::IdentityVerified,
-        ], true)) {
+        if (! $this->canApprove($request)) {
             throw new RuntimeException(__('This notary request is not ready for attorney approval.'));
         }
 
@@ -187,6 +305,26 @@ class NotaryRequestWorkflowService
         $request->markNotarized();
 
         event(new NotaryRequestNotarized($request));
+
+        return $request->fresh();
+    }
+
+    public function digitalize(NotaryRequest $request): NotaryRequest
+    {
+        if (! $this->canDigitalize($request)) {
+            throw new RuntimeException(__('This notary request is not ready for digital notarization.'));
+        }
+
+        if ($request->status !== NotaryRequestStatus::AttorneyApproved) {
+            $request = $this->approve($request->fresh(), [
+                'identity_matched' => true,
+                'voluntary_consent' => true,
+                'jurisdiction_valid' => true,
+                'digital_notarization_ready' => true,
+            ], __('Attorney completed signing and approved this request for digital notarization.'));
+        }
+
+        app(NotaryDigitalizationService::class)->digitalize($request->fresh());
 
         return $request->fresh();
     }
