@@ -5,10 +5,13 @@ namespace Tests\Feature;
 use App\Enums\NotaryRequestStatus;
 use App\Enums\UserRole;
 use App\Models\Document;
+use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
+use App\Models\NotaryIdentityVerification;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
+use App\Models\NotarySigner;
 use App\Models\User;
 use App\Services\GeolocationService;
 use App\Services\IdentityVerificationService;
@@ -17,6 +20,7 @@ use App\Services\NotarialRegisterService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class NotaryEnotaryFlowTest extends TestCase
@@ -202,6 +206,61 @@ class NotaryEnotaryFlowTest extends TestCase
         ]);
     }
 
+    public function test_direct_identity_verification_can_complete_after_location_verification_without_regressing_status(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::LocationVerified,
+            'location_verified_at' => now(),
+        ]);
+
+        app(IdentityVerificationService::class)->verify($request, [
+            'id_document_type' => 'passport',
+            'id_document_number' => 'P555',
+            'id_document_path' => 'identity/passport-late.pdf',
+        ]);
+
+        $request->refresh();
+
+        $this->assertSame(NotaryRequestStatus::LocationVerified, $request->status);
+        $this->assertNotNull($request->identity_verified_at);
+        $this->assertSame('passport', $request->id_document_type);
+    }
+
+    public function test_pending_signer_identity_review_can_complete_after_location_verification_without_regressing_status(): void
+    {
+        $requester = User::factory()->create();
+        $notary = User::factory()->for($requester->organization)->create([
+            'role' => UserRole::Notary,
+        ]);
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::LocationVerified,
+            'location_verified_at' => now(),
+        ]);
+        $signer = NotarySigner::factory()->for($request, 'notaryRequest')->create();
+        $reviewer = User::factory()->for($requester->organization)->create();
+
+        $record = NotaryIdentityVerification::query()->create([
+            'notary_request_id' => $request->id,
+            'notary_signer_id' => $signer->id,
+            'id_type' => 'passport',
+            'id_number' => 'P-LOC-1',
+            'id_image_path' => 'identity/pending-passport.pdf',
+            'selfie_image_path' => 'identity/pending-selfie.jpg',
+            'verification_status' => \App\Enums\NotaryIdentityVerificationStatus::Pending,
+        ]);
+
+        app(IdentityVerificationService::class)->approvePendingRecord($reviewer, $record);
+
+        $request->refresh();
+        $record->refresh();
+
+        $this->assertSame(NotaryRequestStatus::LocationVerified, $request->status);
+        $this->assertNotNull($request->identity_verified_at);
+        $this->assertEquals(\App\Enums\NotaryIdentityVerificationStatus::Verified, $record->verification_status);
+    }
+
     public function test_location_verification_rejects_non_philippines_location(): void
     {
         $requester = User::factory()->create();
@@ -232,6 +291,124 @@ class NotaryEnotaryFlowTest extends TestCase
             'country_code' => 'PH',
             'vpn_detected' => true,
         ]);
+    }
+
+    public function test_browser_geo_failure_requires_review_without_failing_request(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::Submitted,
+        ]);
+
+        $this->partialMock(GeolocationService::class, function ($mock): void {
+            $mock->shouldReceive('resolveFromIp')->once()->andReturn([
+                'country_code' => 'US',
+                'city' => 'Seattle',
+                'latitude' => 47.6062,
+                'longitude' => -122.3321,
+                'is_vpn' => false,
+                'is_proxy' => false,
+            ]);
+        });
+
+        $result = app(LocationVerificationService::class)->evaluateBrowserLocation($request, null, [
+            'latitude' => 47.6062,
+            'longitude' => -122.3321,
+        ]);
+
+        $request->refresh();
+
+        $this->assertFalse($result['success']);
+        $this->assertSame(NotaryRequestStatus::LocationReviewRequired, $request->status);
+        $this->assertSame('review_required', $request->metadata['location_verification']['result'] ?? null);
+        $this->assertDatabaseHas('notary_journals', [
+            'notary_request_id' => $request->id,
+            'entry_type' => 'location_verification_review_required',
+        ]);
+    }
+
+    public function test_manual_location_verification_can_still_succeed_after_browser_geo_failure(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::Submitted,
+        ]);
+
+        $this->partialMock(GeolocationService::class, function ($mock): void {
+            $mock->shouldReceive('resolveFromIp')->once()->andReturn([
+                'country_code' => 'US',
+                'city' => 'Seattle',
+                'latitude' => 47.6062,
+                'longitude' => -122.3321,
+                'is_vpn' => false,
+                'is_proxy' => false,
+            ]);
+        });
+
+        app(LocationVerificationService::class)->evaluateBrowserLocation($request, null, [
+            'latitude' => 47.6062,
+            'longitude' => -122.3321,
+        ]);
+
+        app(LocationVerificationService::class)->markVerified($request->fresh(), [
+            'country_code' => 'PH',
+            'vpn_detected' => false,
+            'ip_address' => '120.28.45.100',
+            'source' => 'manual_review',
+        ]);
+
+        $request->refresh();
+
+        $this->assertSame(NotaryRequestStatus::LocationVerified, $request->status);
+        $this->assertSame('verified', $request->metadata['location_verification']['result'] ?? null);
+    }
+
+    public function test_location_verification_after_session_scheduling_does_not_regress_request_status(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        app(LocationVerificationService::class)->markVerified($request, [
+            'country_code' => 'PH',
+            'vpn_detected' => false,
+            'ip_address' => '120.28.45.100',
+            'source' => 'manual_review',
+        ]);
+
+        $request->refresh();
+
+        $this->assertSame(NotaryRequestStatus::SessionScheduled, $request->status);
+        $this->assertNotNull($request->location_verified_at);
+        $this->assertSame('verified', $request->metadata['location_verification']['result'] ?? null);
+    }
+
+    public function test_identity_rejection_moves_request_to_identity_review_required(): void
+    {
+        $requester = User::factory()->create();
+        $reviewer = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::Submitted,
+        ]);
+        $signer = NotarySigner::factory()->for($request, 'notaryRequest')->create();
+        $record = NotaryIdentityVerification::query()->create([
+            'notary_request_id' => $request->id,
+            'notary_signer_id' => $signer->id,
+            'id_type' => 'passport',
+            'id_number' => 'REJECT-1',
+            'id_image_path' => 'identity/reject.pdf',
+            'verification_status' => \App\Enums\NotaryIdentityVerificationStatus::Pending,
+        ]);
+
+        app(IdentityVerificationService::class)->rejectPendingRecord($reviewer, $record, 'ID image is unreadable');
+
+        $request->refresh();
+        $record->refresh();
+
+        $this->assertSame(NotaryRequestStatus::IdentityReviewRequired, $request->status);
+        $this->assertEquals(\App\Enums\NotaryIdentityVerificationStatus::Rejected, $record->verification_status);
+        $this->assertSame('ID image is unreadable', $request->metadata['identity_review_reason'] ?? null);
     }
 
     public function test_reject_cannot_reject_notarized_request(): void
@@ -433,5 +610,135 @@ class NotaryEnotaryFlowTest extends TestCase
 
         $result = $geoService->resolveFromIp('127.0.0.1');
         $this->assertNull($result['country_code']);
+    }
+
+    public function test_digitalization_seals_the_completed_signed_pdf_and_refreshes_stale_archive_path(): void
+    {
+        config()->set('filesystems.disks.archive_testing', [
+            'driver' => 'local',
+            'root' => storage_path('framework/testing/disks/archive-testing-enotary'),
+            'throw' => false,
+        ]);
+        config()->set('filesystems.docutrust_archive_disk', 'archive_testing');
+
+        Storage::fake('local');
+        Storage::fake('archive_testing');
+
+        $requester = User::factory()->create();
+        $notary = User::factory()->for($requester->organization)->create([
+            'role' => UserRole::Notary,
+        ]);
+        $credential = NotaryCredential::factory()->create([
+            'user_id' => $notary->id,
+            'status' => 'active',
+            'seal_image_path' => 'notary/seals/seal.png',
+        ]);
+
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneyApproved,
+        ]);
+
+        $document = Document::factory()->for($requester)->create([
+            'notary_request_id' => $request->id,
+            'status' => \App\Enums\DocumentStatus::Completed,
+            'file_path' => 'documents/source.pdf',
+            'prepared_pdf_path' => 'documents/prepared.pdf',
+            'final_pdf_path' => null,
+            'archive_storage_disk' => 'archive_testing',
+            'archive_document_path' => 'archives/documents/stale-final.pdf',
+            'archived_at' => now(),
+        ]);
+
+        Storage::disk('local')->put('documents/source.pdf', '%PDF-1.4 source');
+        Storage::disk('local')->put('documents/prepared.pdf', '%PDF-1.4 prepared');
+        Storage::disk('local')->put('documents/generated/final-before-seal.pdf', '%PDF-1.4 final before seal');
+        Storage::disk('local')->put('documents/notarized/final-after-seal.pdf', '%PDF-1.4 final after seal');
+        Storage::disk('local')->put('certificates/final-before-seal.pdf', '%PDF-1.4 certificate');
+        Storage::disk('archive_testing')->put('archives/documents/stale-final.pdf', '%PDF-1.4 stale archived final');
+
+        NotarialRegisterEntry::factory()->create([
+            'notary_request_id' => $request->id,
+            'notary_credential_id' => $credential->id,
+            'document_id' => $document->id,
+        ]);
+
+        $sealSourcePath = null;
+
+        $this->mock(\App\Services\NotarySealService::class, function ($mock) use (&$sealSourcePath) {
+            $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
+            $mock->shouldReceive('applyNotarySeal')->once()->andReturnUsing(function (string $sourcePath) use (&$sealSourcePath) {
+                $sealSourcePath = $sourcePath;
+
+                return 'documents/notarized/final-after-seal.pdf';
+            });
+        });
+        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+            $mock->shouldReceive('generate')->andReturnNull();
+        });
+        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+            $mock->shouldReceive('ensureReady')->andReturnUsing(function (Document $document) {
+                $document->forceFill([
+                    'final_pdf_path' => 'documents/generated/final-before-seal.pdf',
+                    'certificate_path' => 'certificates/final-before-seal.pdf',
+                    'archive_storage_disk' => 'archive_testing',
+                    'archive_document_path' => 'archives/documents/stale-final.pdf',
+                    'archived_at' => now(),
+                ])->save();
+
+                return $document->fresh();
+            });
+        });
+        $this->mock(\App\Services\DocumentHashService::class, function ($mock) use ($document) {
+            $mock->shouldReceive('generateDocumentHash')
+                ->once()
+                ->with('documents/notarized/final-after-seal.pdf')
+                ->andReturn('sealed-hash-'.$document->id);
+            $mock->shouldReceive('createOrRefreshForCompletedDocument')
+                ->once()
+                ->andReturnUsing(function (Document $freshDocument, string $hash) {
+                    return DocumentHash::query()->updateOrCreate(
+                        ['document_id' => $freshDocument->id],
+                        ['hash' => $hash, 'transaction_id' => 'tx-'.$freshDocument->id, 'created_at' => now()]
+                    );
+                });
+        });
+
+        app(\App\Services\NotaryDigitalizationService::class)->digitalize($request);
+
+        $document->refresh();
+
+        $this->assertSame('documents/generated/final-before-seal.pdf', $sealSourcePath);
+        $this->assertSame('documents/notarized/final-after-seal.pdf', $document->final_pdf_path);
+        $this->assertNotSame('archives/documents/stale-final.pdf', $document->archive_document_path);
+        $this->assertNotNull($document->archive_document_path);
+        $this->assertTrue(Storage::disk('archive_testing')->exists($document->archive_document_path));
+        $this->assertDatabaseHas('document_hashes', [
+            'document_id' => $document->id,
+            'hash' => 'sealed-hash-'.$document->id,
+            'transaction_id' => 'tx-'.$document->id,
+        ]);
+    }
+
+    public function test_archive_service_prefers_current_final_pdf_when_archive_disk_matches_working_disk(): void
+    {
+        Storage::fake('local');
+
+        $requester = User::factory()->create();
+        $document = Document::factory()->for($requester)->create([
+            'status' => \App\Enums\DocumentStatus::Completed,
+            'final_pdf_path' => 'documents/generated/current-final.pdf',
+            'archive_storage_disk' => 'local',
+            'archive_document_path' => 'documents/notarized/stale-final.pdf',
+            'archived_at' => now(),
+        ]);
+
+        Storage::disk('local')->put('documents/generated/current-final.pdf', '%PDF-1.4 current final');
+        Storage::disk('local')->put('documents/notarized/stale-final.pdf', '%PDF-1.4 stale final');
+
+        $archived = app(\App\Services\DocumentArchiveService::class)->archiveCompletedDocument($document);
+
+        $this->assertNotNull($archived);
+        $this->assertSame('documents/generated/current-final.pdf', $archived->archive_document_path);
     }
 }

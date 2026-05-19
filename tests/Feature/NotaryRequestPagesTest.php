@@ -9,6 +9,8 @@ use App\Enums\UserRole;
 use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
+use App\Models\NotarialRegisterEntry;
+use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
 use App\Models\SignatureField;
@@ -503,10 +505,10 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Register entry')
             ->assertSee('Digital notarization')
             ->assertSee('Notary review')
-            ->assertSee('Notary review is available only after identity, location, or session verification has started.')
-            ->assertDontSee('Approve request')
+            ->assertSee('Attorney review becomes available after the video session is complete, the attorney has signed, and a register entry exists.')
+            ->assertDontSee('Complete attorney review')
             ->assertSee('Notarial register')
-            ->assertSee('Register entry creation becomes available after attorney approval.')
+            ->assertSee('Register entry creation becomes available after the attorney has signed the linked documents.')
             ->assertDontSee('Create register entry');
     }
 
@@ -593,5 +595,64 @@ class NotaryRequestPagesTest extends TestCase
 
         $document->refresh();
         $this->assertSame('0xrefreshedproof', $document->documentHash?->transaction_id);
+    }
+
+    public function test_notarized_request_verify_links_use_notary_verification_route(): void
+    {
+        $client = User::factory()->client()->create();
+        $request = NotaryRequest::factory()->for($client)->create([
+            'status' => \App\Enums\NotaryRequestStatus::Notarized,
+            'completed_at' => now(),
+        ]);
+
+        $document = Document::factory()->for($client)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $entry = NotarialRegisterEntry::factory()->create([
+            'notary_request_id' => $request->id,
+            'document_id' => $document->id,
+            'qr_verification_token' => 'verify-token-123',
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('notary-requests.show', $request))
+            ->assertOk()
+            ->assertSee(route('notary.verify', ['token' => $entry->qr_verification_token]), false)
+            ->assertDontSee(route('verify.index').'?token='.$entry->qr_verification_token, false);
+    }
+
+    public function test_notarial_certificate_view_uses_secure_disk_qr_path(): void
+    {
+        Storage::fake('local');
+
+        $notary = User::factory()->notary()->create();
+        $credential = NotaryCredential::factory()->create([
+            'user_id' => $notary->id,
+        ]);
+        $request = NotaryRequest::factory()->for($notary)->create();
+        $entry = NotarialRegisterEntry::factory()->create([
+            'notary_request_id' => $request->id,
+            'notary_credential_id' => $credential->id,
+            'qr_verification_token' => 'verify-token-456',
+            'qr_code_path' => 'notary/qr/verify-token-456.png',
+        ]);
+
+        Storage::disk('local')->put($entry->qr_code_path, 'fake-qr-image');
+
+        $rendered = view('certificates.notarial', [
+            'entry' => $entry,
+            'credential' => $credential->fresh('user'),
+        ])->render();
+
+        $this->assertStringContainsString(
+            Storage::disk('local')->path($entry->qr_code_path),
+            $rendered
+        );
+        $this->assertStringNotContainsString(
+            storage_path('app/'.$entry->qr_code_path),
+            $rendered
+        );
     }
 }

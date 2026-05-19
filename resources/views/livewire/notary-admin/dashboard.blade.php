@@ -33,7 +33,9 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $inProgressStatuses = [
             NotaryRequestStatus::Submitted->value,
+            NotaryRequestStatus::IdentityReviewRequired->value,
             NotaryRequestStatus::IdentityVerified->value,
+            NotaryRequestStatus::LocationReviewRequired->value,
             NotaryRequestStatus::LocationVerified->value,
             NotaryRequestStatus::SessionScheduled->value,
             NotaryRequestStatus::SessionInProgress->value,
@@ -110,7 +112,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 <span class="mx-1.5 text-zinc-300 dark:text-zinc-600">•</span>
                                 {{ __('Attorney') }}: {{ $request->notary?->name ?? '—' }}
                                 <span class="mx-1.5 text-zinc-300 dark:text-zinc-600">•</span>
-                                {{ __('Approved') }}: {{ $request->approved_at?->diffForHumans() ?? '—' }}
+                                {{ __('Attorney reviewed') }}: {{ $request->approved_at?->diffForHumans() ?? '—' }}
                                 <span class="mx-1.5 text-zinc-300 dark:text-zinc-600">•</span>
                                 {{ trans_choice(':count document|:count documents', $request->documents->count(), ['count' => $request->documents->count()]) }}
                             </div>

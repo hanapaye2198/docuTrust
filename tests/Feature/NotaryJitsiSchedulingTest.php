@@ -21,7 +21,7 @@ class NotaryJitsiSchedulingTest extends TestCase
     {
         $requester = User::factory()->create();
         $request = NotaryRequest::factory()->for($requester)->create([
-            'status' => NotaryRequestStatus::LocationVerified,
+            'status' => NotaryRequestStatus::Submitted,
         ]);
         $document = Document::factory()->for($requester)->create([
             'notary_request_id' => $request->id,

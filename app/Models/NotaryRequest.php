@@ -226,6 +226,32 @@ class NotaryRequest extends Model
         ])->save();
     }
 
+    public function markIdentityReviewRequired(?string $reason = null): void
+    {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+        if ($reason !== null && $reason !== '') {
+            $metadata['identity_review_reason'] = $reason;
+        }
+
+        $this->forceFill([
+            'status' => NotaryRequestStatus::IdentityReviewRequired,
+            'metadata' => $metadata,
+        ])->save();
+    }
+
+    public function markLocationReviewRequired(?string $reason = null): void
+    {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+        if ($reason !== null && $reason !== '') {
+            $metadata['location_review_reason'] = $reason;
+        }
+
+        $this->forceFill([
+            'status' => NotaryRequestStatus::LocationReviewRequired,
+            'metadata' => $metadata,
+        ])->save();
+    }
+
     public function markCancelled(): void
     {
         $this->forceFill([

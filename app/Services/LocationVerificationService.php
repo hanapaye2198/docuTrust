@@ -33,7 +33,14 @@ class LocationVerificationService
     {
         if (! in_array($request->status, [
             NotaryRequestStatus::Submitted,
+            NotaryRequestStatus::IdentityReviewRequired,
             NotaryRequestStatus::IdentityVerified,
+            NotaryRequestStatus::LocationReviewRequired,
+            NotaryRequestStatus::LocationVerified,
+            NotaryRequestStatus::SessionScheduled,
+            NotaryRequestStatus::SessionInProgress,
+            NotaryRequestStatus::SessionCompleted,
+            NotaryRequestStatus::AttorneySigning,
         ], true)) {
             throw new RuntimeException(__('Location verification requires the request to be submitted or identity verified first.'));
         }
@@ -50,7 +57,6 @@ class LocationVerificationService
         }
 
         $request->forceFill([
-            'status' => NotaryRequestStatus::LocationVerified,
             'location_verified_at' => now(),
             'location_ip_address' => $evidence['ip_address'] ?? null,
             'location_country_code' => $countryCode !== '' ? $countryCode : null,
@@ -58,6 +64,18 @@ class LocationVerificationService
             'location_longitude' => $evidence['longitude'] ?? null,
             'location_vpn_detected' => $vpnDetected,
         ])->save();
+
+        if (in_array($request->status, [
+            NotaryRequestStatus::Submitted,
+            NotaryRequestStatus::IdentityReviewRequired,
+            NotaryRequestStatus::IdentityVerified,
+            NotaryRequestStatus::LocationReviewRequired,
+            NotaryRequestStatus::LocationVerified,
+        ], true)) {
+            $request->forceFill([
+                'status' => NotaryRequestStatus::LocationVerified,
+            ])->save();
+        }
 
         $metadata = is_array($request->metadata) ? $request->metadata : [];
         $metadata['location_verification'] = [
@@ -151,7 +169,48 @@ class LocationVerificationService
                 status: NotaryGeoVerificationStatus::Failed,
             );
 
-            $request->markFailed((string) $failedReason);
+            $metadata = is_array($request->metadata) ? $request->metadata : [];
+            $metadata['location_verification'] = [
+                'verified_at' => now()->toDateTimeString(),
+                'result' => 'review_required',
+                'country_code' => $countryFromIp !== '' ? $countryFromIp : null,
+                'evidence' => [
+                    'ip_address' => $ipAddress,
+                    'country_code' => $countryFromIp !== '' ? $countryFromIp : null,
+                    'latitude' => is_numeric($latitude) ? (float) $latitude : null,
+                    'longitude' => is_numeric($longitude) ? (float) $longitude : null,
+                    'vpn_detected' => $vpnDetected,
+                    'source' => 'browser_and_ip_geolocation',
+                    'city' => $resolved['city'],
+                ],
+                'failure_reason' => (string) $failedReason,
+            ];
+
+            $request->markLocationReviewRequired((string) $failedReason);
+
+            $request->forceFill([
+                'metadata' => $metadata,
+                'location_ip_address' => $ipAddress,
+                'location_country_code' => $countryFromIp !== '' ? $countryFromIp : null,
+                'location_latitude' => is_numeric($latitude) ? (float) $latitude : null,
+                'location_longitude' => is_numeric($longitude) ? (float) $longitude : null,
+                'location_vpn_detected' => $vpnDetected,
+            ])->save();
+
+            NotaryJournal::query()->create([
+                'notary_request_id' => $request->id,
+                'notary_user_id' => $request->notary_user_id,
+                'entry_type' => 'location_verification_review_required',
+                'summary' => (string) $failedReason,
+                'legal_assertions' => [
+                    'location_verified' => false,
+                    'review_required' => true,
+                    'country_code' => $countryFromIp !== '' ? $countryFromIp : null,
+                    'vpn_detected' => $vpnDetected,
+                    'ip_address' => $ipAddress,
+                ],
+                'recorded_at' => now(),
+            ]);
 
             Log::channel('audit')->warning('Notary location verification failed', [
                 'notary_request_id' => $request->id,

@@ -17,6 +17,7 @@ use App\Models\SignatureField;
 use App\Models\SignerCertificate;
 use App\Models\TrustAuthorizationSession;
 use App\Models\User;
+use App\Services\DocumentPdfStampingService;
 use App\Services\PkiSignatureService;
 use App\Services\SignerCertificateService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -175,6 +176,34 @@ class SignatureEngineTest extends TestCase
             ->assertSee('source=1');
     }
 
+    public function test_final_pdf_generation_uses_source_pdf_not_prepared_pdf(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $sourcePath = 'documents/source-final.pdf';
+        $preparedPath = 'documents/generated/source-final-prepared.pdf';
+
+        Storage::disk('local')->put($sourcePath, Pdf::loadHTML('<h1>Source PDF</h1>')->output());
+        Storage::disk('local')->put($preparedPath, Pdf::loadHTML('<h1>Prepared PDF</h1><div style="page-break-after: always;"></div><h1>Page Two</h1>')->output());
+
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Completed,
+            'file_path' => $sourcePath,
+            'prepared_pdf_path' => $preparedPath,
+        ]);
+
+        $generatedPath = app(DocumentPdfStampingService::class)->generateFinalPdf($document);
+
+        $this->assertNotNull($generatedPath);
+        $this->assertTrue(Storage::disk('local')->exists($generatedPath));
+
+        $content = Storage::disk('local')->get($generatedPath);
+        preg_match_all('/\/Type\s*\/Page\b/', $content, $matches);
+
+        $this->assertSame(1, count($matches[0]));
+    }
+
     public function test_attorney_prepare_page_only_hydrates_attorney_fields_and_uses_signed_preview_stream(): void
     {
         Storage::fake('local');
@@ -258,6 +287,115 @@ class SignatureEngineTest extends TestCase
         $this->assertDatabaseCount('signature_fields', 2);
         $this->assertDatabaseHas('signature_fields', ['id' => $clientField->id]);
         $this->assertDatabaseHas('signature_fields', ['id' => $attorneyField->id]);
+    }
+
+    public function test_authenticated_attorney_signing_stream_uses_signed_preview_when_prior_signatures_exist(): void
+    {
+        Storage::fake('local');
+
+        $client = User::factory()->client()->create();
+        $notary = User::factory()->notary()->create([
+            'organization_id' => $client->organization_id,
+        ]);
+
+        $path = 'documents/attorney-account-sign-source.pdf';
+        $preparedPath = 'documents/generated/attorney-account-sign-prepared.pdf';
+        $this->putValidPdf($path);
+        $this->putValidPdf($preparedPath);
+
+        $document = Document::factory()->create([
+            'organization_id' => $client->organization_id,
+            'user_id' => $client->id,
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+            'prepared_pdf_path' => $preparedPath,
+        ]);
+
+        $clientSigner = DocumentSigner::factory()->for($document)->create();
+        $attorneySigner = DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'name' => 'Attorney Signer',
+            'email' => $notary->email,
+        ]);
+
+        $clientField = SignatureField::factory()->create([
+            'document_id' => $document->id,
+            'signer_id' => $clientSigner->id,
+            'type' => SignatureFieldType::Signature,
+        ]);
+        SignatureField::factory()->create([
+            'document_id' => $document->id,
+            'signer_id' => $attorneySigner->id,
+            'type' => SignatureFieldType::Signature,
+        ]);
+
+        Signature::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $clientSigner->id,
+            'signature_field_id' => $clientField->id,
+            'signature_path' => $this->storeTinySignaturePng(),
+            'signature_algorithm' => 'RSA-SHA256',
+        ]);
+
+        $this->actingAs($notary)
+            ->get(route('notary.sign.account.document.pdf', ['signerId' => $attorneySigner->id]))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $generatedFiles = collect(Storage::disk('local')->allFiles('documents/generated'));
+
+        $this->assertTrue(
+            $generatedFiles->contains(fn (string $file): bool => str_contains($file, $document->id.'-signed_preview-')),
+            'Expected the authenticated attorney signing stream to generate a signed preview PDF.'
+        );
+    }
+
+    public function test_authenticated_notary_signature_save_returns_notary_signature_image_route(): void
+    {
+        Storage::fake('local');
+
+        $client = User::factory()->client()->create();
+        $notary = User::factory()->notary()->create([
+            'organization_id' => $client->organization_id,
+        ]);
+
+        $path = 'documents/notary-signature-route-source.pdf';
+        $this->putValidPdf($path);
+
+        $document = Document::factory()->create([
+            'organization_id' => $client->organization_id,
+            'user_id' => $client->id,
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+        ]);
+
+        $attorneySigner = DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'name' => 'Attorney Signer',
+            'email' => $notary->email,
+        ]);
+
+        $field = SignatureField::factory()->create([
+            'document_id' => $document->id,
+            'signer_id' => $attorneySigner->id,
+            'type' => SignatureFieldType::Signature,
+        ]);
+
+        $response = $this->actingAs($notary)->postJson(
+            route('notary.sign.account.signature.store', ['signerId' => $attorneySigner->id]),
+            [
+                'signature_field_id' => $field->id,
+                'signature_image' => self::TINY_PNG_DATA_URL,
+            ]
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath(
+                'field.image_url',
+                fn (?string $url) => is_string($url)
+                    && str_contains($url, '/notary/account-sign/'.$attorneySigner->id.'/signature-image/'.$field->id)
+            );
     }
 
     public function test_owner_is_redirected_to_document_page_when_prepare_has_no_signers(): void

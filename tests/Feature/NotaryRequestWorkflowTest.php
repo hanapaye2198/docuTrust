@@ -194,4 +194,64 @@ class NotaryRequestWorkflowTest extends TestCase
 
         app(NotaryRequestWorkflowService::class)->finalize($request);
     }
+
+    public function test_identity_verification_predicate_stays_open_for_late_identity_completion_states(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::IdentityReviewRequired,
+            'identity_verified_at' => null,
+        ]);
+
+        $this->assertTrue(app(NotaryRequestWorkflowService::class)->canVerifyIdentity($request));
+    }
+
+    public function test_location_verification_predicate_closes_after_location_is_already_verified(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::LocationVerified,
+            'location_verified_at' => now(),
+        ]);
+
+        $this->assertFalse(app(NotaryRequestWorkflowService::class)->canVerifyLocation($request));
+    }
+
+    public function test_location_verification_predicate_stays_open_for_location_review_required(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::LocationReviewRequired,
+            'location_verified_at' => null,
+        ]);
+
+        $this->assertTrue(app(NotaryRequestWorkflowService::class)->canVerifyLocation($request));
+    }
+
+    public function test_workflow_steps_for_draft_request_start_with_upload_and_send_current(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::Draft,
+        ]);
+
+        $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($request);
+
+        $this->assertSame('Upload & send', $steps[0]['label']);
+        $this->assertSame('upcoming', $steps[0]['state']);
+        $this->assertSame('upcoming', $steps[1]['state']);
+    }
+
+    public function test_workflow_steps_for_digitalized_request_mark_digital_notarization_complete(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::Digitalized,
+        ]);
+
+        $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($request);
+
+        $this->assertSame('Digital notarization', $steps[5]['label']);
+        $this->assertSame('complete', $steps[5]['state']);
+    }
 }

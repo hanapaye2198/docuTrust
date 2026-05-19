@@ -98,7 +98,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         $user = Auth::user();
         abort_unless($user !== null, 401);
 
-        $readiness = app(NotaryRequestWorkflowService::class)->finalizationReadiness($this->notaryRequest);
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $readiness = $workflow->finalizationReadiness($this->notaryRequest);
         $requestDocuments = $this->notaryRequest->documents->loadMissing(['documentSigners', 'signatureFields']);
 
         return [
@@ -110,7 +111,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'canCreateRegisterEntry' => $this->canCreateRegisterEntry(),
             'canReviewNotary' => $this->canReviewNotary(),
             'canAttorneySign' => $this->canAttorneySign(),
-            'workflowSteps' => $this->workflowSteps($readiness, $requestDocuments),
+            'workflowSteps' => $workflow->workflowSteps($this->notaryRequest),
             'requestDocuments' => $requestDocuments,
             'recentSessions' => $this->notaryRequest->sessions,
             'journalEntries' => $this->notaryRequest->journals,
@@ -513,7 +514,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         try {
             app(NotaryRequestWorkflowService::class)->digitalize($this->notaryRequest);
             $this->refreshRequest();
-            session()->flash('status', __('Digital notarization completed: notary seal applied, QR code attached, certificate generated, document timestamped. The Notary Admin will now finalize the request.'));
+            session()->flash('status', __('Digital notarization completed: notary seal applied, QR code attached, certificate generated, and document timestamped. The request is now ready for Notary Admin finalization.'));
         } catch (\RuntimeException $exception) {
             $this->addError('digitalizeRequest', $exception->getMessage());
         }
@@ -895,15 +896,12 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     private function canVerifyIdentity(): bool
     {
-        return $this->notaryRequest->status === NotaryRequestStatus::Submitted;
+        return app(NotaryRequestWorkflowService::class)->canVerifyIdentity($this->notaryRequest);
     }
 
     private function canVerifyLocation(): bool
     {
-        return in_array($this->notaryRequest->status, [
-            NotaryRequestStatus::Submitted,
-            NotaryRequestStatus::IdentityVerified,
-        ], true);
+        return app(NotaryRequestWorkflowService::class)->canVerifyLocation($this->notaryRequest);
     }
 
     private function canScheduleSession(): bool
@@ -926,95 +924,6 @@ new #[Layout('components.layouts.app')] class extends Component {
         return app(NotaryRequestWorkflowService::class)->canCreateRegisterEntry($this->notaryRequest);
     }
 
-    /**
-     * @param  array{ready: bool, issues: list<string>, documents: array<int, array<string, mixed>>}  $readiness
-     * @param  \Illuminate\Support\Collection<int, Document>  $documents
-     * @return list<array{label: string, description: string, state: string}>
-     */
-    private function workflowSteps(array $readiness, \Illuminate\Support\Collection $documents): array
-    {
-        $hasSubmitted = $this->notaryRequest->submitted_at !== null || $this->notaryRequest->status !== NotaryRequestStatus::Draft;
-        $hasDocuments = $documents->isNotEmpty();
-        $allSignersSigned = $hasDocuments && $documents->every(fn (Document $document) =>
-            in_array($document->status->value, ['pending', 'completed'], true) &&
-            $document->documentSigners->filter(fn ($s) => $s->requiresAction() && (int) $s->user_id !== (int) $this->notaryRequest->notary_user_id)->every(fn ($s) => in_array($s->status->value, ['signed', 'approved'], true))
-        );
-        $hasCompletedSession = $this->notaryRequest->sessions->contains(fn ($s) => $s->status === 'completed');
-        $attorneyHasSigned = $hasDocuments && $documents->every(fn (Document $document) =>
-            $document->documentSigners->contains(fn ($s) => (int) $s->user_id === (int) $this->notaryRequest->notary_user_id && $s->status->value === 'signed')
-        );
-        $hasRegisterEntry = $this->notaryRequest->registerEntries->isNotEmpty();
-        $isNotarized = $this->notaryRequest->status === NotaryRequestStatus::Notarized;
-        $isAttorneyApproved = $this->notaryRequest->status === NotaryRequestStatus::AttorneyApproved;
-        $isDigitalized = $this->notaryRequest->status === NotaryRequestStatus::Digitalized;
-
-        return [
-            [
-                'label' => __('Upload & send'),
-                'description' => __('Attorney uploads documents, assigns signers, and sends for signing.'),
-                'state' => match (true) {
-                    $allSignersSigned || $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
-                    $hasDocuments => 'current',
-                    default => $hasSubmitted ? 'current' : 'upcoming',
-                },
-            ],
-            [
-                'label' => __('Signers sign'),
-                'description' => __('All assigned signers complete their signatures on the document.'),
-                'state' => match (true) {
-                    $allSignersSigned || $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
-                    $hasDocuments && $documents->contains(fn ($d) => $d->status->value === 'pending') => 'current',
-                    default => 'upcoming',
-                },
-            ],
-            [
-                'label' => __('Video conference'),
-                'description' => __('Attorney verifies signer identity via live video session.'),
-                'state' => match (true) {
-                    $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
-                    in_array($this->notaryRequest->status, [
-                        NotaryRequestStatus::SessionScheduled,
-                        NotaryRequestStatus::SessionInProgress,
-                        NotaryRequestStatus::SessionCompleted,
-                    ], true) => 'current',
-                    $allSignersSigned => 'current',
-                    default => 'upcoming',
-                },
-            ],
-            [
-                'label' => __('Attorney signs'),
-                'description' => __('After identity verification, the attorney signs their part of the document.'),
-                'state' => match (true) {
-                    $attorneyHasSigned || $isNotarized => 'complete',
-                    in_array($this->notaryRequest->status, [
-                        NotaryRequestStatus::SessionCompleted,
-                        NotaryRequestStatus::AttorneySigning,
-                    ], true) => 'current',
-                    default => 'upcoming',
-                },
-            ],
-            [
-                'label' => __('Register entry'),
-                'description' => __('Create notarial register entry documenting the notarial act.'),
-                'state' => match (true) {
-                    $hasRegisterEntry || $isNotarized => 'complete',
-                    $attorneyHasSigned && !$hasRegisterEntry => 'current',
-                    $isAttorneyApproved && !$hasRegisterEntry => 'current',
-                    default => 'upcoming',
-                },
-            ],
-            [
-                'label' => __('Digital notarization'),
-                'description' => __('Applies notary seal, attaches QR code, generates certificates, and timestamps document.'),
-                'state' => match (true) {
-                    $isNotarized => 'complete',
-                    $isDigitalized => 'complete',
-                    $hasRegisterEntry && ($attorneyHasSigned || $isAttorneyApproved) => 'current',
-                    default => 'upcoming',
-                },
-            ],
-        ];
-    }
 }; ?>
 
 <div class="mx-auto flex h-full w-full max-w-7xl flex-1 flex-col gap-6 px-0 py-4 sm:px-1">
@@ -1030,11 +939,26 @@ new #[Layout('components.layouts.app')] class extends Component {
         <div class="space-y-2">
             <h1 class="text-xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-2xl">{{ $notaryRequest->title }}</h1>
             <div class="flex flex-wrap items-center gap-2">
-                <span class="inline-flex items-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</span>
-                <span class="inline-flex items-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ str_replace('_', ' ', $notaryRequest->request_type) }}</span>
+                @php
+                    $statusBadgeColor = match ($notaryRequest->status->value) {
+                        'draft' => 'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
+                        'submitted' => 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800',
+                        'identity_verified', 'location_verified' => 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800',
+                        'session_scheduled', 'session_in_progress' => 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800',
+                        'attorney_approved' => 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800',
+                        'notarized' => 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+                        'rejected', 'failed' => 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800',
+                        'cancelled' => 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
+                        default => 'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
+                    };
+                @endphp
+                <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold capitalize {{ $statusBadgeColor }}">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</span>
+                <span class="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ str_replace('_', ' ', $notaryRequest->request_type) }}</span>
             </div>
             <p class="text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('Requester') }}: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $notaryRequest->requester?->name ?? '-' }}</span> · {{ __('Notary') }}: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $notaryRequest->notary?->name ?? __('Unassigned') }}</span>
+                {{ __('Requester') }}: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $notaryRequest->requester?->name ?? '-' }}</span>
+                <span class="mx-1 text-zinc-300 dark:text-zinc-600">·</span>
+                {{ __('Notary') }}: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $notaryRequest->notary?->name ?? __('Unassigned') }}</span>
             </p>
         </div>
         <div class="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
@@ -1086,7 +1010,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <flux:button variant="primary" icon="arrow-down-tray" :href="route('documents.download', $firstNotarizedDoc)">{{ __('Download') }}</flux:button>
                 @endif
                 @if ($notaryRequest->registerEntries->first()?->qr_verification_token)
-                    <flux:button variant="outline" icon="shield-check" :href="route('verify.index') . '?token=' . $notaryRequest->registerEntries->first()->qr_verification_token" target="_blank">{{ __('Verify') }}</flux:button>
+                    <flux:button variant="outline" icon="shield-check" :href="route('notary.verify', ['token' => $notaryRequest->registerEntries->first()->qr_verification_token])" target="_blank">{{ __('Verify') }}</flux:button>
                 @endif
                 @if ($firstNotarizedDoc)
                     <flux:button variant="outline" icon="archive-box" :href="route('documents.certificate.show', $firstNotarizedDoc)" wire:navigate>{{ __('Certificate') }}</flux:button>
@@ -1111,7 +1035,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Workflow') }}</h2>
                     <span class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('6 stages') }}</span>
                 </div>
-                <div class="mt-4 grid gap-2.5 lg:grid-cols-6">
+                <div class="mt-4 flex gap-2 overflow-x-auto pb-1">
                     @foreach ($workflowSteps as $index => $step)
                         @php
                             $stepStyles = match ($step['state']) {
@@ -1130,15 +1054,31 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 default => __('Upcoming'),
                             };
                         @endphp
-                        <div class="rounded-xl border p-3.5 {{ $stepStyles }}">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="inline-flex size-6 items-center justify-center rounded-full text-[10px] font-bold {{ $badgeStyles }}">{{ $index + 1 }}</span>
-                                <span class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ $stateLabel }}</span>
+                        <div class="flex min-w-[7.5rem] flex-1 flex-col rounded-xl border p-3 {{ $stepStyles }}" title="{{ $step['description'] }}">
+                            <div class="flex items-center justify-between gap-1.5">
+                                <span class="inline-flex size-5 items-center justify-center rounded-full text-[10px] font-bold {{ $badgeStyles }}">{{ $index + 1 }}</span>
+                                <span class="text-[9px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ $stateLabel }}</span>
                             </div>
-                            <div class="mt-3 text-xs font-semibold text-zinc-900 dark:text-zinc-100">{{ $step['label'] }}</div>
+                            <div class="mt-2 text-[11px] font-semibold leading-tight text-zinc-900 dark:text-zinc-100">{{ $step['label'] }}</div>
                         </div>
                     @endforeach
                 </div>
+
+                {{-- Next step guidance (for attorney) --}}
+                @if ($isNotary && $notaryRequest->status !== NotaryRequestStatus::Notarized)
+                    @php
+                        $currentStep = collect($workflowSteps)->first(fn ($s) => $s['state'] === 'current');
+                    @endphp
+                    @if ($currentStep)
+                        <div class="mt-4 flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-900/40 dark:bg-sky-950/20">
+                            <svg class="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
+                            <div>
+                                <div class="text-xs font-semibold text-sky-800 dark:text-sky-200">{{ __('Next:') }} {{ $currentStep['label'] }}</div>
+                                <div class="mt-0.5 text-xs text-sky-700 dark:text-sky-300">{{ $currentStep['description'] }}</div>
+                            </div>
+                        </div>
+                    @endif
+                @endif
             </div>
 
             {{-- Notarized Document & Certificate (shown after finalization) --}}
@@ -1202,7 +1142,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     <div class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Scan to verify authenticity') }}</div>
                                     @if ($entry->qr_verification_token)
                                         <div class="mt-2">
-                                            <a href="{{ route('verify.index') }}?token={{ $entry->qr_verification_token }}" target="_blank" class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-800 dark:bg-zinc-800 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                                            <a href="{{ route('notary.verify', ['token' => $entry->qr_verification_token]) }}" target="_blank" class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-800 dark:bg-zinc-800 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
                                                 <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
                                                 {{ __('Verify') }}
                                             </a>
@@ -1868,7 +1808,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     @endif
                     @if (! $canVerifyIdentity && ! $canVerifyLocation)
                         <div class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                            {{ __('Verification actions appear after the request is submitted.') }}
+                            {{ __('Verification actions appear when the request is submitted or when manual review is required.') }}
                         </div>
                     @endif
                 </div>
@@ -1884,7 +1824,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         </div>
                     @else
                         <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                            {{ __('Register entry creation becomes available after attorney approval.') }}
+                            {{ __('Register entry creation becomes available after the attorney has signed the linked documents.') }}
                         </div>
                     @endif
                     @if ($notaryRequest->registerEntries->isNotEmpty())
@@ -1905,10 +1845,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                     @if ($canReviewNotary)
                         <div class="mt-4 space-y-4">
                             <flux:field>
-                                <flux:label>{{ __('Approval summary') }}</flux:label>
+                                <flux:label>{{ __('Review summary') }}</flux:label>
                                 <flux:textarea wire:model="approvalSummary" rows="4" placeholder="{{ __('Observed signer awareness, reviewed identity, and validated voluntary signing.') }}" />
                             </flux:field>
-                            <flux:button variant="primary" type="button" wire:click="approveRequest">{{ __('Approve request') }}</flux:button>
+                            <flux:button variant="primary" type="button" wire:click="approveRequest">{{ __('Complete attorney review') }}</flux:button>
                             <flux:error name="approveRequest" />
 
                             <div class="border-t border-zinc-200 pt-4 dark:border-zinc-700">
@@ -1925,7 +1865,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         </div>
                     @else
                         <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                            {{ __('Notary review is available only after identity, location, or session verification has started.') }}
+                            {{ __('Attorney review becomes available after the video session is complete, the attorney has signed, and a register entry exists.') }}
                         </div>
                     @endif
                 </div>

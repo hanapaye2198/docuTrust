@@ -10,7 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class NotaryRequestApprovedMail extends Mailable implements ShouldQueue
+class NotaryRequestDigitalizedMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -21,14 +21,14 @@ class NotaryRequestApprovedMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: __('Attorney review completed: :title', ['title' => $this->notaryRequest->title]),
+            subject: __('Notary request ready for finalization: :title', ['title' => $this->notaryRequest->title]),
         );
     }
 
     public function content(): Content
     {
         return new Content(
-            markdown: 'mail.notary.request-approved',
+            markdown: 'mail.notary.request-digitalized',
             with: [
                 'notaryRequest' => $this->notaryRequest,
                 'notaryName' => $this->notaryRequest->notary?->name ?? 'Notary Public',

@@ -6,6 +6,7 @@ use App\Enums\DocumentStatus;
 use App\Enums\NotaryRequestStatus;
 use App\Enums\TemplateRoleType;
 use App\Events\NotaryRequestApproved;
+use App\Events\NotaryRequestDigitalized;
 use App\Events\NotaryRequestNotarized;
 use App\Events\NotaryRequestSubmitted;
 use App\Models\DocumentSigner;
@@ -16,10 +17,137 @@ use RuntimeException;
 
 class NotaryRequestWorkflowService
 {
+    public function canVerifyIdentity(NotaryRequest $request): bool
+    {
+        return $request->identity_verified_at === null
+            && in_array($request->status, [
+                NotaryRequestStatus::Submitted,
+                NotaryRequestStatus::IdentityReviewRequired,
+                NotaryRequestStatus::LocationReviewRequired,
+                NotaryRequestStatus::LocationVerified,
+                NotaryRequestStatus::SessionScheduled,
+                NotaryRequestStatus::SessionInProgress,
+                NotaryRequestStatus::SessionCompleted,
+                NotaryRequestStatus::AttorneySigning,
+            ], true);
+    }
+
+    public function canVerifyLocation(NotaryRequest $request): bool
+    {
+        return $request->location_verified_at === null
+            && in_array($request->status, [
+                NotaryRequestStatus::Submitted,
+                NotaryRequestStatus::IdentityReviewRequired,
+                NotaryRequestStatus::IdentityVerified,
+                NotaryRequestStatus::LocationReviewRequired,
+            ], true);
+    }
+
     public function canScheduleSession(NotaryRequest $request): bool
     {
-        return $request->status === NotaryRequestStatus::LocationVerified
-            && $this->documentsReadyForSession($request);
+        return in_array($request->status, [
+            NotaryRequestStatus::Submitted,
+            NotaryRequestStatus::IdentityReviewRequired,
+            NotaryRequestStatus::IdentityVerified,
+            NotaryRequestStatus::LocationReviewRequired,
+            NotaryRequestStatus::LocationVerified,
+        ], true)
+            && $this->documentsReadyForSessionState($request);
+    }
+
+    public function documentsReadyForSession(NotaryRequest $request): bool
+    {
+        return $this->documentsReadyForSessionState($request);
+    }
+
+    /**
+     * @return list<array{label: string, description: string, state: string}>
+     */
+    public function workflowSteps(NotaryRequest $request): array
+    {
+        $request->loadMissing(['documents.documentSigners', 'sessions', 'registerEntries']);
+
+        $hasSubmitted = $request->submitted_at !== null || $request->status !== NotaryRequestStatus::Draft;
+        $hasDocuments = $request->documents->isNotEmpty();
+        $allSignersSigned = $this->documentsReadyForSession($request);
+        $hasCompletedSession = $this->hasCompletedSession($request);
+        $attorneyHasSigned = $this->hasAttorneySignedAllDocuments($request);
+        $hasRegisterEntry = $request->registerEntries->isNotEmpty();
+        $isNotarized = $request->status === NotaryRequestStatus::Notarized;
+        $isAttorneyApproved = $request->status === NotaryRequestStatus::AttorneyApproved;
+        $isDigitalized = $request->status === NotaryRequestStatus::Digitalized;
+        $canBeginAttorneySigning = $this->canBeginAttorneySigning($request);
+        $canDigitalize = $this->canDigitalize($request);
+
+        return [
+            [
+                'label' => __('Upload & send'),
+                'description' => __('Attorney uploads documents, assigns signers, and sends for signing.'),
+                'state' => match (true) {
+                    $allSignersSigned || $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
+                    $hasDocuments => 'current',
+                    $request->status === NotaryRequestStatus::IdentityReviewRequired => 'current',
+                    $request->status === NotaryRequestStatus::LocationReviewRequired => 'current',
+                    default => $hasSubmitted ? 'current' : 'upcoming',
+                },
+            ],
+            [
+                'label' => __('Signers sign'),
+                'description' => __('All assigned signers complete their signatures on the document.'),
+                'state' => match (true) {
+                    $allSignersSigned || $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
+                    $hasDocuments && $request->documents->contains(fn (Document $document) => $document->status->value === 'pending') => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'label' => __('Video conference'),
+                'description' => __('Attorney verifies signer identity via live video session.'),
+                'state' => match (true) {
+                    $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
+                    in_array($request->status, [
+                        NotaryRequestStatus::SessionScheduled,
+                        NotaryRequestStatus::SessionInProgress,
+                        NotaryRequestStatus::SessionCompleted,
+                    ], true) => 'current',
+                    $allSignersSigned => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'label' => __('Attorney signs'),
+                'description' => __('After identity verification, the attorney signs their part of the document.'),
+                'state' => match (true) {
+                    $attorneyHasSigned || $isNotarized => 'complete',
+                    in_array($request->status, [
+                        NotaryRequestStatus::SessionCompleted,
+                        NotaryRequestStatus::AttorneySigning,
+                    ], true) => 'current',
+                    $canBeginAttorneySigning => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'label' => __('Register entry'),
+                'description' => __('Create notarial register entry documenting the notarial act.'),
+                'state' => match (true) {
+                    $hasRegisterEntry || $isNotarized => 'complete',
+                    $attorneyHasSigned && ! $hasRegisterEntry => 'current',
+                    $isAttorneyApproved && ! $hasRegisterEntry => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'label' => __('Digital notarization'),
+                'description' => __('Applies notary seal, attaches QR code, generates certificates, and timestamps document.'),
+                'state' => match (true) {
+                    $isNotarized => 'complete',
+                    $isDigitalized => 'complete',
+                    $canDigitalize || ($hasRegisterEntry && ($attorneyHasSigned || $isAttorneyApproved)) => 'current',
+                    default => 'upcoming',
+                },
+            ],
+        ];
     }
 
     public function hasCompletedSession(NotaryRequest $request): bool
@@ -35,7 +163,7 @@ class NotaryRequestWorkflowService
             return false;
         }
 
-        return $this->documentsReadyForSession($request);
+        return $this->documentsReadyForSessionState($request);
     }
 
     public function hasAttorneySignedAllDocuments(NotaryRequest $request): bool
@@ -117,7 +245,7 @@ class NotaryRequestWorkflowService
         return $request->fresh();
     }
 
-    private function documentsReadyForSession(NotaryRequest $request): bool
+    private function documentsReadyForSessionState(NotaryRequest $request): bool
     {
         $request->loadMissing(['documents.documentSigners']);
 
@@ -246,7 +374,7 @@ class NotaryRequestWorkflowService
     public function approve(NotaryRequest $request, array $legalAssertions = [], ?string $summary = null): NotaryRequest
     {
         if (! $this->canApprove($request)) {
-            throw new RuntimeException(__('This notary request is not ready for attorney approval.'));
+            throw new RuntimeException(__('This notary request is not ready for attorney review completion.'));
         }
 
         $request->markApproved();
@@ -255,7 +383,7 @@ class NotaryRequestWorkflowService
             'notary_request_id' => $request->id,
             'notary_user_id' => $request->notary_user_id,
             'entry_type' => 'approval',
-            'summary' => $summary ?: __('Attorney approved the notary request.'),
+            'summary' => $summary ?: __('Attorney completed the final review for this notary request.'),
             'legal_assertions' => $legalAssertions,
             'recorded_at' => now(),
         ]);
@@ -323,12 +451,14 @@ class NotaryRequestWorkflowService
                 'voluntary_consent' => true,
                 'jurisdiction_valid' => true,
                 'digital_notarization_ready' => true,
-            ], __('Attorney completed signing and approved this request for digital notarization.'));
+            ], __('Attorney completed signing and review, and marked this request ready for digital notarization.'));
         }
 
         app(NotaryDigitalizationService::class)->digitalize($request->fresh());
 
         $request->fresh()->markDigitalized();
+
+        event(new NotaryRequestDigitalized($request->fresh()));
 
         return $request->fresh();
     }

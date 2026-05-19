@@ -1,13 +1,13 @@
 <x-mail::message>
-# Notary Request Approved
+# Attorney Review Completed
 
-Your notary request has been approved by the assigned notary public.
+The assigned notary public has completed the attorney review for your request.
 
 **Request:** {{ $notaryRequest->title }}
-**Approved by:** {{ $notaryName }}
-**Approved at:** {{ $approvedAt }}
+**Reviewed by:** {{ $notaryName }}
+**Reviewed at:** {{ $approvedAt }}
 
-The request is now ready for finalization. Once all document artifacts are complete, the notarization can be finalized.
+The request can now proceed through the remaining notarization steps, including digital notarization and final administrative finalization.
 
 <x-mail::button :url="route('notary-requests.show', $notaryRequest)">
 View Request

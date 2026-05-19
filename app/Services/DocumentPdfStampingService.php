@@ -35,9 +35,7 @@ class DocumentPdfStampingService
 
     private function generate(Document $document, string $mode): ?string
     {
-        $sourcePath = $mode === 'final'
-            ? ($document->prepared_pdf_path ?: $document->sourcePdfPath())
-            : $document->sourcePdfPath();
+        $sourcePath = $document->sourcePdfPath();
 
         if (! is_string($sourcePath) || $sourcePath === '') {
             return null;

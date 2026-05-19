@@ -2,14 +2,18 @@
 
 namespace App\Services;
 
+use App\Enums\UserRole;
 use App\Events\NotaryRequestApproved;
+use App\Events\NotaryRequestDigitalized;
 use App\Events\NotaryRequestNotarized;
 use App\Events\NotaryRequestSubmitted;
 use App\Events\NotarySessionScheduled;
 use App\Mail\NotaryRequestApprovedMail;
+use App\Mail\NotaryRequestDigitalizedMail;
 use App\Mail\NotaryRequestNotarizedMail;
 use App\Mail\NotaryRequestSubmittedMail;
 use App\Mail\NotarySessionScheduledMail;
+use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 
 class NotaryNotificationService
@@ -40,11 +44,30 @@ class NotaryNotificationService
     {
         $request = $event->notaryRequest->loadMissing(['requester', 'notary']);
 
-        // Notify the requester about approval
+        // Notify the requester that attorney review is complete
         if ($request->requester !== null && $request->requester->email !== '') {
             Mail::to($request->requester->email)
                 ->queue(new NotaryRequestApprovedMail($request));
         }
+    }
+
+    public function handleRequestDigitalized(NotaryRequestDigitalized $event): void
+    {
+        $request = $event->notaryRequest->loadMissing(['requester', 'notary']);
+
+        if ($request->requester !== null && $request->requester->email !== '') {
+            Mail::to($request->requester->email)
+                ->queue(new NotaryRequestDigitalizedMail($request));
+        }
+
+        User::query()
+            ->where('role', UserRole::NotaryAdmin)
+            ->whereNotNull('email')
+            ->where('email', '!=', '')
+            ->pluck('email')
+            ->each(function (string $email) use ($request): void {
+                Mail::to($email)->queue(new NotaryRequestDigitalizedMail($request));
+            });
     }
 
     public function handleRequestNotarized(NotaryRequestNotarized $event): void

@@ -18,6 +18,7 @@ class NotaryDigitalizationService
         private readonly CompletedDocumentArtifactService $completedDocumentArtifactService,
         private readonly BlockchainProofService $blockchainProofService,
         private readonly DocumentHashService $documentHashService,
+        private readonly DocumentArchiveService $documentArchiveService,
     ) {}
 
     /**
@@ -32,11 +33,31 @@ class NotaryDigitalizationService
         $request->loadMissing(['documents', 'registerEntries.notaryCredential']);
 
         $credential = $this->resolveCredential($request);
+        $preparedDocuments = [];
+
+        foreach ($request->documents as $document) {
+            try {
+                $preparedDocuments[$document->id] = $this->completedDocumentArtifactService->ensureReady($document) ?? ($document->fresh() ?? $document);
+            } catch (Throwable $throwable) {
+                Log::channel('errors')->warning('Document artifact generation failed during digitalization', [
+                    'notary_request_id' => $request->id,
+                    'document_id' => $document->id,
+                    'exception' => $throwable::class,
+                    'message' => $throwable->getMessage(),
+                ]);
+
+                $preparedDocuments[$document->id] = $document->fresh() ?? $document;
+            }
+        }
 
         // Step 1: Apply notary seal to documents
         if ($credential !== null) {
             foreach ($request->documents as $document) {
-                $this->applyNotarySealToDocument($request, $document, $credential);
+                $this->applyNotarySealToDocument(
+                    $request,
+                    $preparedDocuments[$document->id] ?? ($document->fresh() ?? $document),
+                    $credential
+                );
             }
         }
 
@@ -59,19 +80,6 @@ class NotaryDigitalizationService
         }
 
         // Step 4: Timestamp documents (generate hash + blockchain anchoring)
-        foreach ($request->documents as $document) {
-            try {
-                $this->completedDocumentArtifactService->ensureReady($document);
-            } catch (Throwable $throwable) {
-                Log::channel('errors')->warning('Document artifact generation failed during digitalization', [
-                    'notary_request_id' => $request->id,
-                    'document_id' => $document->id,
-                    'exception' => $throwable::class,
-                    'message' => $throwable->getMessage(),
-                ]);
-            }
-        }
-
         foreach ($request->documents as $document) {
             $this->ensureBlockchainAnchoring($document->fresh());
         }
@@ -154,7 +162,14 @@ class NotaryDigitalizationService
             if (is_string($notarizedPath) && $notarizedPath !== '') {
                 $document->forceFill([
                     'final_pdf_path' => $notarizedPath,
+                    'archive_document_path' => null,
+                    'archived_at' => null,
                 ])->save();
+
+                $document = $document->fresh() ?? $document;
+                $hash = $this->documentHashService->generateDocumentHash($notarizedPath);
+                $this->documentHashService->createOrRefreshForCompletedDocument($document, $hash);
+                $this->documentArchiveService->archiveCompletedDocument($document);
             }
         } catch (Throwable $throwable) {
             Log::channel('errors')->warning('Notary seal application failed', [

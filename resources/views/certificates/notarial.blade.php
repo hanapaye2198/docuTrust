@@ -241,7 +241,7 @@
     @if ($entry->qr_verification_token)
         <div class="qr-section">
             @if ($entry->qr_code_path)
-                <img src="{{ storage_path('app/' . $entry->qr_code_path) }}" alt="QR Verification">
+                <img src="{{ \Illuminate\Support\Facades\Storage::disk(config('filesystems.docutrust_disk', 'local'))->path($entry->qr_code_path) }}" alt="QR Verification">
             @endif
             <p>Scan to verify this notarization online</p>
         </div>

@@ -8,6 +8,7 @@ use App\Events\DocumentCompleted;
 use App\Events\DocumentSent;
 use App\Events\DocumentSignerCompleted;
 use App\Events\NotaryRequestApproved;
+use App\Events\NotaryRequestDigitalized;
 use App\Events\NotaryRequestNotarized;
 use App\Events\NotaryRequestSubmitted;
 use App\Events\NotarySessionScheduled;
@@ -77,6 +78,10 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(NotaryRequestApproved::class, function (NotaryRequestApproved $event): void {
             app(NotaryNotificationService::class)->handleRequestApproved($event);
+        });
+
+        Event::listen(NotaryRequestDigitalized::class, function (NotaryRequestDigitalized $event): void {
+            app(NotaryNotificationService::class)->handleRequestDigitalized($event);
         });
 
         Event::listen(NotaryRequestNotarized::class, function (NotaryRequestNotarized $event): void {

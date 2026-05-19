@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Concerns\ResolvesSecureDisk;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use setasign\Fpdi\Fpdi;
@@ -66,29 +67,56 @@ class NotarySealService
      */
     public function generateVerificationQrCode(NotarialRegisterEntry $entry): ?string
     {
-        $verificationUrl = route('notary.verify', ['token' => $entry->qr_verification_token]);
-
-        // Use Google Charts API for QR code generation (same pattern as existing TOTP QR)
-        $qrUrl = sprintf(
-            'https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=%s&choe=UTF-8',
-            urlencode($verificationUrl)
-        );
-
-        try {
-            $qrContent = file_get_contents($qrUrl);
-            if ($qrContent === false) {
-                return null;
-            }
-
-            $path = sprintf('notary/qr/%s.png', $entry->qr_verification_token);
-            Storage::disk($this->secureDiskName())->put($path, $qrContent);
-
-            $entry->update(['qr_code_path' => $path]);
-
-            return $path;
-        } catch (Throwable) {
+        if (! is_string($entry->qr_verification_token) || $entry->qr_verification_token === '') {
             return null;
         }
+
+        $verificationUrl = route('notary.verify', ['token' => $entry->qr_verification_token]);
+
+        foreach ($this->verificationQrUrls($verificationUrl) as $qrUrl) {
+            try {
+                $response = Http::timeout(10)
+                    ->accept('image/png')
+                    ->get($qrUrl);
+
+                if (! $response->successful()) {
+                    continue;
+                }
+
+                $qrContent = $response->body();
+                if ($qrContent === '') {
+                    continue;
+                }
+
+                $path = sprintf('notary/qr/%s.png', $entry->qr_verification_token);
+                Storage::disk($this->secureDiskName())->put($path, $qrContent);
+
+                $entry->update(['qr_code_path' => $path]);
+
+                return $path;
+            } catch (Throwable) {
+                continue;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function verificationQrUrls(string $verificationUrl): array
+    {
+        return [
+            sprintf(
+                'https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=%s&choe=UTF-8',
+                urlencode($verificationUrl)
+            ),
+            sprintf(
+                'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=%s',
+                rawurlencode($verificationUrl)
+            ),
+        ];
     }
 
     private function renderSealPage(Fpdi $pdf, NotaryCredential $credential, NotarialRegisterEntry $entry): void

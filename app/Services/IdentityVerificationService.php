@@ -28,8 +28,8 @@ class IdentityVerificationService
      */
     public function verify(NotaryRequest $request, array $identityData): NotaryRequest
     {
-        if ($request->status !== NotaryRequestStatus::Submitted) {
-            throw new RuntimeException(__('Identity verification can only be performed on submitted requests.'));
+        if (! $this->identityWorkflowIsMutable($request)) {
+            throw new RuntimeException(__('Identity verification can only be performed before attorney approval.'));
         }
 
         $idDocumentType = trim((string) ($identityData['id_document_type'] ?? ''));
@@ -47,7 +47,7 @@ class IdentityVerificationService
             'selfie_path' => $identityData['selfie_path'] ?? null,
         ])->save();
 
-        $request->markIdentityVerified();
+        $this->markIdentityVerifiedWithoutRegressingProgress($request);
 
         NotaryJournal::query()->create([
             'notary_request_id' => $request->id,
@@ -86,8 +86,8 @@ class IdentityVerificationService
     {
         $request = $signer->notaryRequest()->firstOrFail();
 
-        if ($request->status !== NotaryRequestStatus::Submitted) {
-            throw new RuntimeException(__('Identity documents can only be submitted while the request is pending verification.'));
+        if (! $this->identityWorkflowIsMutable($request)) {
+            throw new RuntimeException(__('Identity documents can only be submitted before attorney approval.'));
         }
 
         $idType = trim((string) ($payload['id_type'] ?? ''));
@@ -150,8 +150,8 @@ class IdentityVerificationService
 
         $request = $record->notaryRequest()->firstOrFail();
 
-        if ($request->status !== NotaryRequestStatus::Submitted) {
-            throw new RuntimeException(__('This request is not awaiting identity verification.'));
+        if (! $this->identityWorkflowIsMutable($request)) {
+            throw new RuntimeException(__('This request can no longer accept identity review updates.'));
         }
 
         $record->forceFill([
@@ -171,7 +171,7 @@ class IdentityVerificationService
         }
 
         if ($this->allSignersHaveApprovedIdentity($request)) {
-            $request->markIdentityVerified();
+            $this->markIdentityVerifiedWithoutRegressingProgress($request);
 
             NotaryJournal::query()->create([
                 'notary_request_id' => $request->id,
@@ -213,6 +213,8 @@ class IdentityVerificationService
             'rejection_reason' => trim($reason),
         ])->save();
 
+        $request->markIdentityReviewRequired(trim($reason));
+
         NotaryJournal::query()->create([
             'notary_request_id' => $request->id,
             'notary_user_id' => $request->notary_user_id,
@@ -252,5 +254,41 @@ class IdentityVerificationService
         }
 
         return true;
+    }
+
+    private function identityWorkflowIsMutable(NotaryRequest $request): bool
+    {
+        return in_array($request->status, [
+            NotaryRequestStatus::Submitted,
+            NotaryRequestStatus::IdentityReviewRequired,
+            NotaryRequestStatus::IdentityVerified,
+            NotaryRequestStatus::LocationReviewRequired,
+            NotaryRequestStatus::LocationVerified,
+            NotaryRequestStatus::SessionScheduled,
+            NotaryRequestStatus::SessionInProgress,
+            NotaryRequestStatus::SessionCompleted,
+            NotaryRequestStatus::AttorneySigning,
+        ], true);
+    }
+
+    private function markIdentityVerifiedWithoutRegressingProgress(NotaryRequest $request): void
+    {
+        $now = now();
+        $status = $request->status;
+
+        if (! in_array($status, [
+            NotaryRequestStatus::Submitted,
+            NotaryRequestStatus::IdentityReviewRequired,
+            NotaryRequestStatus::IdentityVerified,
+        ], true)) {
+            $request->forceFill([
+                'identity_verified_at' => $now,
+                'verified_at' => $now,
+            ])->save();
+
+            return;
+        }
+
+        $request->markIdentityVerified();
     }
 }

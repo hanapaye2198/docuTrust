@@ -47,12 +47,17 @@ class DocumentArchiveService
             return $document->archive_document_path;
         }
 
-        if (is_string($document->archive_document_path) && $document->archive_document_path !== '' && $archiveDisk->exists($document->archive_document_path)) {
-            return $document->archive_document_path;
-        }
-
         if ($workingDiskName === $archiveDiskName) {
             return $path;
+        }
+
+        if (
+            is_string($document->archive_document_path)
+            && $document->archive_document_path !== ''
+            && $document->archive_document_path === $path
+            && $archiveDisk->exists($document->archive_document_path)
+        ) {
+            return $document->archive_document_path;
         }
 
         if (! $workingDisk->exists($path)) {

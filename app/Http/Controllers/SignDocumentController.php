@@ -12,6 +12,8 @@ use App\Models\DocumentSigner;
 use App\Models\Signature;
 use App\Models\SignatureField;
 use App\Models\TrustAuthorizationSession;
+use App\Services\CompletedDocumentArtifactService;
+use App\Services\DocumentPdfStampingService;
 use App\Services\DocumentSigningWorkflowService;
 use App\Services\FieldSignatureCaptureService;
 use App\Services\SigningMethodService;
@@ -37,6 +39,8 @@ class SignDocumentController extends Controller
     private const DOCUMENT_UNLOCK_SESSION_PREFIX = 'document_access_unlocked:';
 
     public function __construct(
+        private readonly CompletedDocumentArtifactService $completedDocumentArtifactService,
+        private readonly DocumentPdfStampingService $documentPdfStampingService,
         private readonly DocumentSigningWorkflowService $documentSigningWorkflowService,
         private readonly FieldSignatureCaptureService $fieldSignatureCaptureService,
         private readonly TrustAuthorizationWorkflowService $trustAuthorizationWorkflowService,
@@ -98,9 +102,7 @@ class SignDocumentController extends Controller
         }
 
         $document = $signer->document;
-
-        // Use the prepared PDF (with existing signatures) if available, otherwise fall back to source
-        $path = $document->activeSigningPdfPath() ?: $document->sourcePdfPath();
+        $path = $this->authenticatedSigningPdfPath($document);
 
         return PublicPdfStream::inlineResponse($path);
     }
@@ -944,7 +946,7 @@ class SignDocumentController extends Controller
 
         if (is_string($signature->signature_path) && $signature->signature_path !== '' && $signature->signature_field_id !== null) {
             $imageUrl = $authenticated
-                ? route('sign.account.signature.image', [
+                ? route($this->authenticatedAccountRouteName('signature.image'), [
                     'signerId' => $signer->id,
                     'signatureField' => $signature->signature_field_id,
                 ]).'?v='.$signature->updated_at?->timestamp
@@ -1016,5 +1018,35 @@ class SignDocumentController extends Controller
             'trustAuthorizationSessionActive' => $trustAuthorizationSessionActive,
             'authenticatedSigning' => $authenticated,
         ]);
+    }
+
+    private function authenticatedAccountRouteName(string $suffix): string
+    {
+        return Auth::user()?->role->value === 'notary'
+            ? 'notary.sign.account.'.$suffix
+            : 'sign.account.'.$suffix;
+    }
+
+    private function authenticatedSigningPdfPath(Document $document): ?string
+    {
+        if ($document->status === DocumentStatus::Completed) {
+            return $this->completedDocumentArtifactService
+                ->ensureReady($document)
+                ->previewPdfPath();
+        }
+
+        $hasCompletedFieldSignatures = $document->signatures()
+            ->whereNotNull('signature_field_id')
+            ->exists();
+
+        if ($hasCompletedFieldSignatures) {
+            $signedPreviewPath = $this->documentPdfStampingService->generateSignedPreviewPdf($document);
+
+            if (is_string($signedPreviewPath) && $signedPreviewPath !== '') {
+                return $signedPreviewPath;
+            }
+        }
+
+        return $document->activeSigningPdfPath() ?: $document->sourcePdfPath();
     }
 }

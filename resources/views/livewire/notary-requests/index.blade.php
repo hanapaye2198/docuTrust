@@ -291,13 +291,15 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <option value="all">{{ __('All statuses') }}</option>
                     <option value="draft">{{ __('Draft') }}</option>
                     <option value="submitted">{{ __('Submitted') }}</option>
+                    <option value="identity_review_required">{{ __('Identity review required') }}</option>
                     <option value="identity_verified">{{ __('Identity verified') }}</option>
+                    <option value="location_review_required">{{ __('Location review required') }}</option>
                     <option value="location_verified">{{ __('Location verified') }}</option>
                     <option value="session_scheduled">{{ __('Session scheduled') }}</option>
                     <option value="session_in_progress">{{ __('Session in progress') }}</option>
                     <option value="session_completed">{{ __('Session completed') }}</option>
                     <option value="attorney_signing">{{ __('Attorney signing') }}</option>
-                    <option value="attorney_approved">{{ __('Attorney approved') }}</option>
+                    <option value="attorney_approved">{{ __('Attorney reviewed') }}</option>
                     <option value="digitalized">{{ __('Digitalized') }}</option>
                     <option value="notarized">{{ __('Notarized') }}</option>
                     <option value="rejected">{{ __('Rejected') }}</option>
@@ -352,6 +354,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                             $statusColor = match ($request->status->value) {
                                 'draft' => 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
                                 'submitted' => 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+                                'identity_review_required', 'location_review_required' => 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
                                 'identity_verified', 'location_verified' => 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300',
                                 'session_scheduled', 'session_in_progress', 'session_completed' => 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
                                 'attorney_signing' => 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300',
