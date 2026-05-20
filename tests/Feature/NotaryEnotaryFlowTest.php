@@ -443,6 +443,19 @@ class NotaryEnotaryFlowTest extends TestCase
         $this->assertTrue($expiredCredential->isExpired());
     }
 
+    public function test_notary_credential_expiring_today_remains_active_for_the_day(): void
+    {
+        $notary = User::factory()->create(['role' => UserRole::Notary]);
+
+        $credential = NotaryCredential::factory()->for($notary)->create([
+            'commission_expires_at' => now()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        $this->assertTrue($credential->isActive());
+        $this->assertFalse($credential->isExpired());
+    }
+
     public function test_notarial_register_entry_auto_increments_per_credential_per_year(): void
     {
         $notary = User::factory()->create(['role' => UserRole::Notary]);

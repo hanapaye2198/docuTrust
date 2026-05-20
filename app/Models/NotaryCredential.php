@@ -62,13 +62,13 @@ class NotaryCredential extends Model
     {
         return $this->status === 'active'
             && $this->commission_expires_at !== null
-            && $this->commission_expires_at->isFuture();
+            && ! $this->commission_expires_at->copy()->endOfDay()->isPast();
     }
 
     public function isExpired(): bool
     {
         return $this->commission_expires_at !== null
-            && $this->commission_expires_at->isPast();
+            && $this->commission_expires_at->copy()->endOfDay()->isPast();
     }
 
     public function nextEntryNumber(): int
