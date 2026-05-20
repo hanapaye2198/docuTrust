@@ -17,6 +17,7 @@
         "laravel/tinker": "^2.10.1",
         "livewire/flux": "^2.0",
         "livewire/volt": "^1.6.7",
+        "openai-php/client": "^0.10",
         "pragmarx/google2fa": "^8.0",
         "setasign/fpdf": "1.8",
         "setasign/fpdi": "2.5",

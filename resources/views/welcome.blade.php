@@ -25,6 +25,7 @@
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#060d10" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f0f7f5" media="(prefers-color-scheme: light)">
@@ -805,6 +806,17 @@ section{position:relative;z-index:1}
   display:block;margin-bottom:4px;
 }
 .csc-stat-label{font-size:.75rem;color:var(--text-dim)}
+.csc-logo{
+  margin:20px 0 24px;
+  line-height:0;
+}
+.csc-logo-img{
+  width:100%;
+  max-width:min(100%,380px);
+  height:auto;
+  display:block;
+  object-fit:contain;
+}
 
 /* ── FEATURES ── */
 .features-section{padding:80px 0}
@@ -827,6 +839,7 @@ section{position:relative;z-index:1}
   gap:20px;
 }
 .feature-card{
+  display:block;
   background:var(--surface);
   border:1px solid var(--border2);
   border-radius:18px;
@@ -834,7 +847,22 @@ section{position:relative;z-index:1}
   transition:all .3s;
   position:relative;
   overflow:hidden;
+  text-decoration:none;
+  color:inherit;
+  cursor:pointer;
 }
+.feature-card:focus-visible{
+  outline:2px solid var(--teal);
+  outline-offset:3px;
+}
+.feature-card-learn{
+  display:inline-block;
+  margin-top:14px;
+  font-size:.8rem;font-weight:600;
+  color:var(--teal);
+  letter-spacing:.02em;
+}
+.feature-card:hover .feature-card-learn{color:var(--teal-light)}
 .feature-card::after{
   content:'';
   position:absolute;
@@ -1494,6 +1522,7 @@ footer{
     $docutrustLogoLight = file_exists(public_path('images/docutrust-logo-light.png'))
         ? asset('images/docutrust-logo-light.png')
         : null;
+    $cscLogo = asset('images/CSC logo light theme.png');
 @endphp
 
 <div class="orb orb1"></div>
@@ -1689,6 +1718,17 @@ footer{
           Official Member
         </div>
         <h2>Cloud Signature Consortium Member</h2>
+        <div class="csc-logo">
+          <img
+            src="{{ $cscLogo }}"
+            alt="Cloud Signature Consortium"
+            class="csc-logo-img"
+            width="380"
+            height="95"
+            loading="lazy"
+            decoding="async"
+          >
+        </div>
         <p>DocuTrust is a proud member of the <strong style="color:var(--teal-light)">Cloud Signature Consortium (CSC)</strong> — the global standards body for cloud-based digital signatures trusted by enterprises, governments, and regulators worldwide.</p>
         <p style="margin-top:12px;color:var(--text-muted);font-size:.875rem;line-height:1.7">CSC membership means our digital signature infrastructure is built on internationally recognized open standards — including the CSC API, PAdES, and XAdES — ensuring interoperability, legal compliance, and verifiable trust across borders.</p>
         <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener" class="csc-link" style="margin-top:20px;display:inline-flex">
@@ -1727,37 +1767,22 @@ footer{
       <p class="section-sub reveal">From legally binding signatures to audit-ready trails — one platform built for teams that cannot afford gaps in security or speed.</p>
     </div>
     <div class="features-grid">
-      <div class="feature-card featured reveal">
-        <div class="feature-badge">Most Used</div>
-        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg></div>
-        <h3>Secure Digital Signing</h3>
-        <p>Legally binding digital signatures with AES-256 encryption, PKI certificates, and blockchain-anchored tamper-proof verification.</p>
-      </div>
-      <div class="feature-card reveal">
-        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.1-1.1m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg></div>
-        <h3>Blockchain Verification</h3>
-        <p>Every document is cryptographically anchored to the blockchain — immutable, verifiable, and impossible to alter post-signing.</p>
-      </div>
-      <div class="feature-card reveal">
-        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
-        <h3>Multi-Signer Workflow</h3>
-        <p>Define signing order, approval chains, and roles with ease. Support for sequential and parallel signing with automated reminders.</p>
-      </div>
-      <div class="feature-card reveal">
-        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
-        <h3>Real-Time Tracking</h3>
-        <p>Monitor document status from sent to signed in real time. Live dashboards, push notifications, and automated follow-ups.</p>
-      </div>
-      <div class="feature-card reveal">
-        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg></div>
-        <h3>Audit Trail Logs</h3>
-        <p>Complete, court-admissible history of every action — who signed, when, from what IP — for full transparency and compliance.</p>
-      </div>
-      <div class="feature-card reveal">
-        <div class="feature-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg></div>
-        <h3>Smart Document Management</h3>
-        <p>Organize, search, and retrieve files instantly with AI-powered intelligent tagging, version control, and smart folders.</p>
-      </div>
+      @foreach (\App\Support\MarketingFeatures::all() as $marketingFeature)
+        <a
+          href="{{ route('features.show', $marketingFeature['slug']) }}"
+          class="feature-card reveal @if ($marketingFeature['featured']) featured @endif"
+        >
+          @if ($marketingFeature['badge'])
+            <div class="feature-badge">{{ $marketingFeature['badge'] }}</div>
+          @endif
+          <div class="feature-icon">
+            @include('features.partials.icon', ['icon' => $marketingFeature['icon']])
+          </div>
+          <h3>{{ $marketingFeature['title'] }}</h3>
+          <p>{{ $marketingFeature['summary'] }}</p>
+          <span class="feature-card-learn">{{ __('Learn more →') }}</span>
+        </a>
+      @endforeach
     </div>
   </div>
 </section>
@@ -2301,5 +2326,7 @@ const observer = new IntersectionObserver((entries) => {
 }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
 revealEls.forEach(el => observer.observe(el));
 </script>
+
+<x-marketing-chatbot />
 </body>
 </html>

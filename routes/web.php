@@ -1,23 +1,39 @@
 <?php
 
 use App\Http\Controllers\Admin\SignatureComplianceController;
+use App\Http\Controllers\AIController;
 use App\Http\Controllers\DocumentCertificateController;
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\DocumentPrepareController;
 use App\Http\Controllers\DocumentStreamController;
 use App\Http\Controllers\EmailInfrastructureExampleController;
+use App\Http\Controllers\MarketingChatbotController;
+use App\Http\Controllers\MarketingFeatureController;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
 use App\Http\Controllers\TrustProfileAssetController;
 use App\Http\Middleware\AllowMediaPermissions;
 use App\Services\NotarialRegisterService;
+use App\Support\MarketingFeatures;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
+
+Route::get('/features/{feature}', [MarketingFeatureController::class, 'show'])
+    ->whereIn('feature', MarketingFeatures::slugs())
+    ->name('features.show');
+
+Route::post('/ai/chat', [AIController::class, 'ask'])
+    ->middleware('throttle:marketing-chatbot')
+    ->name('ai.chat');
+
+Route::post('/marketing-chatbot/message', MarketingChatbotController::class)
+    ->middleware('throttle:marketing-chatbot')
+    ->name('marketing-chatbot.message');
 
 Route::get('/verify/notary/{token}', function (string $token) {
     $entry = app(NotarialRegisterService::class)->findByVerificationToken($token);

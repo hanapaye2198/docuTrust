@@ -21,7 +21,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-8 px-2 py-4 sm:px-4 lg:px-6">
+<x-admin.page>
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">{{ __('Signature Compliance') }}</h1>
@@ -137,4 +137,4 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
         </div>
     @endif
-</div>
+</x-admin.page>

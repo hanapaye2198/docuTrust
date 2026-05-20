@@ -63,6 +63,18 @@ return [
         'callback_url' => env('EIS_CALLBACK_URL', ''),
     ],
 
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'api_key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        'timeout' => (int) env('OPENAI_TIMEOUT', 30),
+    ],
+
+    'marketing_chatbot' => [
+        'enabled' => env('MARKETING_CHATBOT_ENABLED', true),
+    ],
+
     'remote_signing' => [
         'provider_name' => env('REMOTE_SIGNING_PROVIDER_NAME', 'remote_managed'),
         'base_url' => env('REMOTE_SIGNING_BASE_URL', ''),

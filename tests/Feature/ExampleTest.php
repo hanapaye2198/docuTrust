@@ -17,6 +17,9 @@ class ExampleTest extends TestCase
             ->assertSee(route('login'), false)
             ->assertSee(route('register'), false)
             ->assertSee(route('home'), false)
-            ->assertSee(asset('images/docutrust-logo.png'), false);
+            ->assertSee(asset('images/docutrust-logo.png'), false)
+            ->assertSee(asset('images/CSC logo light theme.png'), false)
+            ->assertSee('Cloud Signature Consortium', false)
+            ->assertDontSee(asset('images/CSC logo dark theme.png'), false);
     }
 }

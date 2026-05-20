@@ -64,6 +64,10 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(30)->by('sign|'.$token.'|'.$request->ip());
         });
 
+        RateLimiter::for('marketing-chatbot', function (Request $request): Limit {
+            return Limit::perMinute(20)->by('marketing-chatbot|'.$request->ip());
+        });
+
         View::composer('components.layouts.app', function ($view): void {
             $view->with('layoutBreadcrumbs', Breadcrumbs::items());
         });

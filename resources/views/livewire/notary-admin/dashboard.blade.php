@@ -57,7 +57,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-8 px-2 py-4 sm:px-4 lg:px-6">
+<x-admin.page>
 
     {{-- Header --}}
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -156,4 +156,4 @@ new #[Layout('components.layouts.app')] class extends Component {
         @endif
     </div>
 
-</div>
+</x-admin.page>

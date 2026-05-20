@@ -389,7 +389,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="flex h-full w-full flex-1 flex-col gap-8 px-2 py-4 font-sans sm:px-4 lg:px-6">
+<x-admin.page class="h-full flex-1 font-sans">
 
     {{-- ── 1. Page Header ── --}}
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -807,4 +807,4 @@ new #[Layout('components.layouts.app')] class extends Component {
         </div>
     </div>
 
-</div>
+</x-admin.page>
