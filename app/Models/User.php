@@ -6,6 +6,7 @@ use App\Enums\EkycStatus;
 use App\Enums\OnboardingStep;
 use App\Enums\OrganizationRole;
 use App\Enums\UserRole;
+use App\Mail\EmailOtpVerificationMail;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -150,6 +152,21 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->onboarding_step === OnboardingStep::Completed
             && $this->mfa_enabled;
+    }
+
+    /**
+     * Send the email verification notification (6-digit OTP, not a signed link).
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        $otp = sprintf('%06d', random_int(0, 999999));
+
+        $this->forceFill([
+            'email_otp' => $otp,
+            'email_otp_expires_at' => now()->addMinutes(10),
+        ])->save();
+
+        Mail::to($this)->send(new EmailOtpVerificationMail($otp));
     }
 
     /**

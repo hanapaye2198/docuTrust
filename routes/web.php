@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\SignatureComplianceController;
 use App\Http\Controllers\DocumentCertificateController;
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\DocumentPrepareController;
@@ -65,6 +66,16 @@ Volt::route('verify', 'pages.verify')->name('verify.index');
 
 Route::middleware(['auth', 'role:super_admin,notary_admin'])->group(function () {
     Volt::route('dashboard', 'notary-admin.dashboard')->name('dashboard');
+    Volt::route('admin/compliance', 'admin.compliance-dashboard')->name('admin.compliance.dashboard');
+
+    Route::prefix('admin/compliance')->name('admin.compliance.')->group(function () {
+        Route::get('report.json', [SignatureComplianceController::class, 'json'])
+            ->name('report.json');
+        Route::get('report.json/download', [SignatureComplianceController::class, 'downloadJson'])
+            ->name('report.json.download');
+        Route::get('report.pdf', [SignatureComplianceController::class, 'downloadPdf'])
+            ->name('report.pdf');
+    });
 });
 
 Route::middleware(['auth', 'role:notary'])->group(function () {

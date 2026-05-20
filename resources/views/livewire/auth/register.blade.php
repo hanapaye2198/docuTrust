@@ -2,10 +2,8 @@
 
 use App\Enums\OnboardingStep;
 use App\Enums\UserRole;
-use App\Mail\EmailOtpVerificationMail;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Session;
 use App\Support\AuthSession;
 use Illuminate\Auth\Events\Registered;
@@ -47,8 +45,6 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             ->map(fn (string $value): string => trim($value))
             ->implode(' ');
 
-        $otp = sprintf('%06d', random_int(0, 999999));
-
         $user = User::query()->create([
             'name' => $fullName,
             'first_name' => $validated['first_name'],
@@ -60,14 +56,10 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             'role' => UserRole::Client,
             'onboarding_step' => OnboardingStep::EmailVerification,
             'email_verified_at' => null,
-            'email_otp' => $otp,
-            'email_otp_expires_at' => now()->addMinutes(10),
             'mfa_enabled' => false,
             'two_factor_enabled' => false,
             'two_factor_onboarding_completed_at' => null,
         ]);
-
-        Mail::to($user)->send(new EmailOtpVerificationMail($otp));
 
         event(new Registered($user));
         Auth::login($user);

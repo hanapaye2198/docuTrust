@@ -67,6 +67,14 @@
                         :tooltip="__('Dashboard')"
                         wire:navigate
                     >{{ __('Dashboard') }}</flux:sidebar.item>
+
+                    <flux:sidebar.item
+                        icon="shield-check"
+                        :href="route('admin.compliance.dashboard')"
+                        :current="request()->routeIs('admin.compliance.*')"
+                        :tooltip="__('Signature Compliance')"
+                        wire:navigate
+                    >{{ __('Compliance') }}</flux:sidebar.item>
                 @endif
 
                 @if ($navRole === UserRole::Notary)

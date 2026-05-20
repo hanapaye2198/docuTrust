@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Contracts\CertificateAuthorityKeyStore;
+use App\Contracts\Signature\SignatureEngineInterface;
 use App\Contracts\SignerKeyStore;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSent;
@@ -16,6 +17,8 @@ use App\Services\DatabaseSignerKeyStore;
 use App\Services\DocumentNotificationService;
 use App\Services\FileBackedCertificateAuthorityKeyStore;
 use App\Services\NotaryNotificationService;
+use App\Services\Signature\BasicElectronicSignatureDriver;
+use App\Services\Signature\FuturePKISignatureDriver;
 use App\View\Breadcrumbs;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -33,6 +36,15 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(CertificateAuthorityKeyStore::class, FileBackedCertificateAuthorityKeyStore::class);
         $this->app->bind(SignerKeyStore::class, DatabaseSignerKeyStore::class);
+
+        $this->app->bind(SignatureEngineInterface::class, function (): SignatureEngineInterface {
+            $engine = (string) config('signature.engines.default', 'basic');
+
+            return match ($engine) {
+                'pki', 'future_pki' => $this->app->make(FuturePKISignatureDriver::class),
+                default => $this->app->make(BasicElectronicSignatureDriver::class),
+            };
+        });
     }
 
     /**

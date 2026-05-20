@@ -12,6 +12,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,17 +21,30 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function () {
-            // PKI protocol routes (CSC compliance)
-            \Illuminate\Support\Facades\Route::middleware('web')
-                ->group(base_path('routes/ocsp.php'));
-            \Illuminate\Support\Facades\Route::middleware('web')
-                ->group(base_path('routes/crl.php'));
-            \Illuminate\Support\Facades\Route::middleware('web')
-                ->group(base_path('routes/scep.php'));
-            \Illuminate\Support\Facades\Route::middleware('web')
-                ->group(base_path('routes/cmp.php'));
-            \Illuminate\Support\Facades\Route::middleware('web')
-                ->group(base_path('routes/hsm.php'));
+            if (filter_var(env('SIGNATURE_OCSP_ROUTES_ENABLED', false), FILTER_VALIDATE_BOOLEAN)) {
+                Route::middleware('web')
+                    ->group(base_path('routes/ocsp.php'));
+            }
+
+            if (filter_var(env('SIGNATURE_CRL_ROUTES_ENABLED', false), FILTER_VALIDATE_BOOLEAN)) {
+                Route::middleware('web')
+                    ->group(base_path('routes/crl.php'));
+            }
+
+            if (filter_var(env('SIGNATURE_SCEP_CMP_ROUTES_ENABLED', false), FILTER_VALIDATE_BOOLEAN)) {
+                Route::middleware('web')
+                    ->group(base_path('routes/scep.php'));
+                Route::middleware('web')
+                    ->group(base_path('routes/cmp.php'));
+            }
+
+            if (
+                filter_var(env('SIGNATURE_HSM_ENABLED', false), FILTER_VALIDATE_BOOLEAN)
+                && filter_var(env('HSM_ROUTES_ENABLED', false), FILTER_VALIDATE_BOOLEAN)
+            ) {
+                Route::middleware('web')
+                    ->group(base_path('routes/hsm.php'));
+            }
         },
     )
     ->withCommands([

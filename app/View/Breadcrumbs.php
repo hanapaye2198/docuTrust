@@ -26,6 +26,10 @@ final class Breadcrumbs
 
         return match ($name) {
             'dashboard' => [],
+            'admin.compliance.dashboard' => [
+                ['label' => __('Dashboard'), 'href' => route('dashboard')],
+                ['label' => __('Signature Compliance')],
+            ],
             'verify.index' => [
                 ['label' => __('Dashboard'), 'href' => route('dashboard')],
                 ['label' => __('Verify')],

@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Services\CompletedDocumentSealingService;
 use App\Services\DocumentArchiveService;
 use App\Services\DocumentCertificateService;
+use App\Services\SignatureEvidenceRecordService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -37,6 +38,7 @@ class GenerateCertificateJob implements ShouldQueue
             }
 
             $completedDocumentSealingService->seal($completedDocument);
+            app(SignatureEvidenceRecordService::class)->recordForCompletedDocument($completedDocument->fresh());
             $documentCertificateService->createForCompletedDocument($completedDocument->fresh());
             $documentArchiveService->archiveCompletedDocument($completedDocument->fresh());
         } catch (Throwable $throwable) {

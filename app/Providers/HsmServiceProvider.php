@@ -12,34 +12,38 @@ use App\Services\HsmSignerSealProvider;
 use App\Services\MockHsmService;
 use App\Services\ThalesHsmService;
 use App\Services\UtimacoHsmService;
+use App\Support\SignatureFeatures;
 use Illuminate\Support\ServiceProvider;
 
 /**
  * HSM Service Provider
- * 
- * Registers HSM-backed services for CSC-compliant PKI operations.
+ *
+ * When SIGNATURE_HSM_ENABLED=false (early production), binds MockHsmService only.
+ * API routes remain gated via config('signature.routes.hsm').
  */
 class HsmServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Bind HSM service interface
-        $this->app->singleton(HsmService::class, function ($app) {
+        $this->app->singleton(HsmService::class, function (): HsmService {
+            if (! SignatureFeatures::hsmEnabled()) {
+                return new MockHsmService;
+            }
+
             $backend = (string) config('hsm.backend', 'mock');
 
             return match ($backend) {
-                'thales' => new ThalesHsmService(),
-                'aws-cloudhsm' => new AwsCloudHsmService(),
-                'utimaco' => new UtimacoHsmService(),
-                'mock' => new MockHsmService(),
+                'thales' => new ThalesHsmService,
+                'aws-cloudhsm' => new AwsCloudHsmService,
+                'utimaco' => new UtimacoHsmService,
+                'mock', 'disabled' => new MockHsmService,
                 default => throw new \RuntimeException(
-                    "Unsupported HSM backend: {$backend}. " .
-                    'Supported: thales, aws-cloudhsm, utimaco, mock'
+                    "Unsupported HSM backend: {$backend}. ".
+                    'Supported: thales, aws-cloudhsm, utimaco, mock, disabled'
                 ),
             };
         });
 
-        // Bind HSM-backed services
         $this->app->singleton(HsmKeyManager::class);
         $this->app->singleton(HsmPkiSignatureService::class);
         $this->app->singleton(HsmCertificateAuthorityService::class);
