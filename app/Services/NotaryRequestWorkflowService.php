@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\DocumentStatus;
 use App\Enums\NotaryRequestStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\TemplateRoleType;
 use App\Events\NotaryRequestApproved;
 use App\Events\NotaryRequestDigitalized;
@@ -65,7 +66,7 @@ class NotaryRequestWorkflowService
      */
     public function workflowSteps(NotaryRequest $request): array
     {
-        $request->loadMissing(['documents.documentSigners', 'sessions', 'registerEntries']);
+        $request->loadMissing(['documents.documentSigners', 'sessions', 'registerEntries', 'payments', 'eInvoices']);
 
         $hasSubmitted = $request->submitted_at !== null || $request->status !== NotaryRequestStatus::Draft;
         $hasDocuments = $request->documents->isNotEmpty();
@@ -73,6 +74,9 @@ class NotaryRequestWorkflowService
         $hasCompletedSession = $this->hasCompletedSession($request);
         $attorneyHasSigned = $this->hasAttorneySignedAllDocuments($request);
         $hasRegisterEntry = $request->registerEntries->isNotEmpty();
+        $paymentRequired = $this->paymentRequired($request);
+        $hasSettledPayment = $this->hasSettledPayment($request);
+        $paymentReady = ! $paymentRequired || $hasSettledPayment;
         $isNotarized = $request->status === NotaryRequestStatus::Notarized;
         $isAttorneyApproved = $request->status === NotaryRequestStatus::AttorneyApproved;
         $isDigitalized = $request->status === NotaryRequestStatus::Digitalized;
@@ -138,12 +142,22 @@ class NotaryRequestWorkflowService
                 },
             ],
             [
+                'label' => __('Payment'),
+                'description' => __('Client completes the notarial payment after the register entry is created.'),
+                'state' => match (true) {
+                    ! $paymentRequired && $hasRegisterEntry => 'complete',
+                    $hasSettledPayment || $isAttorneyApproved || $isDigitalized || $isNotarized => 'complete',
+                    $hasRegisterEntry => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
                 'label' => __('Digital notarization'),
                 'description' => __('Applies notary seal, attaches QR code, generates certificates, and timestamps document.'),
                 'state' => match (true) {
                     $isNotarized => 'complete',
                     $isDigitalized => 'complete',
-                    $canDigitalize || ($hasRegisterEntry && ($attorneyHasSigned || $isAttorneyApproved)) => 'current',
+                    $canDigitalize || ($paymentReady && $hasRegisterEntry && ($attorneyHasSigned || $isAttorneyApproved)) => 'current',
                     default => 'upcoming',
                 },
             ],
@@ -209,7 +223,15 @@ class NotaryRequestWorkflowService
 
         $request->loadMissing('registerEntries');
 
-        return $request->registerEntries->isNotEmpty();
+        if ($request->registerEntries->isEmpty()) {
+            return false;
+        }
+
+        if ($this->paymentRequired($request) && ! $this->hasSettledPayment($request)) {
+            return false;
+        }
+
+        return true;
     }
 
     public function canDigitalize(NotaryRequest $request): bool
@@ -226,10 +248,36 @@ class NotaryRequestWorkflowService
             return false;
         }
 
+        if ($this->paymentRequired($request) && ! $this->hasSettledPayment($request)) {
+            return false;
+        }
+
         $request->loadMissing('documents');
 
         return $request->documents->isNotEmpty()
             && $request->documents->every(fn (Document $document): bool => $document->status === DocumentStatus::Completed);
+    }
+
+    public function paymentRequired(NotaryRequest $request): bool
+    {
+        $request->loadMissing('registerEntries');
+
+        return $request->registerEntries->contains(
+            fn ($entry): bool => (float) $entry->fees > 0
+        );
+    }
+
+    public function hasSettledPayment(NotaryRequest $request): bool
+    {
+        if (! $this->paymentRequired($request)) {
+            return true;
+        }
+
+        $request->loadMissing('payments');
+
+        return $request->payments->contains(
+            fn ($payment): bool => $payment->status === PaymentStatus::Paid
+        );
     }
 
     public function beginAttorneySigning(NotaryRequest $request): NotaryRequest
@@ -288,7 +336,7 @@ class NotaryRequestWorkflowService
      */
     public function finalizationReadiness(NotaryRequest $request): array
     {
-        $request->loadMissing(['documents.documentHash', 'registerEntries']);
+        $request->loadMissing(['documents.documentHash', 'registerEntries', 'payments', 'eInvoices']);
 
         $issues = [];
         $documents = [];
@@ -299,6 +347,10 @@ class NotaryRequestWorkflowService
 
         if ($request->registerEntries->isEmpty()) {
             $issues[] = __('Create at least one notarial register entry before finalizing.');
+        }
+
+        if ($this->paymentRequired($request) && ! $this->hasSettledPayment($request)) {
+            $issues[] = __('Client payment must be completed before finalizing notarization.');
         }
 
         foreach ($request->documents as $document) {
@@ -374,7 +426,7 @@ class NotaryRequestWorkflowService
     public function approve(NotaryRequest $request, array $legalAssertions = [], ?string $summary = null): NotaryRequest
     {
         if (! $this->canApprove($request)) {
-            throw new RuntimeException(__('This notary request is not ready for attorney review completion.'));
+            throw new RuntimeException(__('This notary request is not ready for attorney review completion. Client payment must be completed after the register entry is created.'));
         }
 
         $request->markApproved();
@@ -442,7 +494,7 @@ class NotaryRequestWorkflowService
     public function digitalize(NotaryRequest $request): NotaryRequest
     {
         if (! $this->canDigitalize($request)) {
-            throw new RuntimeException(__('This notary request is not ready for digital notarization.'));
+            throw new RuntimeException(__('This notary request is not ready for digital notarization. Client payment must be completed first.'));
         }
 
         if ($request->status !== NotaryRequestStatus::AttorneyApproved) {

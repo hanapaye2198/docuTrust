@@ -6,6 +6,7 @@ use Database\Factories\NotarialRegisterEntryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class NotarialRegisterEntry extends Model
 {
@@ -73,6 +74,22 @@ class NotarialRegisterEntry extends Model
     public function document(): BelongsTo
     {
         return $this->belongsTo(Document::class);
+    }
+
+    /**
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'notarial_register_entry_id')->latest('created_at');
+    }
+
+    /**
+     * @return HasMany<EInvoice, $this>
+     */
+    public function eInvoices(): HasMany
+    {
+        return $this->hasMany(EInvoice::class, 'notarial_register_entry_id')->latest('created_at');
     }
 
     /**

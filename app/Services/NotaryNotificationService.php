@@ -8,16 +8,40 @@ use App\Events\NotaryRequestDigitalized;
 use App\Events\NotaryRequestNotarized;
 use App\Events\NotaryRequestSubmitted;
 use App\Events\NotarySessionScheduled;
+use App\Mail\NotaryPaymentReadyMail;
 use App\Mail\NotaryRequestApprovedMail;
 use App\Mail\NotaryRequestDigitalizedMail;
 use App\Mail\NotaryRequestNotarizedMail;
 use App\Mail\NotaryRequestSubmittedMail;
 use App\Mail\NotarySessionScheduledMail;
+use App\Models\AppNotification;
+use App\Models\NotaryRequest;
+use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 
 class NotaryNotificationService
 {
+    public function notifyPaymentReady(NotaryRequest $request, Payment $payment): void
+    {
+        $request = $request->loadMissing(['requester', 'notary']);
+
+        if ($request->requester !== null && $request->requester->email !== '') {
+            Mail::to($request->requester->email)
+                ->queue(new NotaryPaymentReadyMail($request, $payment));
+        }
+
+        if ($request->requester !== null) {
+            $this->createInAppNotification(
+                $request->requester->id,
+                'notary.payment_ready',
+                __('Payment is ready for ":title". Complete the fee to continue notarization.', [
+                    'title' => $request->title,
+                ])
+            );
+        }
+    }
+
     public function handleRequestSubmitted(NotaryRequestSubmitted $event): void
     {
         $request = $event->notaryRequest->loadMissing(['notary', 'requester']);
@@ -79,5 +103,16 @@ class NotaryNotificationService
             Mail::to($request->requester->email)
                 ->queue(new NotaryRequestNotarizedMail($request));
         }
+    }
+
+    private function createInAppNotification(int $userId, string $type, string $message): void
+    {
+        AppNotification::query()->create([
+            'user_id' => $userId,
+            'type' => $type,
+            'message' => $message,
+            'read_at' => null,
+            'created_at' => now(),
+        ]);
     }
 }

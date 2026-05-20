@@ -48,6 +48,21 @@ return [
         'key' => env('TXTBOX_API_KEY'),
     ],
 
+    'gatewayhub' => [
+        'base_url' => env('GATEWAYHUB_BASE_URL', 'https://gatewayhub.io'),
+        'timeout' => env('GATEWAYHUB_TIMEOUT', 15),
+        'api_key' => env('GATEWAYHUB_API_KEY', ''),
+        'webhook_secret' => env('GATEWAYHUB_WEBHOOK_SECRET', ''),
+    ],
+
+    'eis' => [
+        'environment' => env('EIS_ENVIRONMENT', 'sandbox'),
+        'base_url' => env('EIS_BASE_URL', ''),
+        'timeout' => env('EIS_TIMEOUT', 30),
+        'public_key_path' => env('EIS_PUBLIC_KEY_PATH', ''),
+        'callback_url' => env('EIS_CALLBACK_URL', ''),
+    ],
+
     'remote_signing' => [
         'provider_name' => env('REMOTE_SIGNING_PROVIDER_NAME', 'remote_managed'),
         'base_url' => env('REMOTE_SIGNING_BASE_URL', ''),

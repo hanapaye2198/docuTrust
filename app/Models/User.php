@@ -330,6 +330,22 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'payer_user_id')->latest('created_at');
+    }
+
+    /**
+     * @return HasMany<EInvoice, $this>
+     */
+    public function eInvoices(): HasMany
+    {
+        return $this->hasMany(EInvoice::class, 'buyer_email', 'email')->latest('created_at');
+    }
+
+    /**
      * @return HasMany<NotaryRequest, $this>
      */
     public function assignedNotaryRequests(): HasMany

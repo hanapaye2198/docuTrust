@@ -4,20 +4,25 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\EInvoiceStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
 use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
+use App\Models\EInvoice;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
+use App\Models\Payment;
 use App\Models\SignatureField;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Volt\Volt as LivewireVolt;
 use Tests\TestCase;
@@ -503,9 +508,10 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Video conference')
             ->assertSee('Attorney signs')
             ->assertSee('Register entry')
+            ->assertSee('Payment')
             ->assertSee('Digital notarization')
             ->assertSee('Notary review')
-            ->assertSee('Attorney review becomes available after the video session is complete, the attorney has signed, and a register entry exists.')
+            ->assertSee('Attorney review becomes available after the video session is complete, the attorney has signed, the register entry exists, and the client payment has been completed.')
             ->assertDontSee('Complete attorney review')
             ->assertSee('Notarial register')
             ->assertSee('Register entry creation becomes available after the attorney has signed the linked documents.')
@@ -522,6 +528,208 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($notary)
             ->get(route('notary.register-entry', $request))
             ->assertForbidden();
+    }
+
+    public function test_register_entry_page_auto_creates_gatewayhub_payment_when_fees_are_provided(): void
+    {
+        Mail::fake();
+
+        Http::fake([
+            'https://gatewayhub.io/api/gateways/enabled' => Http::response([
+                'success' => true,
+                'data' => [
+                    'gateways' => [
+                        ['code' => 'gcash', 'name' => 'Gcash'],
+                    ],
+                    'count' => 1,
+                ],
+                'error' => null,
+            ], 200),
+            'https://gatewayhub.io/api/payments' => Http::response([
+                'success' => true,
+                'data' => [
+                    'payment_id' => 'payment-auto-1',
+                    'transaction_id' => 'payment-auto-1',
+                    'gateway' => 'gcash',
+                    'amount' => 500,
+                    'currency' => 'PHP',
+                    'status' => 'pending',
+                    'qr_data' => '000201...',
+                    'expires_at' => now()->addMinutes(30)->toIso8601String(),
+                    'redirect_url' => null,
+                    'checkout_url' => null,
+                ],
+                'error' => null,
+            ], 200),
+        ]);
+
+        config()->set('services.gatewayhub.api_key', 'test-key');
+
+        $this->mock(\App\Services\NotarySealService::class, function ($mock): void {
+            $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
+        });
+        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock): void {
+            $mock->shouldReceive('generate')->andReturnNull();
+        });
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'organization_id' => $notary->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => \App\Enums\NotaryRequestStatus::AttorneyApproved,
+            'title' => 'Auto payment affidavit',
+        ]);
+
+        NotaryCredential::factory()->for($notary)->create();
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary.register-entry', ['notaryRequest' => $request])
+            ->set('documentTitle', 'Auto payment affidavit')
+            ->set('notarialActType', 'acknowledgment')
+            ->set('parties', [
+                ['name' => 'Client Name', 'address' => 'Davao City'],
+            ])
+            ->set('competentEvidence', [
+                ['person_name' => 'Client Name', 'id_type' => 'Passport', 'id_number' => 'P12345'],
+            ])
+            ->set('fees', '500.00')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $entry = NotarialRegisterEntry::query()->where('notary_request_id', $request->id)->first();
+        $this->assertNotNull($entry);
+
+        $this->assertDatabaseHas('payments', [
+            'notary_request_id' => $request->id,
+            'notarial_register_entry_id' => $entry->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-auto-1',
+            'gateway' => 'gcash',
+            'status' => PaymentStatus::Pending->value,
+        ]);
+
+        $this->assertDatabaseHas('app_notifications', [
+            'user_id' => $notary->id,
+            'type' => 'notary.payment_ready',
+        ]);
+
+        Mail::assertQueued(\App\Mail\NotaryPaymentReadyMail::class, function (\App\Mail\NotaryPaymentReadyMail $mail) use ($request): bool {
+            return $mail->notaryRequest->is($request)
+                && $mail->payment->provider_payment_id === 'payment-auto-1';
+        });
+    }
+
+    public function test_client_sees_payment_required_banner_after_register_entry_is_created(): void
+    {
+        $client = User::factory()->client()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => \App\Enums\NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $credential = NotaryCredential::factory()->for($notary)->create();
+        NotarialRegisterEntry::factory()->create([
+            'notary_request_id' => $request->id,
+            'notary_credential_id' => $credential->id,
+            'fees' => 500.00,
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('notary-requests.show', $request))
+            ->assertOk()
+            ->assertSee('Payment required before notarization can continue')
+            ->assertSee('Complete the payment below to continue processing your notarization request.');
+    }
+
+    public function test_client_sees_expired_payment_message_and_regenerate_call_to_action(): void
+    {
+        $client = User::factory()->client()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => \App\Enums\NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $credential = NotaryCredential::factory()->for($notary)->create();
+        $entry = NotarialRegisterEntry::factory()->create([
+            'notary_request_id' => $request->id,
+            'notary_credential_id' => $credential->id,
+            'fees' => 500.00,
+        ]);
+
+        Payment::query()->create([
+            'organization_id' => $client->organization_id,
+            'notary_request_id' => $request->id,
+            'notarial_register_entry_id' => $entry->id,
+            'payer_user_id' => $client->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'expired-payment-1',
+            'provider_transaction_id' => 'expired-payment-1',
+            'gateway' => 'gcash',
+            'reference' => 'EXPIRED-REQ-'.$request->id,
+            'amount' => 500.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Pending->value,
+            'qr_data' => '000201...',
+            'expires_at' => now()->subMinutes(5),
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('notary-requests.show', $request))
+            ->assertOk()
+            ->assertSee('This payment link has expired. Generate a new payment to continue.')
+            ->assertSee('Generate new payment');
+    }
+
+    public function test_client_sees_einvoice_status_after_payment_is_recorded(): void
+    {
+        $client = User::factory()->client()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $client->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $client->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'paid-payment-1',
+            'provider_transaction_id' => 'paid-payment-1',
+            'gateway' => 'gcash',
+            'reference' => 'PAID-REQ-'.$request->id,
+            'amount' => 500.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid->value,
+            'paid_at' => now(),
+        ]);
+
+        EInvoice::query()->create([
+            'organization_id' => $client->organization_id,
+            'notary_request_id' => $request->id,
+            'payment_id' => $payment->id,
+            'status' => EInvoiceStatus::Draft->value,
+            'invoice_number' => 'INV-20260520-PAIDREQ',
+            'currency' => 'PHP',
+            'total_amount' => 500.00,
+            'issue_date' => now(),
+            'document_title' => 'Affidavit of Support',
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('notary-requests.show', $request))
+            ->assertOk()
+            ->assertSee('E-invoice')
+            ->assertSee('INV-20260520-PAIDREQ')
+            ->assertSee('The internal invoice record is ready and awaiting EIS submission setup.');
     }
 
     public function test_admin_can_generate_missing_certificate_from_notary_request_page(): void

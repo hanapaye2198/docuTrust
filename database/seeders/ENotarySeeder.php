@@ -135,8 +135,9 @@ class ENotarySeeder extends Seeder
         // ─── Request 5: Draft (just created) ─────────────────────────────────
 
         $this->seedDraftRequest($client, $notary);
+        $this->seedPaymentContinuationRequest($client2, $notary, $credential);
 
-        $this->command->info('E-Notary seeder completed: 5 requests across all workflow stages.');
+        $this->command->info('E-Notary seeder completed: 6 requests including fixed request #8 for payment testing.');
     }
 
     private function seedFullyNotarizedRequest(
@@ -494,6 +495,221 @@ class ENotarySeeder extends Seeder
                 'created_from' => 'manual_form',
             ],
         ]);
+    }
+
+    private function seedPaymentContinuationRequest(
+        User $client,
+        User $notary,
+        NotaryCredential $credential,
+    ): NotaryRequest {
+        $request = NotaryRequest::query()->find(8);
+
+        if (! $request instanceof NotaryRequest) {
+            $request = new NotaryRequest;
+            $request->id = 8;
+        }
+
+        $request->forceFill([
+            'organization_id' => $client->organization_id,
+            'user_id' => $client->id,
+            'notary_user_id' => $notary->id,
+            'title' => 'test payment',
+            'request_type' => 'acknowledgment',
+            'status' => NotaryRequestStatus::AttorneySigning,
+            'submitted_at' => now()->subMinutes(20),
+            'approved_at' => null,
+            'rejected_at' => null,
+            'completed_at' => null,
+            'rejection_reason' => null,
+            'metadata' => [
+                'created_from' => 'enotary_wizard',
+            ],
+            'document_path' => null,
+            'remarks' => 'asa',
+            'identity_verified_at' => null,
+            'verified_at' => null,
+            'location_verified_at' => null,
+            'location_ip_address' => null,
+            'location_country_code' => null,
+            'location_latitude' => null,
+            'location_longitude' => null,
+            'location_vpn_detected' => null,
+            'created_at' => now()->subMinutes(21),
+            'updated_at' => now()->subMinutes(11),
+        ])->save();
+
+        $document = Document::query()->updateOrCreate([
+            'notary_request_id' => $request->id,
+            'title' => 'afawada',
+        ], [
+            'organization_id' => $client->organization_id,
+            'user_id' => $notary->id,
+            'file_path' => 'documents/demo-payment-request.pdf',
+            'status' => DocumentStatus::Completed,
+            'sent_at' => now()->subMinutes(13),
+            'signing_workflow' => 'sequential',
+            'prepared_pdf_path' => 'documents/generated/demo-payment-request-prepared.pdf',
+            'final_pdf_path' => 'documents/generated/demo-payment-request-final.pdf',
+            'certificate_path' => 'certificates/demo-payment-request-certificate.pdf',
+            'archive_storage_disk' => 'local',
+            'archive_document_path' => 'documents/generated/demo-payment-request-final.pdf',
+            'archive_certificate_path' => 'certificates/demo-payment-request-certificate.pdf',
+            'archived_at' => now()->subMinutes(11),
+        ]);
+
+        DocumentSigner::query()->updateOrCreate([
+            'document_id' => $document->id,
+            'email' => $client->email,
+        ], [
+            'name' => $client->name,
+            'role_name' => 'Signer 1',
+            'role_type' => TemplateRoleType::Signer,
+            'signing_method' => SigningMethod::EmailLink,
+            'status' => DocumentSignerStatus::Signed,
+            'signing_order' => 1,
+            'signed_at' => now()->subMinutes(12),
+            'access_token' => Str::uuid()->toString(),
+            'expires_at' => now()->addDays(7),
+        ]);
+
+        \App\Models\NotarySigner::query()->updateOrCreate([
+            'notary_request_id' => $request->id,
+            'email' => 'hannah18.panaligan@gmail.com',
+        ], [
+            'full_name' => 'dfaada',
+            'phone' => '+639276776528',
+            'address' => 'Brgy. Matti, Digos City, Davao del Sur, 8002',
+            'role' => 'signer',
+        ]);
+
+        NotarySession::query()->updateOrCreate([
+            'notary_request_id' => $request->id,
+            'room_name' => 'docutrust-8-ibgyuhapws',
+        ], [
+            'notary_user_id' => $notary->id,
+            'provider_name' => 'jitsi',
+            'status' => 'completed',
+            'meeting_url' => 'https://8x8.vc/vpaas-magic-cookie-6f5394927a4a4904812f628ebbf691a3/docutrust-8-ibgyuhapws',
+            'scheduled_for' => now()->subMinutes(12),
+            'started_at' => now()->subMinutes(11),
+            'ended_at' => now()->subMinutes(10),
+            'verification_checklist' => [
+                'face_matches_id' => true,
+                'id_valid_not_expired' => true,
+                'signer_conscious_aware' => true,
+                'signer_agrees_voluntarily' => true,
+                'signer_in_philippines' => true,
+                'id_shown_on_camera' => true,
+            ],
+            'evidence' => [],
+            'signer_confirmed' => false,
+            'signer_confirmed_at' => null,
+        ]);
+
+        $entry = NotarialRegisterEntry::query()->updateOrCreate([
+            'notary_request_id' => $request->id,
+            'entry_number' => 5,
+            'entry_year' => (int) now()->format('Y'),
+        ], [
+            'notary_credential_id' => $credential->id,
+            'document_id' => $document->id,
+            'page_number' => 1,
+            'book_number' => '1',
+            'document_title' => 'test payment',
+            'document_description' => 'sefsfsfs',
+            'parties' => [
+                ['name' => 'sfsefs', 'address' => 'sefsefsfsf'],
+            ],
+            'witnesses' => [],
+            'competent_evidence' => [
+                ['person_name' => 'sfesfsf', 'id_type' => 'PRC ID', 'id_number' => '234234234'],
+            ],
+            'notarized_at' => now()->subMinutes(8)->timezone('Asia/Manila'),
+            'notarial_act_type' => 'acknowledgment',
+            'fees' => 1.00,
+            'official_receipt_number' => '34343',
+            'notary_signature_path' => $credential->signature_image_path,
+            'qr_code_path' => null,
+            'qr_verification_token' => 'f5369fb9-77d5-42f5-84d0-2a63fd51fb51',
+        ]);
+
+        \App\Models\Payment::query()->where('notary_request_id', $request->id)->delete();
+
+        $journalEntries = [
+            [
+                'entry_type' => 'document_attached',
+                'summary' => 'Linked document "afawada" to this notary request.',
+                'legal_assertions' => [
+                    'document_id' => $document->id,
+                ],
+                'recorded_at' => now()->subMinutes(14),
+            ],
+            [
+                'entry_type' => 'session_scheduled',
+                'summary' => 'Video session scheduled for '.now()->subMinutes(12)->format('M j, Y g:i A').' via jitsi.',
+                'legal_assertions' => [
+                    'scheduled_for' => now()->subMinutes(12)->toDateTimeString(),
+                    'provider_name' => 'jitsi',
+                    'meeting_url' => null,
+                ],
+                'recorded_at' => now()->subMinutes(13),
+            ],
+            [
+                'entry_type' => 'session_started',
+                'summary' => 'Live video verification session started.',
+                'legal_assertions' => [
+                    'started_at' => now()->subMinutes(11)->toDateTimeString(),
+                    'provider_name' => 'jitsi',
+                ],
+                'recorded_at' => now()->subMinutes(11),
+            ],
+            [
+                'entry_type' => 'session_completed',
+                'summary' => 'Live video verification session completed.',
+                'legal_assertions' => [
+                    'ended_at' => now()->subMinutes(10)->toDateTimeString(),
+                    'verification_checklist' => [
+                        'face_matches_id' => true,
+                        'id_valid_not_expired' => true,
+                        'signer_conscious_aware' => true,
+                        'signer_agrees_voluntarily' => true,
+                        'signer_in_philippines' => true,
+                        'id_shown_on_camera' => true,
+                    ],
+                    'all_checks_passed' => true,
+                ],
+                'recorded_at' => now()->subMinutes(10),
+            ],
+            [
+                'entry_type' => 'register_entry_created',
+                'summary' => 'Notarial register entry 005 created for "test payment" (acknowledgment).',
+                'legal_assertions' => [
+                    'entry_number' => $entry->entry_number,
+                    'entry_year' => $entry->entry_year,
+                    'notarial_act_type' => $entry->notarial_act_type,
+                    'parties_count' => count($entry->parties ?? []),
+                    'witnesses_count' => count($entry->witnesses ?? []),
+                    'fees' => 1.00,
+                    'official_receipt_number' => '34343',
+                    'verification_token' => $entry->qr_verification_token,
+                ],
+                'recorded_at' => now()->subMinutes(8),
+            ],
+        ];
+
+        foreach ($journalEntries as $journalEntry) {
+            NotaryJournal::query()->updateOrCreate([
+                'notary_request_id' => $request->id,
+                'entry_type' => $journalEntry['entry_type'],
+                'recorded_at' => $journalEntry['recorded_at'],
+            ], [
+                'notary_user_id' => $notary->id,
+                'summary' => $journalEntry['summary'],
+                'legal_assertions' => $journalEntry['legal_assertions'],
+            ]);
+        }
+
+        return $request;
     }
 
     private function seedJournalEntries(NotaryRequest $request, User $notary): void

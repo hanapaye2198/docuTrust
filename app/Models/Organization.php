@@ -48,4 +48,28 @@ class Organization extends Model
     {
         return $this->hasMany(NotaryRequest::class);
     }
+
+    /**
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->latest('created_at');
+    }
+
+    /**
+     * @return HasMany<BillingProfile, $this>
+     */
+    public function billingProfiles(): HasMany
+    {
+        return $this->hasMany(BillingProfile::class)->latest('created_at');
+    }
+
+    /**
+     * @return HasMany<EInvoice, $this>
+     */
+    public function eInvoices(): HasMany
+    {
+        return $this->hasMany(EInvoice::class)->latest('created_at');
+    }
 }

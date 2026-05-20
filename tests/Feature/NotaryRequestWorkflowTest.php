@@ -5,12 +5,14 @@ namespace Tests\Feature;
 use App\Enums\DocumentStatus;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\NotaryRequestStatus;
+use App\Enums\PaymentStatus;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\DocumentHash;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
+use App\Models\Payment;
 use App\Models\User;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
@@ -98,6 +100,22 @@ class NotaryRequestWorkflowTest extends TestCase
             'notary_request_id' => $request->id,
             'notary_credential_id' => $credential->id,
             'document_id' => $document->id,
+            'fees' => 500.00,
+        ]);
+
+        Payment::query()->create([
+            'organization_id' => $request->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $requester->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-workflow-1',
+            'provider_transaction_id' => 'payment-workflow-1',
+            'gateway' => 'gcash',
+            'reference' => 'WORKFLOW-REQ-'.$request->id,
+            'amount' => 500.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid->value,
+            'paid_at' => now(),
         ]);
 
         $workflowService->approve($request->fresh(), [
@@ -180,6 +198,63 @@ class NotaryRequestWorkflowTest extends TestCase
         app(NotaryRequestWorkflowService::class)->approve($request);
     }
 
+    public function test_notary_request_cannot_be_approved_until_client_payment_is_completed(): void
+    {
+        $requester = User::factory()->create();
+        $notary = User::factory()->create();
+
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::LocationVerified,
+        ]);
+
+        $document = Document::factory()->for($requester)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Signed,
+            'signing_order' => 1,
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'email' => $notary->email,
+            'status' => DocumentSignerStatus::Signed,
+            'signing_order' => 999,
+        ]);
+
+        $session = app(NotarySchedulingService::class)->schedule(
+            $request,
+            now()->addHour(),
+            'manual',
+            'https://example.test/notary-session'
+        );
+
+        app(NotarySchedulingService::class)->start($session);
+        app(NotarySchedulingService::class)->complete($session, [
+            'face_matches_id' => true,
+            'id_valid_not_expired' => true,
+            'signer_conscious_aware' => true,
+            'signer_agrees_voluntarily' => true,
+            'signer_in_philippines' => true,
+            'id_shown_on_camera' => true,
+        ]);
+
+        $credential = NotaryCredential::factory()->for($notary)->create();
+        NotarialRegisterEntry::factory()->create([
+            'notary_request_id' => $request->id,
+            'notary_credential_id' => $credential->id,
+            'document_id' => $document->id,
+            'fees' => 500.00,
+        ]);
+
+        $this->assertFalse(app(NotaryRequestWorkflowService::class)->canApprove($request->fresh()));
+
+        $this->expectException(\RuntimeException::class);
+
+        app(NotaryRequestWorkflowService::class)->approve($request->fresh());
+    }
+
     public function test_notary_request_cannot_finalize_before_digitalization(): void
     {
         $requester = User::factory()->create();
@@ -251,7 +326,7 @@ class NotaryRequestWorkflowTest extends TestCase
 
         $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($request);
 
-        $this->assertSame('Digital notarization', $steps[5]['label']);
-        $this->assertSame('complete', $steps[5]['state']);
+        $this->assertSame('Digital notarization', $steps[6]['label']);
+        $this->assertSame('complete', $steps[6]['state']);
     }
 }

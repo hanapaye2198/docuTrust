@@ -6,6 +6,9 @@ use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
 use App\Services\NotarialCertificateService;
 use App\Services\NotarialRegisterService;
+use App\Services\GatewayHubService;
+use App\Services\NotaryPaymentService;
+use App\Services\NotaryNotificationService;
 use App\Services\NotarySealService;
 use App\Services\NotaryRequestWorkflowService;
 use Illuminate\Support\Facades\Auth;
@@ -143,9 +146,16 @@ new #[Layout('components.layouts.app')] class extends Component {
             // Generate notarial certificate PDF
             app(NotarialCertificateService::class)->generate($entry);
 
-            session()->flash('status', __('Notarial register entry :number created successfully.', [
+            $statusMessage = __('Notarial register entry :number created successfully.', [
                 'number' => str_pad((string) $entry->entry_number, 3, '0', STR_PAD_LEFT),
-            ]));
+            ]);
+
+            $paymentNote = $this->attemptAutoCreatePayment();
+            if ($paymentNote !== null) {
+                $statusMessage .= ' '.$paymentNote;
+            }
+
+            session()->flash('status', $statusMessage);
 
             $this->redirect(route('notary.requests.show', $this->notaryRequest, absolute: false), navigate: true);
         } catch (\RuntimeException $e) {
@@ -166,6 +176,41 @@ new #[Layout('components.layouts.app')] class extends Component {
             'credential' => $credential,
             'existingEntries' => $this->notaryRequest->registerEntries()->with('notaryCredential')->get(),
         ];
+    }
+
+    private function attemptAutoCreatePayment(): ?string
+    {
+        if ($this->fees === '' || (float) $this->fees <= 0) {
+            return null;
+        }
+
+        try {
+            $gateways = app(GatewayHubService::class)->enabledGateways();
+            $gatewayCode = collect($gateways)
+                ->pluck('code')
+                ->first(fn ($code) => is_string($code) && $code !== '');
+
+            if (! is_string($gatewayCode) || $gatewayCode === '') {
+                return __('No payment gateway is currently available. Create the payment later from the request page.');
+            }
+
+            $payment = app(NotaryPaymentService::class)->createGatewayPayment(
+                $this->notaryRequest->fresh(['registerEntries', 'payments']),
+                $gatewayCode,
+                Auth::id(),
+            );
+
+            app(NotaryNotificationService::class)->notifyPaymentReady(
+                $this->notaryRequest->fresh(['requester', 'notary']),
+                $payment,
+            );
+
+            return __('A payment link is now ready for the client.');
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return __('The register entry was saved, but the payment link could not be created automatically. Create it from the request page.');
+        }
     }
 }; ?>
 

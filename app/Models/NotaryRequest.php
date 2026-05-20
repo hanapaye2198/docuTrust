@@ -158,6 +158,22 @@ class NotaryRequest extends Model
         return $this->hasMany(NotarialRegisterEntry::class)->orderByDesc('entry_number');
     }
 
+    /**
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->latest('created_at');
+    }
+
+    /**
+     * @return HasMany<EInvoice, $this>
+     */
+    public function eInvoices(): HasMany
+    {
+        return $this->hasMany(EInvoice::class)->latest('created_at');
+    }
+
     public function markSubmitted(): void
     {
         $this->forceFill([

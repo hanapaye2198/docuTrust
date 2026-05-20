@@ -2,6 +2,8 @@
 
 use App\Enums\NotaryIdentityVerificationStatus;
 use App\Enums\NotaryRequestStatus;
+use App\Enums\EInvoiceStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\SigningMethod;
 use App\Enums\TemplateRoleType;
@@ -10,11 +12,13 @@ use App\Models\DocumentSigner;
 use App\Models\NotaryIdentityVerification;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
+use App\Models\Payment;
 use App\Models\User;
 use App\Services\CompletedDocumentArtifactService;
 use App\Services\CompletedDocumentSealingService;
 use App\Services\IdentityVerificationService;
 use App\Services\LocationVerificationService;
+use App\Services\NotaryPaymentService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
 use App\Services\NotaryParticipantSyncService;
@@ -70,6 +74,13 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public ?int $identityRejectId = null;
 
+    public string $paymentGateway = '';
+
+    /**
+     * @var list<array{code: string, name: string}>
+     */
+    public array $enabledPaymentGateways = [];
+
     /**
      * @var array<string, bool>
      */
@@ -80,7 +91,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         $user = Auth::user();
         abort_unless($user !== null, 401);
 
-        $notaryRequest->load(['requester', 'notary', 'documents', 'sessions', 'journals.notary', 'registerEntries', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
+        $notaryRequest->load(['requester', 'notary', 'documents', 'sessions', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
 
         // NotaryAdmin can view ALL requests globally (single admin manages all organizations)
         $isNotaryAdmin = $user->role->value === 'notary_admin';
@@ -88,6 +99,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         abort_unless($canView, 403);
 
         $this->notaryRequest = $notaryRequest;
+        $this->loadPaymentGateways();
 
         $keys = config('docutrust.notary.verification_checklist', []);
         $this->sessionChecklist = array_fill_keys($keys, false);
@@ -111,10 +123,16 @@ new #[Layout('components.layouts.app')] class extends Component {
             'canCreateRegisterEntry' => $this->canCreateRegisterEntry(),
             'canReviewNotary' => $this->canReviewNotary(),
             'canAttorneySign' => $this->canAttorneySign(),
+            'canDigitalizeRequest' => $workflow->canDigitalize($this->notaryRequest),
+            'paymentRequired' => $workflow->paymentRequired($this->notaryRequest),
+            'hasSettledPayment' => $workflow->hasSettledPayment($this->notaryRequest),
             'workflowSteps' => $workflow->workflowSteps($this->notaryRequest),
             'requestDocuments' => $requestDocuments,
             'recentSessions' => $this->notaryRequest->sessions,
             'journalEntries' => $this->notaryRequest->journals,
+            'latestPayment' => $this->notaryRequest->payments->sortByDesc('created_at')->first(),
+            'paymentHistory' => $this->notaryRequest->payments->sortByDesc('created_at')->values(),
+            'latestEInvoice' => $this->notaryRequest->eInvoices->sortByDesc('created_at')->first(),
             'finalizationReadiness' => $readiness,
             'documentWorkflowStates' => $requestDocuments
                 ->mapWithKeys(fn (Document $document) => [
@@ -866,9 +884,48 @@ new #[Layout('components.layouts.app')] class extends Component {
         session()->flash('status', __('Blockchain proof refreshed.'));
     }
 
+    public function createGatewayPayment(): void
+    {
+        $validated = $this->validate([
+            'paymentGateway' => ['required', Rule::in(collect($this->enabledPaymentGateways)->pluck('code')->all())],
+        ]);
+
+        try {
+            $payment = app(NotaryPaymentService::class)->createGatewayPayment(
+                $this->notaryRequest->fresh(['registerEntries', 'payments']),
+                $validated['paymentGateway'],
+                Auth::id(),
+            );
+
+            $this->refreshRequest();
+
+            session()->flash('status', $payment->wasRecentlyCreated
+                ? __('Payment created. Display the QR code or checkout link to the customer.')
+                : __('An active pending payment already exists for this request.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('createGatewayPayment', $exception->getMessage());
+        }
+    }
+
+    public function refreshPaymentStatus(int $paymentId): void
+    {
+        $payment = Payment::query()
+            ->whereKey($paymentId)
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->firstOrFail();
+
+        try {
+            app(NotaryPaymentService::class)->refreshGatewayPayment($payment);
+            $this->refreshRequest();
+            session()->flash('status', __('Payment status verified from GatewayHub.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('refreshPaymentStatus', $exception->getMessage());
+        }
+    }
+
     private function refreshRequest(): void
     {
-        $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions', 'journals.notary', 'registerEntries', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
+        $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
     }
 
     private function resolveCompletedLinkedDocument(int $documentId): Document
@@ -922,6 +979,18 @@ new #[Layout('components.layouts.app')] class extends Component {
     private function canCreateRegisterEntry(): bool
     {
         return app(NotaryRequestWorkflowService::class)->canCreateRegisterEntry($this->notaryRequest);
+    }
+
+    private function loadPaymentGateways(): void
+    {
+        try {
+            $this->enabledPaymentGateways = app(\App\Services\GatewayHubService::class)->enabledGateways();
+            $this->paymentGateway = $this->enabledPaymentGateways[0]['code'] ?? '';
+        } catch (\Throwable $exception) {
+            $this->enabledPaymentGateways = [];
+            $this->paymentGateway = '';
+            report($exception);
+        }
     }
 
 }; ?>
@@ -993,8 +1062,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                 @if ($attorneyHasSignedDoc && !$hasRegisterEntry)
                     <flux:button variant="primary" :href="route('notary.register-entry', $notaryRequest)" wire:navigate>{{ __('Create Register Entry') }}</flux:button>
                 @endif
-                {{-- Apply Digital Notarization: After attorney signs + register entry exists, before finalization --}}
-                @if ($attorneyHasSignedDoc && $hasRegisterEntry && ! in_array($notaryRequest->status, [NotaryRequestStatus::Digitalized, NotaryRequestStatus::Notarized], true))
+                {{-- Apply Digital Notarization: After attorney signs + register entry + client payment --}}
+                @if ($canDigitalizeRequest)
                     <flux:button variant="primary" wire:click="digitalizeRequest">{{ __('Apply Digital Notarization') }}</flux:button>
                 @endif
             @endif
@@ -1030,10 +1099,23 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     <div class="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
         <div class="min-w-0 space-y-6">
+            @if ($paymentRequired && ! $hasSettledPayment)
+                <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+                    <div class="font-semibold">{{ __('Payment required before notarization can continue') }}</div>
+                    <div class="mt-1">
+                        @if ($isNotary)
+                            {{ __('The notarial register entry has been created. The client must complete payment before attorney review can finish or digital notarization can begin.') }}
+                        @else
+                            {{ __('The attorney has created the notarial register entry. Complete the payment below to continue processing your notarization request.') }}
+                        @endif
+                    </div>
+                </div>
+            @endif
+
             <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
                 <div class="flex items-center justify-between gap-4">
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Workflow') }}</h2>
-                    <span class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('6 stages') }}</span>
+                    <span class="text-xs text-zinc-400 dark:text-zinc-500">{{ trans_choice(':count stage|:count stages', count($workflowSteps), ['count' => count($workflowSteps)]) }}</span>
                 </div>
                 <div class="mt-4 flex gap-2 overflow-x-auto pb-1">
                     @foreach ($workflowSteps as $index => $step)
@@ -1814,7 +1896,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 </div>
             </div>
 
-            @if ($isNotary)
+            @if ($isNotary || $canManageLifecycle)
                 <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Notarial register') }}</h2>
                     @if ($canCreateRegisterEntry)
@@ -1841,6 +1923,179 @@ new #[Layout('components.layouts.app')] class extends Component {
                 </div>
 
                 <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+                    <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Payment') }}</h2>
+                    @php
+                        $latestRegisterEntry = $notaryRequest->registerEntries->sortByDesc('created_at')->first();
+                        $paymentDue = $latestRegisterEntry ? (float) $latestRegisterEntry->fees : 0.0;
+                        $currentPaymentExpired = $latestPayment instanceof Payment
+                            && $latestPayment->status === PaymentStatus::Pending
+                            && $latestPayment->expires_at?->isPast();
+                        $displayPaymentStatus = $currentPaymentExpired ? PaymentStatus::Expired : ($latestPayment?->status ?? null);
+                        $paymentBadgeColor = match ($displayPaymentStatus) {
+                            PaymentStatus::Paid => 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300',
+                            PaymentStatus::Pending => 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300',
+                            PaymentStatus::Failed, PaymentStatus::Expired, PaymentStatus::Cancelled => 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300',
+                            default => 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300',
+                        };
+                    @endphp
+
+                    @if ($latestRegisterEntry)
+                        <div class="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900/40">
+                            <div class="font-medium text-zinc-900 dark:text-zinc-100">{{ __('Amount due') }}</div>
+                            <div class="mt-1 text-xl font-semibold text-zinc-900 dark:text-zinc-100">PHP {{ number_format($paymentDue, 2) }}</div>
+                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Based on register entry :entry', ['entry' => str_pad((string) $latestRegisterEntry->entry_number, 3, '0', STR_PAD_LEFT)]) }}</div>
+                        </div>
+                    @else
+                        <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                            {{ __('Create a notarial register entry with fees before generating a GatewayHub payment.') }}
+                        </div>
+                    @endif
+
+                    @if ($paymentRequired && ! $hasSettledPayment)
+                        <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+                            {{ __('This request is blocked until a successful payment is recorded.') }}
+                        </div>
+                    @endif
+
+                    @if ($latestPayment instanceof Payment)
+                        <div class="mt-4 rounded-xl border px-4 py-4 {{ $paymentBadgeColor }}">
+                            <div class="flex items-center justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-semibold uppercase tracking-wider">{{ __('Latest payment') }}</div>
+                                    <div class="mt-1 text-sm font-medium">{{ strtoupper($latestPayment->gateway) }} · {{ $latestPayment->reference }}</div>
+                                </div>
+                                <span class="rounded-full border border-current/15 px-2.5 py-1 text-xs font-semibold uppercase">{{ $displayPaymentStatus?->value ?? '-' }}</span>
+                            </div>
+                            <div class="mt-3 space-y-1 text-xs">
+                                <div>{{ __('GatewayHub Payment ID') }}: <span class="font-mono">{{ $latestPayment->provider_payment_id ?? '-' }}</span></div>
+                                <div>{{ __('Created') }}: {{ $latestPayment->created_at?->timezone('Asia/Manila')->format('M j, Y g:i A') ?? '-' }} (PHT)</div>
+                                <div>{{ __('Expires') }}: {{ $latestPayment->expires_at?->timezone('Asia/Manila')->format('M j, Y g:i A') ?? '-' }}{{ $currentPaymentExpired ? ' '.__('(expired)') : '' }}</div>
+                                @if ($latestPayment->paid_at)
+                                    <div>{{ __('Paid') }}: {{ $latestPayment->paid_at->timezone('Asia/Manila')->format('M j, Y g:i A') }} (PHT)</div>
+                                @endif
+                            </div>
+
+                            @if ($currentPaymentExpired)
+                                <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+                                    {{ __('This payment link has expired. Generate a new payment to continue.') }}
+                                </div>
+                                <div class="mt-4">
+                                    <flux:button variant="outline" type="button" wire:click="refreshPaymentStatus({{ $latestPayment->id }})">{{ __('Re-check status') }}</flux:button>
+                                </div>
+                            @elseif ($latestPayment->status === PaymentStatus::Pending)
+                                <div class="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_280px]">
+                                    <div class="space-y-3">
+                                        @if ($latestPayment->checkout_url || $latestPayment->redirect_url)
+                                            <a href="{{ $latestPayment->checkout_url ?? $latestPayment->redirect_url }}"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-500">
+                                                {{ __('Open checkout') }}
+                                            </a>
+                                        @endif
+                                        <div>
+                                            <div class="text-xs font-semibold uppercase tracking-wider">{{ __('QR payload') }}</div>
+                                            <textarea readonly rows="5" class="mt-2 w-full rounded-xl border border-current/15 bg-white/70 px-3 py-2 text-xs font-mono text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100">{{ $latestPayment->qr_data }}</textarea>
+                                        </div>
+                                        <flux:button variant="outline" type="button" wire:click="refreshPaymentStatus({{ $latestPayment->id }})">{{ __('Verify status from GatewayHub') }}</flux:button>
+                                        <flux:error name="refreshPaymentStatus" />
+                                    </div>
+                                    <div class="flex items-start justify-center">
+                                        @if ($latestPayment->qr_data)
+                                            <img
+                                                src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data={{ rawurlencode($latestPayment->qr_data) }}"
+                                                alt="{{ __('GatewayHub payment QR') }}"
+                                                class="w-full max-w-[280px] rounded-2xl border border-current/15 bg-white p-3"
+                                            >
+                                        @endif
+                                    </div>
+                                </div>
+                            @else
+                                <div class="mt-4">
+                                    <flux:button variant="outline" type="button" wire:click="refreshPaymentStatus({{ $latestPayment->id }})">{{ __('Re-check status') }}</flux:button>
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+
+                    @if ($latestRegisterEntry && $paymentDue > 0 && (! ($latestPayment instanceof Payment) || $latestPayment->status !== PaymentStatus::Paid))
+                        <div class="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+                            <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $currentPaymentExpired ? __('Generate a new GatewayHub payment') : __('Create GatewayHub payment') }}</div>
+                            @if ($enabledPaymentGateways !== [])
+                                <div class="mt-3 space-y-3">
+                                    <flux:field>
+                                        <flux:label>{{ __('Gateway') }}</flux:label>
+                                        <select wire:model="paymentGateway" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                                            @foreach ($enabledPaymentGateways as $gatewayOption)
+                                                <option value="{{ $gatewayOption['code'] }}">{{ $gatewayOption['name'] }}</option>
+                                            @endforeach
+                                        </select>
+                                        <flux:error name="paymentGateway" />
+                                    </flux:field>
+                                    <flux:button variant="primary" type="button" wire:click="createGatewayPayment">{{ $currentPaymentExpired ? __('Generate new payment') : __('Create payment') }}</flux:button>
+                                    <flux:error name="createGatewayPayment" />
+                                </div>
+                            @else
+                                <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                                    {{ __('GatewayHub is not fully configured or enabled gateways could not be loaded.') }}
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+
+                    @if ($paymentHistory->count() > 1)
+                        <div class="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+                            <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Payment history') }}</div>
+                            <div class="mt-3 space-y-2">
+                                @foreach ($paymentHistory->slice(1) as $historicPayment)
+                                    <div class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                                        <div class="font-medium text-zinc-800 dark:text-zinc-200">{{ strtoupper($historicPayment->gateway) }} · {{ $historicPayment->reference }}</div>
+                                        <div class="text-xs text-zinc-500 dark:text-zinc-400">{{ strtoupper($historicPayment->status->value) }} · {{ $historicPayment->created_at?->timezone('Asia/Manila')->format('M j, Y g:i A') ?? '-' }} (PHT)</div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($latestEInvoice)
+                        @php
+                            $invoiceBadgeColor = match ($latestEInvoice->status) {
+                                EInvoiceStatus::Accepted => 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300',
+                                EInvoiceStatus::Rejected, EInvoiceStatus::NeedsCorrection => 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300',
+                                EInvoiceStatus::Queued, EInvoiceStatus::Submitted, EInvoiceStatus::Processing => 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300',
+                                default => 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300',
+                            };
+                        @endphp
+
+                        <div class="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+                            <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('E-invoice') }}</div>
+                            <div class="mt-3 rounded-xl border px-4 py-4 {{ $invoiceBadgeColor }}">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div>
+                                        <div class="text-xs font-semibold uppercase tracking-wider">{{ __('Latest invoice') }}</div>
+                                        <div class="mt-1 text-sm font-medium">{{ $latestEInvoice->invoice_number }}</div>
+                                    </div>
+                                    <span class="rounded-full border border-current/15 px-2.5 py-1 text-xs font-semibold uppercase">{{ $latestEInvoice->status->value }}</span>
+                                </div>
+                                <div class="mt-3 space-y-1 text-xs">
+                                    <div>{{ __('Amount') }}: PHP {{ number_format((float) $latestEInvoice->total_amount, 2) }}</div>
+                                    <div>{{ __('Issue date') }}: {{ $latestEInvoice->issue_date?->timezone('Asia/Manila')->format('M j, Y g:i A') ?? '-' }} (PHT)</div>
+                                    <div>{{ __('Document') }}: {{ $latestEInvoice->document_title ?? '-' }}</div>
+                                    <div>{{ __('O.R. number') }}: {{ $latestEInvoice->official_receipt_number ?? '-' }}</div>
+                                </div>
+
+                                @if ($latestEInvoice->status === EInvoiceStatus::Draft)
+                                    <div class="mt-4 rounded-xl border border-current/15 bg-white/50 px-4 py-3 text-sm dark:bg-zinc-950/20">
+                                        {{ __('The internal invoice record is ready and awaiting EIS submission setup.') }}
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                @if ($isNotary)
+                <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Notary review') }}</h2>
                     @if ($canReviewNotary)
                         <div class="mt-4 space-y-4">
@@ -1865,10 +2120,11 @@ new #[Layout('components.layouts.app')] class extends Component {
                         </div>
                     @else
                         <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                            {{ __('Attorney review becomes available after the video session is complete, the attorney has signed, and a register entry exists.') }}
+                            {{ __('Attorney review becomes available after the video session is complete, the attorney has signed, the register entry exists, and the client payment has been completed.') }}
                         </div>
                     @endif
                 </div>
+                @endif
             @endif
         </div>
     </div>

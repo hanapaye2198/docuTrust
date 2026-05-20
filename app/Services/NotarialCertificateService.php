@@ -6,8 +6,11 @@ use App\Concerns\ResolvesSecureDisk;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
+use Throwable;
 
 class NotarialCertificateService
 {
@@ -25,19 +28,48 @@ class NotarialCertificateService
             return null;
         }
 
-        $pdf = Pdf::loadView('certificates.notarial', [
-            'entry' => $entry,
-            'credential' => $credential,
-        ])->setPaper('a4');
+        if (! extension_loaded('gd')) {
+            if (app()->environment('production')) {
+                throw new RuntimeException('The PHP GD extension is required to generate notarial certificates.');
+            }
 
-        $path = sprintf(
-            'certificates/notarial/%s-%s.pdf',
-            $entry->notary_request_id,
-            Str::uuid()->toString()
-        );
+            Log::warning('Skipping notarial certificate generation because GD is not installed.', [
+                'entry_id' => $entry->id,
+                'notary_request_id' => $entry->notary_request_id,
+                'environment' => app()->environment(),
+            ]);
 
-        Storage::disk($this->secureDiskName())->put($path, $pdf->output());
+            return null;
+        }
 
-        return $path;
+        try {
+            $pdf = Pdf::loadView('certificates.notarial', [
+                'entry' => $entry,
+                'credential' => $credential,
+            ])->setPaper('a4');
+
+            $path = sprintf(
+                'certificates/notarial/%s-%s.pdf',
+                $entry->notary_request_id,
+                Str::uuid()->toString()
+            );
+
+            Storage::disk($this->secureDiskName())->put($path, $pdf->output());
+
+            return $path;
+        } catch (Throwable $throwable) {
+            if (app()->environment('production')) {
+                throw $throwable;
+            }
+
+            Log::warning('Skipping notarial certificate generation after local PDF failure.', [
+                'entry_id' => $entry->id,
+                'notary_request_id' => $entry->notary_request_id,
+                'message' => $throwable->getMessage(),
+                'exception' => $throwable::class,
+            ]);
+
+            return null;
+        }
     }
 }
