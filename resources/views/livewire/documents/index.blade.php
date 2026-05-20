@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Models\Document;
+use App\Models\Organization;
 use App\Models\Tag;
 use App\Services\SigningMethodService;
 use Illuminate\Support\Facades\Cache;
@@ -27,6 +28,14 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     #[Url(as: 'to')]
     public string $dateTo = '';
+
+    #[Url(as: 'org')]
+    public string $organizationFilter = 'all';
+
+    public function updatedOrganizationFilter(): void
+    {
+        $this->resetPage();
+    }
 
     public function updatedSearch(): void
     {
@@ -56,11 +65,14 @@ new #[Layout('components.layouts.app')] class extends Component {
     public function with(): array
     {
         $user = auth()->user();
-        $isSignerView = $user?->role === UserRole::Client && ! $user?->isOrganizationAdmin();
+        $isPlatformView = $user?->isSuperAdmin() === true;
+        $isSignerView = ! $isPlatformView && $user?->role === UserRole::Client && ! $user?->isOrganizationAdmin();
         $cacheScope = implode('|', [
             'documents-index',
             (string) $user?->id,
             (string) $user?->organization_id,
+            $isPlatformView ? 'platform' : 'org',
+            $this->organizationFilter,
             $this->search,
             $this->statusFilter,
             $this->tagFilter,
@@ -69,8 +81,12 @@ new #[Layout('components.layouts.app')] class extends Component {
         ]);
 
         $documentsQuery = Document::query()
-            ->where('organization_id', $user?->organization_id)
-            ->whereNull('notary_request_id')
+            ->when(! $isPlatformView, fn ($query) => $query
+                ->where('organization_id', $user?->organization_id)
+                ->whereNull('notary_request_id'))
+            ->when($isPlatformView && $this->organizationFilter !== 'all', function ($query): void {
+                $query->where('organization_id', (int) $this->organizationFilter);
+            })
             ->when($isSignerView, function ($query) use ($user): void {
                 $query->where(function ($scopedQuery) use ($user): void {
                     $scopedQuery
@@ -119,19 +135,29 @@ new #[Layout('components.layouts.app')] class extends Component {
             'documents' => $documentsQuery
                 ->with([
                     'tags',
+                    'organization',
+                    'user',
+                    'documentHash',
                     'documentSigners' => fn ($query) => $query
                         ->when($isSignerView, fn ($signerQuery) => $signerQuery->where('user_id', $user?->id))
                         ->orderBy('id'),
                 ])
-                ->withCount('documentSigners')
+                ->withCount([
+                    'documentSigners',
+                    'documentSigners as signed_signers_count' => fn ($query) => $query->where('status', 'signed'),
+                ])
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')
                 ->paginate(10)
                 ->withQueryString(),
             'availableTags' => Tag::query()
-                ->where('organization_id', $user?->organization_id)
+                ->when(! $isPlatformView, fn ($query) => $query->where('organization_id', $user?->organization_id))
                 ->orderBy('name')
                 ->get(),
+            'organizations' => $isPlatformView
+                ? Organization::query()->orderBy('name')->get(['id', 'name'])
+                : collect(),
+            'isPlatformView' => $isPlatformView,
             'totalDocuments' => $cachedCounts['total'],
             'pendingDocuments' => $cachedCounts['pending'],
             'completedDocuments' => $cachedCounts['completed'],
@@ -149,15 +175,19 @@ new #[Layout('components.layouts.app')] class extends Component {
                 {{ __('Documents') }}
             </h1>
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400 max-w-xl">
-                {{ $isSignerView
-                    ? __('Review documents assigned to you and complete pending signatures.')
-                    : __('Manage your uploaded PDFs and track signing progress in one view.') }}
+                {{ $isPlatformView
+                    ? __('Platform-wide document registry including e-notary and standard signing workflows.')
+                    : ($isSignerView
+                        ? __('Review documents assigned to you and complete pending signatures.')
+                        : __('Manage your uploaded PDFs and track signing progress in one view.')) }}
             </p>
         </div>
+        @if (! $isPlatformView)
         <flux:button variant="primary" :href="route('documents.create')" wire:navigate>
             <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
             {{ __('Upload document') }}
         </flux:button>
+        @endif
     </div>
 
     {{-- ── Stat counters ── --}}
@@ -226,6 +256,22 @@ new #[Layout('components.layouts.app')] class extends Component {
                 class="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-4 text-sm text-zinc-900 placeholder:text-zinc-400 shadow-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600"
             />
         </div>
+
+        @if ($isPlatformView)
+            <div class="relative sm:w-56">
+                <label class="sr-only" for="org-filter">{{ __('Filter by organization') }}</label>
+                <select
+                    id="org-filter"
+                    wire:model.live="organizationFilter"
+                    class="w-full appearance-none rounded-xl border border-zinc-200 bg-white py-2.5 pl-3 pr-8 text-sm text-zinc-900 shadow-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                    <option value="all">{{ __('All organizations') }}</option>
+                    @foreach ($organizations as $organization)
+                        <option value="{{ $organization->id }}">{{ $organization->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+        @endif
 
         <div class="relative sm:w-52">
             <label class="sr-only" for="tag-filter">{{ __('Filter by tag') }}</label>
@@ -300,6 +346,11 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <th scope="col" class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                             {{ __('Title') }}
                         </th>
+                        @if ($isPlatformView)
+                            <th scope="col" class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                {{ __('Organization') }}
+                            </th>
+                        @endif
                         <th scope="col" class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                             {{ __('Status') }}
                         </th>
@@ -347,7 +398,16 @@ new #[Layout('components.layouts.app')] class extends Component {
                                         <span class="text-xs text-zinc-400">—</span>
                                     @endforelse
                                 </div>
+                                @if ($isPlatformView && $document->notary_request_id)
+                                    <p class="mt-1 pl-11 text-xs text-violet-600 dark:text-violet-400">{{ __('e-Notary document') }}</p>
+                                @endif
                             </td>
+
+                            @if ($isPlatformView)
+                                <td class="px-5 py-4 text-sm text-zinc-600 dark:text-zinc-300">
+                                    {{ $document->organization?->name ?? '—' }}
+                                </td>
+                            @endif
 
                             {{-- Status badge --}}
                             <td class="px-5 py-4 text-sm">
@@ -356,9 +416,16 @@ new #[Layout('components.layouts.app')] class extends Component {
 
                             {{-- Signers count --}}
                             <td class="px-5 py-4 text-sm">
-                                <div class="flex items-center gap-1.5">
-                                    <svg class="h-3.5 w-3.5 text-zinc-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
-                                    <span class="tabular-nums text-zinc-600 dark:text-zinc-300">{{ $document->document_signers_count }}</span>
+                                <div class="flex flex-col gap-0.5">
+                                    <div class="flex items-center gap-1.5">
+                                        <svg class="h-3.5 w-3.5 text-zinc-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
+                                        <span class="tabular-nums text-zinc-600 dark:text-zinc-300">
+                                            {{ $document->signed_signers_count }}/{{ $document->document_signers_count }}
+                                        </span>
+                                    </div>
+                                    @if ($isPlatformView && $document->documentHash?->transaction_id)
+                                        <span class="text-[10px] text-teal-600 dark:text-teal-400">{{ __('Anchored') }}</span>
+                                    @endif
                                 </div>
                             </td>
 
@@ -380,7 +447,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-5 py-16 text-center">
+                            <td colspan="{{ $isPlatformView ? 6 : 5 }}" class="px-5 py-16 text-center">
                                 <div class="flex flex-col items-center gap-3">
                                     <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800">
                                         <svg class="h-7 w-7 text-zinc-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>

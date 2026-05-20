@@ -58,6 +58,12 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             ]);
         }
 
+        if (! $user->isActive()) {
+            throw ValidationException::withMessages([
+                'email' => __('This account has been deactivated. Contact your administrator.'),
+            ]);
+        }
+
         Auth::login($user, $this->remember);
         Session::regenerate();
 

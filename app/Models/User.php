@@ -37,6 +37,10 @@ class User extends Authenticatable implements MustVerifyEmail
         });
 
         static::creating(function (User $user): void {
+            if ($user->role === UserRole::SuperAdmin) {
+                return;
+            }
+
             if ($user->organization_id !== null) {
                 return;
             }
@@ -100,6 +104,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'two_factor_enabled',
         'two_factor_confirmed_at',
         'two_factor_onboarding_completed_at',
+        'deactivated_at',
     ];
 
     /**
@@ -140,7 +145,18 @@ class User extends Authenticatable implements MustVerifyEmail
             'selfie_verified_at' => 'datetime',
             'gps_permission_granted_at' => 'datetime',
             'mfa_enabled' => 'boolean',
+            'deactivated_at' => 'datetime',
         ];
+    }
+
+    public function isActive(): bool
+    {
+        return $this->deactivated_at === null;
+    }
+
+    public function isPlatformOperator(): bool
+    {
+        return $this->isSuperAdmin();
     }
 
     public function needsTwoFactorOnboarding(): bool

@@ -30,6 +30,14 @@ final class Breadcrumbs
                 ['label' => __('Dashboard'), 'href' => route('dashboard')],
                 ['label' => __('Signature Compliance')],
             ],
+            'admin.signing.dashboard' => [
+                ['label' => __('Dashboard'), 'href' => route('dashboard')],
+                ['label' => __('Signing Dashboard')],
+            ],
+            'admin.users.index' => [
+                ['label' => __('Dashboard'), 'href' => route('dashboard')],
+                ['label' => __('Platform users')],
+            ],
             'verify.index' => [
                 ['label' => __('Dashboard'), 'href' => route('dashboard')],
                 ['label' => __('Verify')],

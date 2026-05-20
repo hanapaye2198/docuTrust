@@ -14,6 +14,10 @@ class DocumentPolicy
 
     public function view(User $user, Document $document): bool
     {
+        if ($user->isSuperAdmin() || $user->isNotaryAdmin()) {
+            return true;
+        }
+
         // Allow the assigned attorney to view eNOTARY documents
         if ($document->notary_request_id !== null) {
             $notaryRequest = $document->notaryRequest;
@@ -53,6 +57,10 @@ class DocumentPolicy
 
     public function update(User $user, Document $document): bool
     {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
         // Allow the assigned attorney to update eNOTARY documents (for field preparation)
         if ($document->notary_request_id !== null) {
             $notaryRequest = $document->notaryRequest;

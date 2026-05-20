@@ -64,9 +64,17 @@
                         icon="home"
                         :href="route('dashboard')"
                         :current="request()->routeIs('dashboard')"
-                        :tooltip="__('Dashboard')"
+                        :tooltip="__('e-Notary Dashboard')"
                         wire:navigate
-                    >{{ __('Dashboard') }}</flux:sidebar.item>
+                    >{{ __('e-Notary') }}</flux:sidebar.item>
+
+                    <flux:sidebar.item
+                        icon="chart-bar"
+                        :href="route('admin.signing.dashboard')"
+                        :current="request()->routeIs('admin.signing.dashboard')"
+                        :tooltip="__('Signing Dashboard')"
+                        wire:navigate
+                    >{{ __('Signing') }}</flux:sidebar.item>
 
                     <flux:sidebar.item
                         icon="shield-check"
@@ -75,6 +83,16 @@
                         :tooltip="__('Signature Compliance')"
                         wire:navigate
                     >{{ __('Compliance') }}</flux:sidebar.item>
+                @endif
+
+                @if ($navRole === UserRole::SuperAdmin)
+                    <flux:sidebar.item
+                        icon="users"
+                        :href="route('admin.users.index')"
+                        :current="request()->routeIs('admin.users.*')"
+                        :tooltip="__('Platform Users')"
+                        wire:navigate
+                    >{{ __('Users') }}</flux:sidebar.item>
                 @endif
 
                 @if ($navRole === UserRole::Notary)

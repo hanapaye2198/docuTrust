@@ -41,7 +41,7 @@ Route::middleware('throttle:signing-links')->group(function () {
     Route::post('/sign/{token}/complete', [SignDocumentController::class, 'complete'])->name('sign.complete');
 });
 
-Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
+Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(function () {
     Route::get('/account-sign/{signerId}', [SignDocumentController::class, 'showAuthenticated'])->name('sign.account.show');
     Route::post('/account-sign/{signerId}/unlock', [SignDocumentController::class, 'unlockAuthenticated'])->name('sign.account.unlock');
     Route::get('/account-sign/{signerId}/pdf', [SignDocumentController::class, 'streamAuthenticatedPdf'])->name('sign.account.document.pdf');
@@ -66,7 +66,12 @@ Volt::route('verify', 'pages.verify')->name('verify.index');
 
 Route::middleware(['auth', 'role:super_admin,notary_admin'])->group(function () {
     Volt::route('dashboard', 'notary-admin.dashboard')->name('dashboard');
+    Volt::route('admin/signing-dashboard', 'pages.dashboard')->name('admin.signing.dashboard');
     Volt::route('admin/compliance', 'admin.compliance-dashboard')->name('admin.compliance.dashboard');
+
+    Route::middleware(['role:super_admin'])->group(function () {
+        Volt::route('admin/users', 'admin.users-index')->name('admin.users.index');
+    });
 
     Route::prefix('admin/compliance')->name('admin.compliance.')->group(function () {
         Route::get('report.json', [SignatureComplianceController::class, 'json'])
@@ -94,7 +99,7 @@ Route::middleware(['auth', 'role:notary'])->group(function () {
     Route::post('notary/documents/{document}/send', [DocumentPrepareController::class, 'send'])->name('notary.documents.send');
 });
 
-Route::middleware(['auth', 'role:notary_admin,client'])->group(function () {
+Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(function () {
     Volt::route('contacts', 'contacts.index')->name('contacts.index');
 
     Volt::route('notary-requests', 'notary-requests.index')->name('notary-requests.index');

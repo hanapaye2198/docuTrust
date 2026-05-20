@@ -11,9 +11,36 @@ use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 
 new #[Layout('components.layouts.app')] class extends Component {
+    private function isGlobalPlatformStats(): bool
+    {
+        return auth()->user()?->isSuperAdmin() === true;
+    }
+
+    private function scopeDocumentsQuery($query)
+    {
+        if (! $this->isGlobalPlatformStats()) {
+            $query->where('organization_id', auth()->user()?->organization_id);
+        }
+
+        return $query;
+    }
+
+    private function scopeDocumentRelationQuery($query)
+    {
+        if (! $this->isGlobalPlatformStats()) {
+            $query->where('organization_id', auth()->user()?->organization_id);
+        }
+
+        return $query;
+    }
+
     private function statsCacheKey(string $suffix): string
     {
-        return 'dashboard:'.$suffix.':org:'.(string) auth()->user()?->organization_id;
+        $scope = $this->isGlobalPlatformStats()
+            ? 'platform'
+            : 'org:'.(string) auth()->user()?->organization_id;
+
+        return 'dashboard:'.$suffix.':'.$scope;
     }
 
     /**
@@ -29,14 +56,19 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         return Cache::remember($this->statsCacheKey('stats'), now()->addMinutes(3), function (): array {
             $organizationId = auth()->user()?->organization_id;
+            $global = $this->isGlobalPlatformStats();
+
             $statusCounts = Document::query()
-                ->where('organization_id', $organizationId)
+                ->when(! $global, fn ($query) => $query->where('organization_id', $organizationId))
                 ->selectRaw('status, COUNT(*) as aggregate')
                 ->groupBy('status')
                 ->pluck('aggregate', 'status');
 
             $signerCounts = DocumentSigner::query()
-                ->whereHas('document', fn ($query) => $query->where('organization_id', $organizationId))
+                ->when(! $global, fn ($query) => $query->whereHas(
+                    'document',
+                    fn ($documentQuery) => $documentQuery->where('organization_id', $organizationId)
+                ))
                 ->selectRaw('status, COUNT(*) as aggregate')
                 ->groupBy('status')
                 ->pluck('aggregate', 'status');
@@ -230,8 +262,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function recentDocuments()
     {
-        return Document::query()
-            ->where('organization_id', auth()->user()?->organization_id)
+        return $this->scopeDocumentsQuery(Document::query())
             ->withCount('documentSigners')
             ->latest()
             ->limit(6)
@@ -241,8 +272,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function recentSignedDocuments()
     {
-        return Document::query()
-            ->where('organization_id', auth()->user()?->organization_id)
+        return $this->scopeDocumentsQuery(Document::query())
             ->where('status', DocumentStatus::Completed)
             ->latest('updated_at')
             ->limit(5)
@@ -252,8 +282,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function recentUploads()
     {
-        return Document::query()
-            ->where('organization_id', auth()->user()?->organization_id)
+        return $this->scopeDocumentsQuery(Document::query())
             ->latest('created_at')
             ->limit(5)
             ->get();
@@ -264,7 +293,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         return DocumentSigner::query()
             ->selectRaw('email, MAX(name) as name, COUNT(*) as total_requests, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as signed_requests', [DocumentSignerStatus::Signed->value])
-            ->whereHas('document', fn ($q) => $q->where('organization_id', auth()->user()?->organization_id))
+            ->whereHas('document', fn ($q) => $this->scopeDocumentRelationQuery($q))
             ->groupBy('email')
             ->orderByDesc('signed_requests')
             ->orderByDesc('total_requests')
@@ -278,7 +307,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         return SignerCertificate::query()
             ->where('status', 'active')
             ->whereNull('revoked_at')
-            ->whereHas('documentSigner.document', fn ($query) => $query->where('organization_id', auth()->user()?->organization_id))
+            ->whereHas('documentSigner.document', fn ($query) => $this->scopeDocumentRelationQuery($query))
             ->count();
     }
 
@@ -289,7 +318,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->where(function ($query): void {
                 $query->where('status', 'revoked')->orWhereNotNull('revoked_at');
             })
-            ->whereHas('documentSigner.document', fn ($query) => $query->where('organization_id', auth()->user()?->organization_id))
+            ->whereHas('documentSigner.document', fn ($query) => $this->scopeDocumentRelationQuery($query))
             ->count();
     }
 
@@ -301,7 +330,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->where(function ($query): void {
                 $query->where('status', 'revoked')->orWhereNotNull('revoked_at');
             })
-            ->whereHas('documentSigner.document', fn ($query) => $query->where('organization_id', auth()->user()?->organization_id))
+            ->whereHas('documentSigner.document', fn ($query) => $this->scopeDocumentRelationQuery($query))
             ->latest('revoked_at')
             ->limit(4)
             ->get();
@@ -317,7 +346,6 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function activityChartPayload(): array
     {
-        $organizationId = auth()->user()?->organization_id;
         $now = now();
         $startOfWindow = $now->copy()->startOfMonth()->subMonths(5)->startOfDay();
 
@@ -328,8 +356,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->startOfMonth()->subMonths($i);
             $labels[] = $month->format('M');
-            $monthlyCount = Document::query()
-                ->where('organization_id', $organizationId)
+            $monthlyCount = $this->scopeDocumentsQuery(Document::query())
                 ->whereBetween('created_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
                 ->count();
             $monthlyValues[] = $monthlyCount;
