@@ -9,6 +9,7 @@ use App\Models\NotaryRequest;
 use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class GatewayHubWebhookTest extends TestCase
@@ -156,5 +157,51 @@ class GatewayHubWebhookTest extends TestCase
         ], $body);
 
         $response->assertUnauthorized();
+    }
+
+    public function test_refreshing_gatewayhub_payment_treats_success_status_as_paid(): void
+    {
+        config()->set('services.gatewayhub.api_key', 'test-api-key');
+
+        Http::fake([
+            'https://gatewayhub.io/api/payments/payment-uuid-3/status' => Http::response([
+                'success' => true,
+                'data' => [
+                    'payment_id' => 'payment-uuid-3',
+                    'status' => 'success',
+                    'amount' => 500,
+                    'currency' => 'PHP',
+                    'gateway' => 'gcash',
+                    'reference' => 'NREQ-3-ABCDE12345',
+                ],
+                'error' => null,
+            ], 200),
+        ]);
+
+        $user = User::factory()->client()->create();
+        $request = NotaryRequest::factory()->create([
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $user->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $user->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-uuid-3',
+            'provider_transaction_id' => 'payment-uuid-3',
+            'gateway' => 'gcash',
+            'reference' => 'NREQ-3-ABCDE12345',
+            'amount' => 500.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Pending->value,
+        ]);
+
+        $updated = app(\App\Services\NotaryPaymentService::class)->refreshGatewayPayment($payment);
+
+        $this->assertSame(PaymentStatus::Paid, $updated->status);
+        $this->assertNotNull($updated->paid_at);
+        $this->assertNotNull($updated->last_verified_at);
     }
 }

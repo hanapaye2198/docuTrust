@@ -23,6 +23,14 @@ class GatewayHubWebhookController extends Controller
         $signature = $request->header('X-Merchant-Signature');
 
         if (! $this->gatewayHubService->verifyWebhookSignature($timestamp, $signature, $rawBody)) {
+            Log::warning('GatewayHub webhook signature verification failed.', [
+                'timestamp' => $timestamp,
+                'signature_present' => $signature !== null && $signature !== '',
+                'body_length' => strlen($rawBody),
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return response()->json([
                 'message' => 'Invalid webhook signature.',
             ], 401);
@@ -30,10 +38,21 @@ class GatewayHubWebhookController extends Controller
 
         $payload = $request->json()->all();
         if (! is_array($payload) || ($payload['event'] ?? null) !== 'payment.updated') {
+            Log::info('GatewayHub webhook event ignored.', [
+                'event' => is_array($payload) ? ($payload['event'] ?? null) : null,
+                'ip' => $request->ip(),
+            ]);
+
             return response()->json([
                 'message' => 'Event ignored.',
             ], 202);
         }
+
+        Log::info('GatewayHub webhook received.', [
+            'payment_id' => $payload['data']['payment_id'] ?? null,
+            'reference' => $payload['data']['reference'] ?? null,
+            'status' => $payload['data']['status'] ?? null,
+        ]);
 
         $payment = $this->notaryPaymentService->handleGatewayWebhook($payload);
 

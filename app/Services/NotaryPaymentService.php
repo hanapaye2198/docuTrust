@@ -165,7 +165,7 @@ class NotaryPaymentService
         $value = strtolower(trim((string) $status));
 
         return match ($value) {
-            PaymentStatus::Paid->value => PaymentStatus::Paid,
+            PaymentStatus::Paid->value, 'success', 'succeeded', 'completed' => PaymentStatus::Paid,
             PaymentStatus::Failed->value => PaymentStatus::Failed,
             PaymentStatus::Expired->value => PaymentStatus::Expired,
             PaymentStatus::Cancelled->value => PaymentStatus::Cancelled,
