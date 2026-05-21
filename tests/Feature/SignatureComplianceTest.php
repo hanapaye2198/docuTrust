@@ -54,13 +54,18 @@ class SignatureComplianceTest extends TestCase
         $this->assertFalse(SignatureFeatures::hsmEnabled());
     }
 
-    public function test_compliance_dashboard_requires_admin_role(): void
+    public function test_compliance_dashboard_requires_super_admin_role(): void
     {
-        $user = User::factory()->client()->create();
+        $client = User::factory()->client()->create();
+        $notaryAdmin = User::factory()->notaryAdmin()->create();
 
-        $this->actingAs($user)
+        $this->actingAs($client)
             ->get(route('admin.compliance.dashboard'))
-            ->assertRedirect(route($user->homeRouteName()));
+            ->assertRedirect(route($client->homeRouteName()));
+
+        $this->actingAs($notaryAdmin)
+            ->get(route('admin.compliance.dashboard'))
+            ->assertRedirect(route($notaryAdmin->homeRouteName()));
     }
 
     public function test_compliance_json_export_for_super_admin(): void

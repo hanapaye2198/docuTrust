@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\NotaryCredentialStatus;
 use Database\Factories\NotaryCredentialFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -28,7 +29,16 @@ class NotaryCredential extends Model
         'mcle_compliance_number',
         'seal_image_path',
         'signature_image_path',
+        'commission_document_path',
+        'ibp_document_path',
+        'ptr_document_path',
+        'mcle_document_path',
         'status',
+        'rejection_reason',
+        'reviewed_by_user_id',
+        'reviewed_at',
+        'submitted_at',
+        'is_renewal',
     ];
 
     /**
@@ -39,6 +49,9 @@ class NotaryCredential extends Model
         return [
             'commission_issued_at' => 'date',
             'commission_expires_at' => 'date',
+            'reviewed_at' => 'datetime',
+            'submitted_at' => 'datetime',
+            'is_renewal' => 'boolean',
         ];
     }
 
@@ -51,6 +64,14 @@ class NotaryCredential extends Model
     }
 
     /**
+     * @return BelongsTo<User, $this>
+     */
+    public function reviewedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by_user_id');
+    }
+
+    /**
      * @return HasMany<NotarialRegisterEntry, $this>
      */
     public function registerEntries(): HasMany
@@ -58,9 +79,14 @@ class NotaryCredential extends Model
         return $this->hasMany(NotarialRegisterEntry::class)->orderByDesc('entry_number');
     }
 
+    public function isPending(): bool
+    {
+        return $this->status === NotaryCredentialStatus::Pending->value;
+    }
+
     public function isActive(): bool
     {
-        return $this->status === 'active'
+        return $this->status === NotaryCredentialStatus::Active->value
             && $this->commission_expires_at !== null
             && ! $this->commission_expires_at->copy()->endOfDay()->isPast();
     }

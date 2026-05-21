@@ -10,6 +10,7 @@ use App\Enums\OrganizationRole;
 use App\Enums\SigningMethod;
 use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
+use App\Enums\UserWorkspace;
 use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
@@ -18,6 +19,8 @@ use App\Models\NotaryCredential;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
 use App\Models\NotarySession;
+use App\Models\NotarySigner;
+use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
@@ -29,7 +32,7 @@ class ENotarySeeder extends Seeder
         // ─── Users ───────────────────────────────────────────────────────────
 
         $notary = User::query()->updateOrCreate([
-            'email' => 'enotary@docutrust.com',
+            'email' => 'notaryatty@docutrust.tech',
         ], [
             'name' => 'Atty. Maria Santos',
             'password' => 'password',
@@ -45,7 +48,7 @@ class ENotarySeeder extends Seeder
         ]);
 
         $notaryAdmin = User::query()->updateOrCreate([
-            'email' => 'notaryadmin@docutrust.com',
+            'email' => 'notaryadmin@docutrust.tech',
         ], [
             'organization_id' => $notary->organization_id,
             'name' => 'Admin Reyes',
@@ -62,13 +65,14 @@ class ENotarySeeder extends Seeder
         ]);
 
         $client = User::query()->updateOrCreate([
-            'email' => 'client@docutrust.com',
+            'email' => 'client@docutrust.tech',
         ], [
             'organization_id' => $notary->organization_id,
             'name' => 'Juan Dela Cruz',
             'password' => 'password',
             'email_verified_at' => now(),
             'role' => UserRole::Client,
+            'workspace' => UserWorkspace::Enotary,
             'organization_role' => OrganizationRole::Member,
             'onboarding_step' => OnboardingStep::Completed,
             'mfa_enabled' => true,
@@ -79,13 +83,14 @@ class ENotarySeeder extends Seeder
         ]);
 
         $client2 = User::query()->updateOrCreate([
-            'email' => 'client2@docutrust.com',
+            'email' => 'client2@docutrust.tech',
         ], [
             'organization_id' => $notary->organization_id,
             'name' => 'Ana Marie Garcia',
             'password' => 'password',
             'email_verified_at' => now(),
             'role' => UserRole::Client,
+            'workspace' => UserWorkspace::Enotary,
             'organization_role' => OrganizationRole::Member,
             'onboarding_step' => OnboardingStep::Completed,
             'mfa_enabled' => true,
@@ -572,7 +577,7 @@ class ENotarySeeder extends Seeder
             'expires_at' => now()->addDays(7),
         ]);
 
-        \App\Models\NotarySigner::query()->updateOrCreate([
+        NotarySigner::query()->updateOrCreate([
             'notary_request_id' => $request->id,
             'email' => 'hannah18.panaligan@gmail.com',
         ], [
@@ -633,7 +638,7 @@ class ENotarySeeder extends Seeder
             'qr_verification_token' => 'f5369fb9-77d5-42f5-84d0-2a63fd51fb51',
         ]);
 
-        \App\Models\Payment::query()->where('notary_request_id', $request->id)->delete();
+        Payment::query()->where('notary_request_id', $request->id)->delete();
 
         $journalEntries = [
             [

@@ -68,6 +68,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(20)->by('marketing-chatbot|'.$request->ip());
         });
 
+        RateLimiter::for('enotary-invite-accept', function (Request $request): Limit {
+            $token = (string) ($request->route('token') ?? 'missing');
+
+            return Limit::perMinute(15)->by('enotary-invite|'.$token.'|'.$request->ip());
+        });
+
         View::composer('components.layouts.app', function ($view): void {
             $view->with('layoutBreadcrumbs', Breadcrumbs::items());
         });

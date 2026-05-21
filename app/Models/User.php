@@ -6,6 +6,7 @@ use App\Enums\EkycStatus;
 use App\Enums\OnboardingStep;
 use App\Enums\OrganizationRole;
 use App\Enums\UserRole;
+use App\Enums\UserWorkspace;
 use App\Mail\EmailOtpVerificationMail;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -77,6 +78,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'email',
         'password',
         'role',
+        'workspace',
         'organization_role',
         'onboarding_step',
         'ekyc_status',
@@ -133,6 +135,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'onboarding_step' => OnboardingStep::class,
             'password' => 'hashed',
             'role' => UserRole::class,
+            'workspace' => UserWorkspace::class,
             'two_factor_enabled' => 'boolean',
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
@@ -281,8 +284,13 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function homeRouteName(): string
     {
+        if ($this->role === UserRole::Client) {
+            return $this->workspace === UserWorkspace::Enotary
+                ? 'notary-requests.index'
+                : 'documents.index';
+        }
+
         return match ($this->role) {
-            UserRole::Client => 'documents.index',
             UserRole::Notary => 'notary.dashboard',
             UserRole::NotaryAdmin, UserRole::SuperAdmin => 'dashboard',
         };
@@ -315,11 +323,43 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function canAccessWorkspaceTools(): bool
     {
-        return in_array($this->role, [
-            UserRole::SuperAdmin,
-            UserRole::NotaryAdmin,
-            UserRole::Client,
-        ], true);
+        return $this->canAccessSigningWorkspace() || $this->canAccessEnotaryWorkspace();
+    }
+
+    public function canAccessSigningWorkspace(): bool
+    {
+        if (in_array($this->role, [UserRole::SuperAdmin, UserRole::NotaryAdmin], true)) {
+            return true;
+        }
+
+        if ($this->role !== UserRole::Client) {
+            return false;
+        }
+
+        return $this->workspace === null || $this->workspace === UserWorkspace::Signing;
+    }
+
+    public function canAccessEnotaryWorkspace(): bool
+    {
+        if (in_array($this->role, [UserRole::SuperAdmin, UserRole::NotaryAdmin, UserRole::Notary], true)) {
+            return true;
+        }
+
+        if ($this->role !== UserRole::Client) {
+            return false;
+        }
+
+        return $this->workspace === null || $this->workspace === UserWorkspace::Enotary;
+    }
+
+    public function canLoginViaSigningPortal(): bool
+    {
+        return $this->canAccessSigningWorkspace();
+    }
+
+    public function canLoginViaEnotaryPortal(): bool
+    {
+        return $this->canAccessEnotaryWorkspace();
     }
 
     /**

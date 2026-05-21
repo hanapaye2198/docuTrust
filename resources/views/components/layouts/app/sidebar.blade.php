@@ -77,15 +77,23 @@
                     >{{ __('Signing') }}</flux:sidebar.item>
 
                     <flux:sidebar.item
+                        icon="clipboard-document-check"
+                        :href="route('admin.attorney-applications.index')"
+                        :current="request()->routeIs('admin.attorney-applications.*')"
+                        :tooltip="__('Attorney applications')"
+                        wire:navigate
+                    >{{ __('Attorney apps') }}</flux:sidebar.item>
+                @endif
+
+                @if ($navRole === UserRole::SuperAdmin)
+                    <flux:sidebar.item
                         icon="shield-check"
                         :href="route('admin.compliance.dashboard')"
                         :current="request()->routeIs('admin.compliance.*')"
                         :tooltip="__('Signature Compliance')"
                         wire:navigate
                     >{{ __('Compliance') }}</flux:sidebar.item>
-                @endif
 
-                @if ($navRole === UserRole::SuperAdmin)
                     <flux:sidebar.item
                         icon="users"
                         :href="route('admin.users.index')"
@@ -113,7 +121,7 @@
                     >{{ __('Notary Requests') }}</flux:sidebar.item>
                 @endif
 
-                @if (auth()->user()->canAccessWorkspaceTools())
+                @if (auth()->user()->canAccessEnotaryWorkspace())
                     <flux:sidebar.item
                         icon="clipboard-document-list"
                         :href="route('notary-requests.index')"
@@ -121,7 +129,9 @@
                         :tooltip="__('Notary Requests')"
                         wire:navigate
                     >{{ __('Notary Requests') }}</flux:sidebar.item>
+                @endif
 
+                @if (auth()->user()->canAccessSigningWorkspace())
                     <flux:sidebar.item
                         icon="layout-grid"
                         :href="route('documents.index')"
@@ -145,7 +155,9 @@
                         :tooltip="__('Templates')"
                         wire:navigate
                     >{{ __('Templates') }}</flux:sidebar.item>
+                @endif
 
+                @if (auth()->user()->canAccessWorkspaceTools())
                     {{-- Divider before Verify --}}
                     <div class="my-2 mx-3 border-t border-zinc-100 in-data-flux-sidebar-collapsed-desktop:mx-auto in-data-flux-sidebar-collapsed-desktop:w-6 dark:border-zinc-800/80"></div>
 

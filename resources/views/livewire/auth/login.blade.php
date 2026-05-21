@@ -64,6 +64,8 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             ]);
         }
 
+        $this->ensureWorkspaceMatchesLoginMode($user);
+
         Auth::login($user, $this->remember);
         Session::regenerate();
 
@@ -117,6 +119,21 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
     {
         return Str::transliterate(Str::lower($this->email).'|'.request()->ip());
     }
+
+    protected function ensureWorkspaceMatchesLoginMode(User $user): void
+    {
+        if ($this->mode === 'enotary' && ! $user->canLoginViaEnotaryPortal()) {
+            throw ValidationException::withMessages([
+                'email' => __('This account is for document signing only. Switch to the Document Signer tab and try again.'),
+            ]);
+        }
+
+        if ($this->mode === 'standard' && ! $user->canLoginViaSigningPortal()) {
+            throw ValidationException::withMessages([
+                'email' => __('This account is for e-Notary only. Switch to the e-Notary tab and try again.'),
+            ]);
+        }
+    }
 }; ?>
 
 @php
@@ -168,16 +185,16 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             <div class="relative flex h-full flex-col justify-between p-10 xl:p-12">
                 <div class="max-w-sm rounded-2xl border border-white/20 bg-white/10 p-6 shadow-2xl backdrop-blur-md">
                     <p
-                        x-text="mode === 'enotary' ? '{{ __('Remote online notarization') }}' : '{{ __('Secure document signing') }}'"
+                        x-text="mode === 'enotary' ? '{{ __('e-Notary portal') }}' : '{{ __('Document Signer portal') }}'"
                         class="text-xs font-medium uppercase tracking-[0.18em] text-[#d8fff8]"
                     ></p>
                     <h2
-                        x-text="mode === 'enotary' ? '{{ __('Enter the notarization workspace with your existing account.') }}' : '{{ __('Welcome back to seamless and secure signing.') }}'"
+                        x-text="mode === 'enotary' ? '{{ __('Remote notarization with your assigned attorney') }}' : '{{ __('Sign and manage everyday documents') }}'"
                         class="mt-3 text-2xl font-semibold leading-tight text-white"
                     ></h2>
                     <p
-                        x-text="mode === 'enotary' ? '{{ __('Same login flow and two-factor checks across both workspaces.') }}' : '{{ __('Manage contracts, signatures, and document workflows in one place.') }}'"
-                        class="mt-3 text-sm text-zinc-200/90"
+                        x-text="mode === 'enotary' ? '{{ __('For clients in an active notarization case and for licensed attorneys. Choose the e-Notary tab on the right before signing in.') }}' : '{{ __('For sending contracts, tracking signatures, and downloading completed files. Choose the Document Signer tab before signing in.') }}'"
+                        class="mt-3 text-sm leading-relaxed text-zinc-200/90"
                     ></p>
                 </div>
 
@@ -188,7 +205,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                     <div>
                         <p class="text-lg font-semibold text-white">{{ config('app.name', 'DocuTrust') }}</p>
                         <p
-                            x-text="mode === 'enotary' ? '{{ __('e-Notary access') }}' : '{{ __('Trust the digital future.') }}'"
+                            x-text="mode === 'enotary' ? '{{ __('Clients & attorneys') }}' : '{{ __('Contracts & agreements') }}'"
                             class="text-xs text-zinc-200"
                         ></p>
                     </div>
@@ -208,7 +225,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                         <div>
                             <p class="text-sm font-semibold text-[#1F2937] dark:text-zinc-100">{{ config('app.name', 'DocuTrust') }}</p>
                             <p
-                                x-text="mode === 'enotary' ? '{{ __('e-Notary access') }}' : '{{ __('Secure access portal') }}'"
+                                x-text="mode === 'enotary' ? '{{ __('e-Notary portal') }}' : '{{ __('Document Signer portal') }}'"
                                 class="text-xs text-zinc-600 dark:text-zinc-400"
                             ></p>
                         </div>
@@ -239,7 +256,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                 <svg class="size-4 shrink-0 opacity-70" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                     <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.684a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.949 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" />
                                 </svg>
-                                {{ __('Signer') }}
+                                {{ __('Document Signer') }}
                             </button>
                             <button
                                 type="button"
@@ -255,14 +272,14 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                         </div>
                         <p
                             x-text="mode === 'enotary'
-                                ? '{{ __('For notaries and notarization workspace access.') }}'
-                                : '{{ __('For signers and document workflow access.') }}'"
-                            class="mt-2 text-center text-xs text-zinc-500 dark:text-zinc-400"
+                                ? '{{ __('Notarization cases — for clients with an attorney and for licensed attorneys.') }}'
+                                : '{{ __('Everyday signing — contracts, NDAs, and document workflows only.') }}'"
+                            class="mt-2 text-center text-xs leading-relaxed text-zinc-500 dark:text-zinc-400"
                         ></p>
                     </div>
 
                     {{-- Heading --}}
-                    <div class="relative mb-6 min-h-[5.25rem] sm:min-h-[5.5rem]">
+                    <div class="relative mb-4 min-h-[7.5rem] sm:min-h-[8rem]">
                         <div
                             x-show="mode === 'standard'"
                             @if ($mode === 'standard') style="display: block;" @else style="display: none;" @endif
@@ -275,10 +292,12 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                             x-transition:leave-end="opacity-0"
                         >
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                                {{ __('Signer access') }}
+                                {{ __('Document signing workspace') }}
                             </p>
-                            <h1 class="mt-1 text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Sign in') }}</h1>
-                            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Enter your credentials to continue') }}</p>
+                            <h1 class="mt-1 text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Sign in as Document Signer') }}</h1>
+                            <p class="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+                                {{ __('Use your document signing email and password. You will manage documents here — not e-Notary cases.') }}
+                            </p>
                         </div>
                         <div
                             x-show="mode === 'enotary'"
@@ -292,13 +311,36 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                             x-transition:leave-end="opacity-0"
                         >
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8a6b2f] dark:text-[#c6a666]">
-                                {{ __('Notary workspace') }}
+                                {{ __('Remote online notarization') }}
                             </p>
                             <h1 class="mt-1 text-2xl font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Sign in to e-Notary') }}</h1>
-                            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ __('Same account — dedicated notarization console after login.') }}
+                            <p class="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+                                {{ __('eNotary signers: access your case with your assigned attorney. Attorneys: open your notary dashboard and live sessions.') }}
                             </p>
                         </div>
+                    </div>
+
+                    {{-- Who should use this tab --}}
+                    <div
+                        x-show="mode === 'standard'"
+                        @if ($mode === 'standard') style="display: block;" @else style="display: none;" @endif
+                        class="mb-5 rounded-xl border border-[#2EC4B6]/30 bg-[#2EC4B6]/5 px-3.5 py-3 dark:border-teal-500/20 dark:bg-teal-500/5"
+                    >
+                        <p class="text-xs font-semibold text-[#1B5E20] dark:text-teal-300">{{ __('Who should use Document Signer?') }}</p>
+                        <p class="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                            {{ __('You send or sign contracts, NDAs, offer letters, and similar documents. If you were invited to a notarization with an attorney, use the e-Notary tab instead.') }}
+                        </p>
+                    </div>
+                    <div
+                        x-show="mode === 'enotary'"
+                        @if ($mode === 'enotary') style="display: block;" @else style="display: none;" @endif
+                        class="mb-5 rounded-xl border border-[#c6a666]/40 bg-[#f7f1e6]/80 px-3.5 py-3 dark:border-[#c6a666]/30 dark:bg-[#1a2e24]/60"
+                    >
+                        <p class="text-xs font-semibold text-[#5c4520] dark:text-[#c6a666]">{{ __('Who should use e-Notary?') }}</p>
+                        <ul class="mt-1.5 list-inside list-disc space-y-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                            <li>{{ __('eNotary signers — follow your notarization request with the assigned attorney') }}</li>
+                            <li>{{ __('Licensed attorneys — manage credentials, sessions, and the notarial register') }}</li>
+                        </ul>
                     </div>
 
                     <x-auth-session-status
@@ -371,8 +413,8 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                 <span class="block text-sm font-medium text-[#1F2937] dark:text-zinc-200">{{ __('Remember this device') }}</span>
                                 <span
                                     x-text="mode === 'enotary'
-                                        ? '{{ __('Use only on a private workstation you control.') }}'
-                                        : '{{ __('Stay signed in on this browser.') }}'"
+                                        ? '{{ __('Recommended only on a private device you trust.') }}'
+                                        : '{{ __('Keep me signed in on this browser for document signing.') }}'"
                                     class="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400"
                                 ></span>
                             </span>
@@ -404,7 +446,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                     <svg class="size-4 opacity-80" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                         <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
                                     </svg>
-                                    <span x-text="mode === 'enotary' ? '{{ __('Enter e-Notary workspace') }}' : '{{ __('Sign in') }}'"></span>
+                                    <span x-text="mode === 'enotary' ? '{{ __('Sign in to e-Notary') }}' : '{{ __('Sign in as Document Signer') }}'"></span>
                                 </span>
 
                                 <span wire:loading wire:target="login" class="inline-flex items-center justify-center gap-2.5">
@@ -413,20 +455,31 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                                         <span class="inline-block size-1.5 motion-safe:animate-bounce rounded-full bg-white/80 [animation-delay:0.15s]"></span>
                                         <span class="inline-block size-1.5 motion-safe:animate-bounce rounded-full bg-white/80 [animation-delay:0.3s]"></span>
                                     </span>
-                                    <span x-text="mode === 'enotary' ? '{{ __('Authenticating…') }}' : '{{ __('Signing in…') }}'"></span>
+                                    <span x-text="mode === 'enotary' ? '{{ __('Opening e-Notary workspace…') }}' : '{{ __('Opening document workspace…') }}'"></span>
                                 </span>
                             </flux:button>
                         </div>
                     </form>
 
-                    <p class="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                        {{ __('Need an account?') }}
+                    <p
+                        x-show="mode === 'standard'"
+                        @if ($mode === 'standard') style="display: block;" @else style="display: none;" @endif
+                        class="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400"
+                    >
+                        {{ __('Need a document signing account?') }}
                         <x-text-link
                             href="{{ route('register') }}"
                             class="font-medium text-[#1B5E20] hover:text-[#2EC4B6] hover:underline dark:text-teal-300 dark:hover:text-teal-200"
                         >
                             {{ __('Create one') }}
                         </x-text-link>
+                    </p>
+                    <p
+                        x-show="mode === 'enotary'"
+                        @if ($mode === 'enotary') style="display: block;" @else style="display: none;" @endif
+                        class="mt-6 text-center text-xs leading-relaxed text-zinc-500 dark:text-zinc-400"
+                    >
+                        {{ __('eNotary signers and attorneys receive accounts from their organization or administrator. Contact support if you need access.') }}
                     </p>
                 </div>
             </div>

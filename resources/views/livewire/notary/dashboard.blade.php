@@ -80,7 +80,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="mx-auto flex w-full max-w-4xl flex-col gap-6">
+<x-admin.page gap="gap-6">
     <header>
         <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">{{ __('Notary workspace') }}</h1>
         <p class="mt-2 text-zinc-600 dark:text-zinc-400">
@@ -161,4 +161,4 @@ new #[Layout('components.layouts.app')] class extends Component {
             @endforelse
         </div>
     </div>
-</div>
+</x-admin.page>

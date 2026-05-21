@@ -344,6 +344,16 @@ new class extends Component {
                             </flux:button>
                         @endif
                     </div>
+
+                    @if (in_array($user->role, [\App\Enums\UserRole::Client, \App\Enums\UserRole::Notary], true))
+                        <div class="rounded-2xl border border-teal-200/80 bg-teal-50/50 p-5 dark:border-teal-900/40 dark:bg-teal-950/20">
+                            <flux:heading size="lg">{{ __('Attorney / Notary Public') }}</flux:heading>
+                            <flux:subheading class="mt-1 mb-3">{{ __('Apply for e-Notary attorney access. A Notary Admin will review your commission and documents.') }}</flux:subheading>
+                            <flux:button variant="primary" size="sm" :href="route('settings.attorney-application')" wire:navigate>
+                                {{ __('Apply to practice as Attorney') }}
+                            </flux:button>
+                        </div>
+                    @endif
                 </div>
 
                 {{-- Activity + sessions --}}

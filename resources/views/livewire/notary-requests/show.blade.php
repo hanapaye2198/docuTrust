@@ -21,11 +21,15 @@ use App\Services\LocationVerificationService;
 use App\Services\NotaryPaymentService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
+use App\Services\EnotaryInvitationService;
 use App\Services\NotaryParticipantSyncService;
 use App\Services\OtpService;
+use App\Enums\UserWorkspace;
+use App\Models\EnotaryInvitation;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
@@ -173,6 +177,16 @@ new #[Layout('components.layouts.app')] class extends Component {
                 ->all(),
             'nextDocumentAction' => $this->nextDocumentAction($requestDocuments),
             'requestSigners' => $this->notaryRequest->signers,
+            'signerInvitations' => app(EnotaryInvitationService::class)->latestInvitationsForRequest($this->notaryRequest),
+            'enotaryPortalEmails' => User::query()
+                ->whereIn('email', $this->notaryRequest->signers->pluck('email')->map(fn (string $email): string => strtolower(trim($email)))->all())
+                ->where(function ($query): void {
+                    $query->where('workspace', UserWorkspace::Enotary->value)
+                        ->orWhereNull('workspace');
+                })
+                ->pluck('email')
+                ->map(fn (string $email): string => strtolower($email))
+                ->flip(),
             'pendingIdentityReviews' => $this->notaryRequest->identityVerifications()
                 ->with('signer')
                 ->where('verification_status', NotaryIdentityVerificationStatus::Pending)
@@ -529,6 +543,16 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function digitalizeRequest(): void
     {
+        $user = Auth::user();
+        if ($user !== null && $user->role->value === 'notary') {
+            $eligibility = app(\App\Services\AttorneyApplicationService::class)->practiceEligibility($user);
+            if (! $eligibility['allowed']) {
+                $this->addError('digitalizeRequest', $eligibility['message'] ?? __('Attorney practice is not enabled.'));
+
+                return;
+            }
+        }
+
         try {
             app(NotaryRequestWorkflowService::class)->digitalize($this->notaryRequest);
             $this->refreshRequest();
@@ -580,7 +604,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'newSignerRole' => ['required', 'string', 'max:64'],
         ]);
 
-        NotarySigner::query()->create([
+        $signer = NotarySigner::query()->create([
             'notary_request_id' => $this->notaryRequest->id,
             'full_name' => trim($validated['newSignerName']),
             'email' => strtolower(trim($validated['newSignerEmail'])),
@@ -591,6 +615,20 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         app(NotaryParticipantSyncService::class)->syncRequestSignersToDocuments($this->notaryRequest->fresh());
 
+        try {
+            $invitation = app(EnotaryInvitationService::class)->inviteSignerFromAttorney(
+                $user,
+                $this->notaryRequest,
+                $signer,
+            );
+
+            $statusMessage = $invitation === null
+                ? __('Signer added. They already have e-Notary portal access for this case.')
+                : __('Signer added and portal invitation sent to :email.', ['email' => $signer->email]);
+        } catch (\RuntimeException $exception) {
+            $statusMessage = __('Signer added, but invitation could not be sent: :message', ['message' => $exception->getMessage()]);
+        }
+
         $this->newSignerName = '';
         $this->newSignerEmail = '';
         $this->newSignerPhone = '';
@@ -598,7 +636,26 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->newSignerRole = 'signer';
         $this->resetValidation(['newSignerName', 'newSignerEmail', 'newSignerPhone', 'newSignerAddress', 'newSignerRole']);
         $this->refreshRequest();
-        session()->flash('status', __('Signer added to this notary request.'));
+        session()->flash('status', $statusMessage);
+    }
+
+    public function resendSignerPortalInvite(int $signerId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role->value === 'notary', 403);
+
+        $signer = NotarySigner::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->whereKey($signerId)
+            ->firstOrFail();
+
+        try {
+            app(EnotaryInvitationService::class)->resendInvitation($user, $signer);
+            $this->refreshRequest();
+            session()->flash('status', __('Portal invitation resent to :email.', ['email' => $signer->email]));
+        } catch (\RuntimeException $exception) {
+            $this->addError('resendInvite', $exception->getMessage());
+        }
     }
 
     /**
@@ -993,9 +1050,28 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
     }
 
+    /**
+     * @return array{label: string, description: string}|null
+     */
+    #[Computed]
+    public function currentWorkflowStep(): ?array
+    {
+        $step = collect(app(NotaryRequestWorkflowService::class)->workflowSteps($this->notaryRequest))
+            ->first(fn (array $workflowStep): bool => ($workflowStep['state'] ?? '') === 'current');
+
+        if (! is_array($step)) {
+            return null;
+        }
+
+        return [
+            'label' => (string) ($step['label'] ?? ''),
+            'description' => (string) ($step['description'] ?? ''),
+        ];
+    }
+
 }; ?>
 
-<div class="mx-auto flex h-full w-full max-w-7xl flex-1 flex-col gap-6 px-0 py-4 sm:px-1">
+<x-admin.page class="h-full flex-1" gap="gap-6">
     @if (session('status'))
         <div class="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200">
             <svg class="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
@@ -1459,6 +1535,34 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     @if ($signer->role && $signer->role !== 'signer')
                                         <span class="mt-1 inline-block rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ ucfirst($signer->role) }}</span>
                                     @endif
+                                    @php
+                                        $invitation = $signerInvitations[$signer->id] ?? null;
+                                        $hasPortalAccess = isset($enotaryPortalEmails[strtolower($signer->email)]);
+                                    @endphp
+                                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                                        @if ($hasPortalAccess)
+                                            <span class="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                                {{ __('Portal active') }}
+                                            </span>
+                                        @elseif ($invitation instanceof \App\Models\EnotaryInvitation && $invitation->isPending())
+                                            <span class="inline-flex rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                                                {{ __('Invitation pending') }}
+                                            </span>
+                                        @elseif ($invitation instanceof \App\Models\EnotaryInvitation && $invitation->isAccepted())
+                                            <span class="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                                {{ __('Invitation accepted') }}
+                                            </span>
+                                        @else
+                                            <span class="inline-flex rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+                                                {{ __('No portal invite yet') }}
+                                            </span>
+                                        @endif
+                                        @if ($isNotary && ! $hasPortalAccess && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
+                                            <flux:button size="xs" variant="outline" type="button" wire:click="resendSignerPortalInvite({{ $signer->id }})">
+                                                {{ $invitation instanceof \App\Models\EnotaryInvitation && $invitation->isPending() ? __('Resend invite') : __('Send portal invite') }}
+                                            </flux:button>
+                                        @endif
+                                    </div>
                                 </div>
                                 @if ($isNotary && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
                                     <button type="button" wire:click="removeSigner({{ $signer->id }})" wire:confirm="{{ __('Remove this signer?') }}"
@@ -2128,4 +2232,4 @@ new #[Layout('components.layouts.app')] class extends Component {
             @endif
         </div>
     </div>
-</div>
+</x-admin.page>

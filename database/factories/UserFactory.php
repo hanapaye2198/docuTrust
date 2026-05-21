@@ -6,6 +6,8 @@ use App\Enums\EkycStatus;
 use App\Enums\OnboardingStep;
 use App\Enums\OrganizationRole;
 use App\Enums\UserRole;
+use App\Enums\UserWorkspace;
+use App\Models\NotaryCredential;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -68,6 +70,15 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'role' => UserRole::Client,
+            'workspace' => UserWorkspace::Signing,
+        ]);
+    }
+
+    public function enotarySigner(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::Client,
+            'workspace' => UserWorkspace::Enotary,
         ]);
     }
 
@@ -75,6 +86,31 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'role' => UserRole::Notary,
+            'onboarding_step' => OnboardingStep::Completed,
+            'mfa_enabled' => true,
+            'mobile_verified_at' => now(),
+        ])->afterCreating(function (User $user): void {
+            if ($user->role !== UserRole::Notary) {
+                return;
+            }
+
+            if ($user->notaryCredential()->exists()) {
+                return;
+            }
+
+            NotaryCredential::factory()->create([
+                'user_id' => $user->id,
+            ]);
+        });
+    }
+
+    public function notaryWithoutCredential(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::Notary,
+            'onboarding_step' => OnboardingStep::Completed,
+            'mfa_enabled' => true,
+            'mobile_verified_at' => now(),
         ]);
     }
 

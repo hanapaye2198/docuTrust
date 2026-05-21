@@ -29,7 +29,20 @@ class NotaryCredentialFactory extends Factory
             'seal_image_path' => null,
             'signature_image_path' => null,
             'status' => 'active',
+            'submitted_at' => now(),
+            'is_renewal' => false,
         ];
+    }
+
+    public function pending(): static
+    {
+        return $this->state(fn () => [
+            'status' => 'pending',
+            'submitted_at' => now(),
+            'reviewed_at' => null,
+            'reviewed_by_user_id' => null,
+            'rejection_reason' => null,
+        ]);
     }
 
     public function expired(): static

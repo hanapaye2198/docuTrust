@@ -18,7 +18,7 @@ class ProductionTestAccountSeeder extends Seeder
     public function run(): void
     {
         // Get the organization from the existing demo account, or use org 1
-        $organizationId = User::where('email', 'demo@docutrust.com')
+        $organizationId = User::where('email', 'adminsigner@docutrust.tech')
             ->value('organization_id')
             ?? User::first()?->organization_id
             ?? 1;

@@ -35,6 +35,10 @@ Route::middleware('guest')->group(function () {
 
 });
 
+Volt::route('enotary/invite/{token}', 'auth.enotary-invite-accept')
+    ->middleware('throttle:enotary-invite-accept')
+    ->name('enotary.invite.accept');
+
 Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
     ->middleware(['signed', 'throttle:6,1'])
     ->name('verification.verify');

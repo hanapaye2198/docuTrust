@@ -12,7 +12,7 @@ class DocumentSeeder extends Seeder
 {
     public function run(): void
     {
-        $user = User::query()->where('email', 'demo@docutrust.com')->firstOrFail();
+        $user = User::query()->where('email', 'docusigner1@docutrust.tech')->firstOrFail();
 
         $documents = [
             ['title' => 'Employment Contract', 'status' => DocumentStatus::Pending],

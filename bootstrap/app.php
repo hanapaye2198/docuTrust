@@ -2,10 +2,12 @@
 
 use App\Console\Commands\MoveRootCaKeyToExternalStore;
 use App\Http\Middleware\AddSecurityHeaders;
+use App\Http\Middleware\EnsureAttorneyPracticeEligible;
 use App\Http\Middleware\EnsureOnboardingProgress;
 use App\Http\Middleware\EnsurePendingTwoFactorChallenge;
 use App\Http\Middleware\EnsureTwoFactorIsVerified;
 use App\Http\Middleware\EnsureUserRole;
+use App\Http\Middleware\EnsureUserWorkspace;
 use App\Http\Middleware\VirtualGateway;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -56,7 +58,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'onboarding.progress' => EnsureOnboardingProgress::class,
             'pending.two.factor' => EnsurePendingTwoFactorChallenge::class,
+            'attorney.practice' => EnsureAttorneyPracticeEligible::class,
             'role' => EnsureUserRole::class,
+            'workspace' => EnsureUserWorkspace::class,
             'two.factor.verified' => EnsureTwoFactorIsVerified::class,
             'vgw' => VirtualGateway::class,
         ]);

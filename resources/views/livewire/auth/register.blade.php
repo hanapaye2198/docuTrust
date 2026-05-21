@@ -2,6 +2,7 @@
 
 use App\Enums\OnboardingStep;
 use App\Enums\UserRole;
+use App\Enums\UserWorkspace;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
@@ -54,6 +55,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             'email' => $validated['email'],
             'password' => $validated['password'],
             'role' => UserRole::Client,
+            'workspace' => UserWorkspace::Signing,
             'onboarding_step' => OnboardingStep::EmailVerification,
             'email_verified_at' => null,
             'mfa_enabled' => false,

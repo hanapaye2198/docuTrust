@@ -17,6 +17,8 @@ class AuthenticationTest extends TestCase
         $response = $this->get('/login');
 
         $response->assertStatus(200);
+        $response->assertSee('Sign in as Document Signer', escape: false);
+        $response->assertSee('Document Signer', escape: false);
     }
 
     public function test_e_notary_login_mode_can_be_rendered_from_login_screen(): void
@@ -25,7 +27,8 @@ class AuthenticationTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('e-Notary', escape: false);
-        $response->assertSee('Notary workspace', escape: false);
+        $response->assertSee('Remote online notarization', escape: false);
+        $response->assertSee('Sign in to e-Notary', escape: false);
     }
 
     public function test_legacy_e_notary_login_route_redirects_to_login_mode(): void

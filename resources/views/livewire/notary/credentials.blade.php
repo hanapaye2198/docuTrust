@@ -49,6 +49,13 @@ new #[Layout('components.layouts.app')] class extends Component {
             $signaturePath = $this->signatureImage->store('notary/signatures', (string) config('filesystems.docutrust_disk', 'local'));
         }
 
+        $existing = NotaryCredential::query()
+            ->where('user_id', $user->id)
+            ->latest('id')
+            ->first();
+
+        abort_unless($existing !== null && $existing->isActive(), 403, __('Only approved attorneys can update credentials here. Submit changes via renewal if your commission changed.'));
+
         $credential = NotaryCredential::query()->updateOrCreate(
             ['user_id' => $user->id, 'commission_number' => trim($validated['commissionNumber'])],
             [
@@ -59,14 +66,29 @@ new #[Layout('components.layouts.app')] class extends Component {
                 'ibp_number' => trim((string) $validated['ibpNumber']) !== '' ? trim($validated['ibpNumber']) : null,
                 'ptr_number' => trim((string) $validated['ptrNumber']) !== '' ? trim($validated['ptrNumber']) : null,
                 'mcle_compliance_number' => trim((string) $validated['mcleComplianceNumber']) !== '' ? trim($validated['mcleComplianceNumber']) : null,
-                'seal_image_path' => $sealPath ?? $credential->seal_image_path ?? null,
-                'signature_image_path' => $signaturePath ?? $credential->signature_image_path ?? null,
-                'status' => 'active',
+                'seal_image_path' => $sealPath ?? $existing->seal_image_path ?? null,
+                'signature_image_path' => $signaturePath ?? $existing->signature_image_path ?? null,
+                'status' => \App\Enums\NotaryCredentialStatus::Active->value,
             ]
         );
 
         session()->flash('status', __('Notary credentials saved.'));
         $this->reset(['sealImage', 'signatureImage']);
+    }
+
+    public function mount(): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role === UserRole::Notary, 403);
+
+        $credential = NotaryCredential::query()
+            ->where('user_id', $user->id)
+            ->latest('id')
+            ->first();
+
+        if ($credential === null || ! $credential->isActive()) {
+            $this->redirect(route('settings.attorney-application'), navigate: true);
+        }
     }
 
     public function with(): array

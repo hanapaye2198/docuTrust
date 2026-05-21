@@ -13,7 +13,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         User::query()->updateOrCreate([
-            'email' => 'demo@docutrust.com',
+            'email' => 'adminsigner@docutrust.tech',
         ], [
             'name' => 'Demo Admin',
             'password' => 'password',
@@ -29,6 +29,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             SuperAdminSeeder::class,
             ENotarySeeder::class,
+            DocumentSignerAccountSeeder::class,
+            ENotarySignerAccountSeeder::class,
             DocumentSeeder::class,
             SignerSeeder::class,
             TemplateSeeder::class,

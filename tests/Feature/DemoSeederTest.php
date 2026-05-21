@@ -21,37 +21,48 @@ class DemoSeederTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
 
-        $demoUser = User::query()->where('email', 'demo@docutrust.com')->first();
-        $eNotaryUser = User::query()->where('email', 'enotary@docutrust.com')->first();
-        $eNotaryAdminUser = User::query()->where('email', 'notaryadmin@docutrust.com')->first();
-        $eNotaryClientUser = User::query()->where('email', 'client@docutrust.com')->first();
+        $demoAdmin = User::query()->where('email', 'adminsigner@docutrust.tech')->first();
+        $documentSigner = User::query()->where('email', 'docusigner1@docutrust.tech')->first();
+        $eNotaryUser = User::query()->where('email', 'notaryatty@docutrust.tech')->first();
+        $eNotaryAdminUser = User::query()->where('email', 'notaryadmin@docutrust.tech')->first();
+        $eNotaryClientUser = User::query()->where('email', 'client@docutrust.tech')->first();
+        $eNotarySigner = User::query()->where('email', 'enotarysigner1@docutrust.tech')->first();
 
-        $this->assertNotNull($demoUser);
+        $this->assertNotNull($demoAdmin);
+        $this->assertNotNull($documentSigner);
         $this->assertNotNull($eNotaryUser);
         $this->assertNotNull($eNotaryAdminUser);
         $this->assertNotNull($eNotaryClientUser);
-        $this->assertTrue(Hash::check('password', (string) $demoUser->password));
+        $this->assertNotNull($eNotarySigner);
+        $this->assertTrue(Hash::check('password', (string) $documentSigner->password));
         $this->assertTrue(Hash::check('password', (string) $eNotaryUser->password));
         $this->assertTrue(Hash::check('password', (string) $eNotaryAdminUser->password));
         $this->assertTrue(Hash::check('password', (string) $eNotaryClientUser->password));
-        $this->assertSame(8, Document::query()->where('user_id', $demoUser->id)->count());
+        $this->assertSame('signing', $documentSigner->workspace?->value);
+        $this->assertSame('enotary', $eNotarySigner->workspace?->value);
+        $this->assertSame(8, Document::query()->where('user_id', $documentSigner->id)->count());
         $this->assertGreaterThanOrEqual(16, DocumentSigner::query()->count());
-        $this->assertSame(3, Template::query()->where('user_id', $demoUser->id)->count());
-        $this->assertGreaterThan(0, Document::query()->where('user_id', $demoUser->id)->where('status', DocumentStatus::Pending)->count());
-        $this->assertGreaterThan(0, Document::query()->where('user_id', $demoUser->id)->where('status', DocumentStatus::Completed)->count());
+        $this->assertSame(3, Template::query()->where('user_id', $documentSigner->id)->count());
+        $this->assertGreaterThan(0, Document::query()->where('user_id', $documentSigner->id)->where('status', DocumentStatus::Pending)->count());
+        $this->assertGreaterThan(0, Document::query()->where('user_id', $documentSigner->id)->where('status', DocumentStatus::Completed)->count());
         $this->assertDatabaseHas('users', [
-            'email' => 'enotary@docutrust.com',
+            'email' => 'notaryatty@docutrust.tech',
             'role' => 'notary',
         ]);
         $this->assertDatabaseHas('users', [
-            'email' => 'notaryadmin@docutrust.com',
+            'email' => 'notaryadmin@docutrust.tech',
             'role' => 'notary_admin',
             'organization_id' => $eNotaryUser->organization_id,
         ]);
         $this->assertDatabaseHas('users', [
-            'email' => 'client@docutrust.com',
+            'email' => 'client@docutrust.tech',
             'role' => 'client',
+            'workspace' => 'enotary',
             'organization_id' => $eNotaryUser->organization_id,
+        ]);
+        $this->assertDatabaseHas('users', [
+            'email' => 'enotarysigner1@docutrust.tech',
+            'workspace' => 'enotary',
         ]);
         $this->assertDatabaseHas('notary_credentials', [
             'user_id' => $eNotaryUser->id,
