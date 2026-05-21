@@ -286,7 +286,7 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         if ($this->role === UserRole::Client) {
             return $this->workspace === UserWorkspace::Enotary
-                ? 'notary-requests.index'
+                ? 'settings.trust-profile'
                 : 'documents.index';
         }
 
@@ -294,6 +294,28 @@ class User extends Authenticatable implements MustVerifyEmail
             UserRole::Notary => 'notary.dashboard',
             UserRole::NotaryAdmin, UserRole::SuperAdmin => 'dashboard',
         };
+    }
+
+    public function canManageNotaryRequestPortal(): bool
+    {
+        return in_array($this->role, [UserRole::SuperAdmin, UserRole::NotaryAdmin], true);
+    }
+
+    public function isEnotaryPortalSigner(): bool
+    {
+        return $this->role === UserRole::Client
+            && $this->workspace === UserWorkspace::Enotary;
+    }
+
+    public function isNotarySignerOn(NotaryRequest $notaryRequest): bool
+    {
+        if (! $this->isEnotaryPortalSigner()) {
+            return false;
+        }
+
+        return $notaryRequest->signers()
+            ->whereRaw('LOWER(email) = ?', [strtolower($this->email)])
+            ->exists();
     }
 
     public function isOrganizationAdmin(): bool

@@ -123,10 +123,18 @@ Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function 
 
 Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(function () {
     Route::middleware(['workspace:enotary'])->group(function () {
-        Volt::route('notary-requests', 'notary-requests.index')->name('notary-requests.index');
-        Volt::route('notary-requests/create', 'notary-requests.create')->name('notary-requests.create');
-        Volt::route('notary-requests/{notaryRequest}', 'notary-requests.show')->name('notary-requests.show');
-        Volt::route('notary-requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary-requests.session.live')->middleware(AllowMediaPermissions::class);
+        Volt::route('notary-requests', 'notary-requests.index')
+            ->middleware('enotary.portal:manage')
+            ->name('notary-requests.index');
+        Volt::route('notary-requests/create', 'notary-requests.create')
+            ->middleware('enotary.portal:manage')
+            ->name('notary-requests.create');
+        Volt::route('notary-requests/{notaryRequest}', 'notary-requests.show')
+            ->middleware('enotary.portal:view')
+            ->name('notary-requests.show');
+        Volt::route('notary-requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')
+            ->middleware(['enotary.portal:view', AllowMediaPermissions::class])
+            ->name('notary-requests.session.live');
     });
 
     Route::middleware(['workspace:signing'])->group(function () {

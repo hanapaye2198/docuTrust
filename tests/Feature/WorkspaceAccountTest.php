@@ -91,7 +91,7 @@ class WorkspaceAccountTest extends TestCase
             ->set('mode', 'enotary')
             ->call('login')
             ->assertHasNoErrors()
-            ->assertRedirect(route('notary-requests.index', absolute: false));
+            ->assertRedirect(route('settings.trust-profile', absolute: false));
     }
 
     public function test_enotary_signer_cannot_login_via_signer_tab(): void
@@ -123,6 +123,6 @@ class WorkspaceAccountTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('documents.index'))
-            ->assertRedirect(route('notary-requests.index'));
+            ->assertRedirect(route('settings.trust-profile'));
     }
 }

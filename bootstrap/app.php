@@ -3,6 +3,7 @@
 use App\Console\Commands\MoveRootCaKeyToExternalStore;
 use App\Http\Middleware\AddSecurityHeaders;
 use App\Http\Middleware\EnsureAttorneyPracticeEligible;
+use App\Http\Middleware\EnsureEnotaryPortalAccess;
 use App\Http\Middleware\EnsureOnboardingProgress;
 use App\Http\Middleware\EnsurePendingTwoFactorChallenge;
 use App\Http\Middleware\EnsureTwoFactorIsVerified;
@@ -61,6 +62,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'attorney.practice' => EnsureAttorneyPracticeEligible::class,
             'role' => EnsureUserRole::class,
             'workspace' => EnsureUserWorkspace::class,
+            'enotary.portal' => EnsureEnotaryPortalAccess::class,
             'two.factor.verified' => EnsureTwoFactorIsVerified::class,
             'vgw' => VirtualGateway::class,
         ]);

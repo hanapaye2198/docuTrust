@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Enums\EInvoiceStatus;
+use App\Enums\NotaryRequestStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
+use App\Mail\NotaryPaymentReadyMail;
 use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
@@ -19,11 +21,14 @@ use App\Models\NotarySigner;
 use App\Models\Payment;
 use App\Models\SignatureField;
 use App\Models\User;
+use App\Services\NotarialCertificateService;
+use App\Services\NotarySealService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 use Livewire\Volt\Volt as LivewireVolt;
 use Tests\TestCase;
 
@@ -31,28 +36,24 @@ class NotaryRequestPagesTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_can_create_notary_request_from_livewire_page(): void
+    public function test_attorney_can_create_notary_request_from_livewire_page(): void
     {
-        $admin = User::factory()->create();
-        $notary = User::factory()->for($admin->organization)->create([
-            'role' => UserRole::Notary,
-        ]);
+        $attorney = User::factory()->notary()->create();
 
-        $this->actingAs($admin);
+        $this->actingAs($attorney);
 
-        // Admin (non-notary) only provides case info — no signers or documents
         LivewireVolt::test('notary-requests.create')
             ->set('title', 'Board resolution acknowledgment')
             ->set('requestType', 'acknowledgment')
-            ->set('notaryUserId', (string) $notary->id)
             ->set('remarks', 'Bring government ID and board secretary certificate.')
             ->call('save')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            ->assertRedirect();
 
         $this->assertDatabaseHas('notary_requests', [
             'title' => 'Board resolution acknowledgment',
-            'notary_user_id' => $notary->id,
-            'organization_id' => $admin->organization_id,
+            'notary_user_id' => $attorney->id,
+            'organization_id' => $attorney->organization_id,
         ]);
     }
 
@@ -263,7 +264,7 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($notary);
 
-        \Livewire\Livewire::test('notary-requests.show', ['notaryRequest' => $request])
+        Livewire::test('notary-requests.show', ['notaryRequest' => $request])
             ->set('attachDocumentId', (string) $document->id)
             ->call('attachDocument')
             ->assertHasNoErrors();
@@ -359,7 +360,7 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($notary);
 
-        \Livewire\Livewire::test('notary-requests.show', ['notaryRequest' => $request])
+        Livewire::test('notary-requests.show', ['notaryRequest' => $request])
             ->set('newSignerName', 'Late Added Signer')
             ->set('newSignerEmail', 'late@example.test')
             ->set('newSignerPhone', '')
@@ -400,7 +401,7 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($notary);
 
-        \Livewire\Livewire::test('notary-requests.show', ['notaryRequest' => $request])
+        Livewire::test('notary-requests.show', ['notaryRequest' => $request])
             ->call('removeSigner', $requestSigner->id)
             ->assertHasNoErrors();
 
@@ -510,7 +511,7 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Register entry')
             ->assertSee('Payment')
             ->assertSee('Digital notarization')
-            ->assertSee('Notary review')
+            ->assertSee('Attorney review')
             ->assertSee('Attorney review becomes available after the video session is complete, the attorney has signed, the register entry exists, and the client payment has been completed.')
             ->assertDontSee('Complete attorney review')
             ->assertSee('Notarial register')
@@ -565,10 +566,10 @@ class NotaryRequestPagesTest extends TestCase
 
         config()->set('services.gatewayhub.api_key', 'test-key');
 
-        $this->mock(\App\Services\NotarySealService::class, function ($mock): void {
+        $this->mock(NotarySealService::class, function ($mock): void {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock): void {
+        $this->mock(NotarialCertificateService::class, function ($mock): void {
             $mock->shouldReceive('generate')->andReturnNull();
         });
 
@@ -576,7 +577,7 @@ class NotaryRequestPagesTest extends TestCase
         $request = NotaryRequest::factory()->for($notary)->create([
             'organization_id' => $notary->organization_id,
             'notary_user_id' => $notary->id,
-            'status' => \App\Enums\NotaryRequestStatus::AttorneyApproved,
+            'status' => NotaryRequestStatus::AttorneyApproved,
             'title' => 'Auto payment affidavit',
         ]);
 
@@ -614,7 +615,7 @@ class NotaryRequestPagesTest extends TestCase
             'type' => 'notary.payment_ready',
         ]);
 
-        Mail::assertQueued(\App\Mail\NotaryPaymentReadyMail::class, function (\App\Mail\NotaryPaymentReadyMail $mail) use ($request): bool {
+        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request): bool {
             return $mail->notaryRequest->is($request)
                 && $mail->payment->provider_payment_id === 'payment-auto-1';
         });
@@ -622,13 +623,13 @@ class NotaryRequestPagesTest extends TestCase
 
     public function test_client_sees_payment_required_banner_after_register_entry_is_created(): void
     {
-        $client = User::factory()->client()->create();
+        $client = User::factory()->enotarySigner()->create();
         $notary = User::factory()->for($client->organization)->notary()->create();
 
         $request = NotaryRequest::factory()->for($client)->create([
             'organization_id' => $client->organization_id,
             'notary_user_id' => $notary->id,
-            'status' => \App\Enums\NotaryRequestStatus::AttorneySigning,
+            'status' => NotaryRequestStatus::AttorneySigning,
         ]);
 
         $credential = NotaryCredential::factory()->for($notary)->create();
@@ -642,18 +643,33 @@ class NotaryRequestPagesTest extends TestCase
             ->get(route('notary-requests.show', $request))
             ->assertOk()
             ->assertSee('Payment required before notarization can continue')
-            ->assertSee('Complete the payment below to continue processing your notarization request.');
+            ->assertSee('Complete the payment in the sidebar to continue.');
     }
 
     public function test_client_sees_expired_payment_message_and_regenerate_call_to_action(): void
     {
-        $client = User::factory()->client()->create();
+        config(['services.gatewayhub.api_key' => 'test-gatewayhub-key']);
+
+        Http::fake([
+            'https://gatewayhub.io/api/gateways/enabled' => Http::response([
+                'success' => true,
+                'data' => [
+                    'gateways' => [
+                        ['code' => 'gcash', 'name' => 'Gcash'],
+                    ],
+                    'count' => 1,
+                ],
+                'error' => null,
+            ], 200),
+        ]);
+
+        $client = User::factory()->enotarySigner()->create();
         $notary = User::factory()->for($client->organization)->notary()->create();
 
         $request = NotaryRequest::factory()->for($client)->create([
             'organization_id' => $client->organization_id,
             'notary_user_id' => $notary->id,
-            'status' => \App\Enums\NotaryRequestStatus::AttorneySigning,
+            'status' => NotaryRequestStatus::AttorneySigning,
         ]);
 
         $credential = NotaryCredential::factory()->for($notary)->create();
@@ -689,7 +705,7 @@ class NotaryRequestPagesTest extends TestCase
 
     public function test_client_sees_einvoice_status_after_payment_is_recorded(): void
     {
-        $client = User::factory()->client()->create();
+        $client = User::factory()->enotarySigner()->create();
         $notary = User::factory()->for($client->organization)->notary()->create();
 
         $request = NotaryRequest::factory()->for($client)->create([
@@ -807,9 +823,9 @@ class NotaryRequestPagesTest extends TestCase
 
     public function test_notarized_request_verify_links_use_notary_verification_route(): void
     {
-        $client = User::factory()->client()->create();
+        $client = User::factory()->enotarySigner()->create();
         $request = NotaryRequest::factory()->for($client)->create([
-            'status' => \App\Enums\NotaryRequestStatus::Notarized,
+            'status' => NotaryRequestStatus::Notarized,
             'completed_at' => now(),
         ]);
 

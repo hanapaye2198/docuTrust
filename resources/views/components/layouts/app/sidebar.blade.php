@@ -121,7 +121,7 @@
                     >{{ __('Notary Requests') }}</flux:sidebar.item>
                 @endif
 
-                @if (auth()->user()->canAccessEnotaryWorkspace())
+                @if (auth()->user()->canManageNotaryRequestPortal())
                     <flux:sidebar.item
                         icon="clipboard-document-list"
                         :href="route('notary-requests.index')"

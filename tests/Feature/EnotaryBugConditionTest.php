@@ -4,18 +4,23 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentStatus;
 use App\Enums\NotaryRequestStatus;
-use App\Enums\UserRole;
 use App\Models\Document;
+use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
+use App\Models\Organization;
 use App\Models\SignatureField;
 use App\Models\User;
+use App\Services\CompletedDocumentArtifactService;
+use App\Services\NotarialCertificateService;
+use App\Services\NotaryDigitalizationService;
+use App\Services\NotarySealService;
 use App\Services\SendDocumentForSignatureService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use RuntimeException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -31,42 +36,23 @@ class EnotaryBugConditionTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Updated for new flow: Client creates notary request with case info only (no document upload).
-     * System redirects to notary-requests.show.
-     *
-     * Expected behavior: After creating a notary request, the client should be redirected
-     * to the notary request show page.
+     * Only attorneys and platform admins create notary requests — e-NOTARY portal signers cannot.
      *
      * **Validates: Requirements 2.1**
      */
-    public function test_client_redirect_after_notary_request_creation_goes_to_notary_requests_show(): void
+    public function test_enotary_portal_client_cannot_create_notary_requests(): void
     {
-        $organization = \App\Models\Organization::factory()->create();
-        $client = User::factory()->client()->create(['organization_id' => $organization->id]);
+        $organization = Organization::factory()->create();
+        $client = User::factory()->enotarySigner()->create(['organization_id' => $organization->id]);
         $notary = User::factory()->notary()->create(['organization_id' => $organization->id]);
 
-        $this->actingAs($client);
+        $this->actingAs($client)
+            ->get(route('notary-requests.create'))
+            ->assertForbidden();
 
-        // Client only provides case info — no document upload, no signers
-        $component = \Livewire\Livewire::test('notary-requests.create')
-            ->set('title', 'Test Deed of Sale')
-            ->set('requestType', 'acknowledgment')
-            ->set('notaryUserId', (string) $notary->id)
-            ->set('remarks', 'Please notarize this deed.')
-            ->call('save');
-
-        // Get the created notary request
-        $request = \App\Models\NotaryRequest::query()
-            ->where('user_id', $client->id)
-            ->where('title', 'Test Deed of Sale')
-            ->first();
-
-        $this->assertNotNull($request, 'Notary request should have been created');
-        $this->assertEquals($notary->id, $request->notary_user_id);
-
-        // Expected: client should be redirected to notary-requests.show
-        $expectedRoute = route('notary-requests.show', $request, absolute: false);
-        $component->assertRedirect($expectedRoute);
+        $this->assertDatabaseMissing('notary_requests', [
+            'title' => 'Test Deed of Sale',
+        ]);
     }
 
     /**
@@ -80,7 +66,7 @@ class EnotaryBugConditionTest extends TestCase
      */
     public function test_non_attorney_user_gets_403_on_enotary_document_prepare(): void
     {
-        $organization = \App\Models\Organization::factory()->create();
+        $organization = Organization::factory()->create();
         $client = User::factory()->client()->create(['organization_id' => $organization->id]);
         $notary = User::factory()->notary()->create(['organization_id' => $organization->id]);
 
@@ -124,7 +110,7 @@ class EnotaryBugConditionTest extends TestCase
      */
     public function test_send_document_for_signature_succeeds_for_enotary_document(): void
     {
-        $organization = \App\Models\Organization::factory()->create();
+        $organization = Organization::factory()->create();
         $client = User::factory()->client()->create(['organization_id' => $organization->id]);
         $notary = User::factory()->notary()->create(['organization_id' => $organization->id]);
 
@@ -172,7 +158,7 @@ class EnotaryBugConditionTest extends TestCase
      */
     public function test_digitalization_records_attorney_signature_and_credential_in_journal(): void
     {
-        $organization = \App\Models\Organization::factory()->create();
+        $organization = Organization::factory()->create();
         $client = User::factory()->client()->create(['organization_id' => $organization->id]);
         $notary = User::factory()->notary()->create(['organization_id' => $organization->id]);
 
@@ -198,10 +184,10 @@ class EnotaryBugConditionTest extends TestCase
         ]);
 
         // Pre-create a DocumentHash with transaction_id so blockchain anchoring is skipped
-        \App\Models\DocumentHash::query()->create([
+        DocumentHash::query()->create([
             'document_id' => $document->id,
-            'hash' => 'sha256-test-hash-' . $document->id,
-            'transaction_id' => 'tx-already-anchored-' . $document->id,
+            'hash' => 'sha256-test-hash-'.$document->id,
+            'transaction_id' => 'tx-already-anchored-'.$document->id,
             'created_at' => now(),
         ]);
 
@@ -213,19 +199,19 @@ class EnotaryBugConditionTest extends TestCase
         ]);
 
         // Mock services that interact with filesystem to avoid side effects
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) {
+        $this->mock(NotarySealService::class, function ($mock) {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
             $mock->shouldReceive('applyNotarySeal')->andReturnNull();
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+        $this->mock(NotarialCertificateService::class, function ($mock) {
             $mock->shouldReceive('generate')->andReturnNull();
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) {
             $mock->shouldReceive('ensureReady')->andReturnNull();
         });
 
         // Execute digitalization
-        $result = app(\App\Services\NotaryDigitalizationService::class)->digitalize($notaryRequest);
+        $result = app(NotaryDigitalizationService::class)->digitalize($notaryRequest);
 
         // Find the journal entry created during digitalization
         $journal = NotaryJournal::query()
@@ -262,7 +248,7 @@ class EnotaryBugConditionTest extends TestCase
      */
     public function test_send_linked_document_blocked_for_non_attorney_users(): void
     {
-        $organization = \App\Models\Organization::factory()->create();
+        $organization = Organization::factory()->create();
         $client = User::factory()->client()->create(['organization_id' => $organization->id]);
         $notary = User::factory()->notary()->create(['organization_id' => $organization->id]);
 
@@ -294,9 +280,9 @@ class EnotaryBugConditionTest extends TestCase
         // Test as client (non-attorney) — should see error
         $this->actingAs($client);
 
-        $component = \Livewire\Livewire::test('notary-requests.show', ['notaryRequest' => $notaryRequest])
+        $component = Livewire::test('notary-requests.show', ['notaryRequest' => $notaryRequest])
             ->call('sendLinkedDocument', $document->id);
 
-        $component->assertHasErrors('sendDocument' . $document->id);
+        $component->assertHasErrors('sendDocument'.$document->id);
     }
 }

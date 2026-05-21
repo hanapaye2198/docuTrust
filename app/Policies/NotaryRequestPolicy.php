@@ -11,12 +11,8 @@ class NotaryRequestPolicy
 {
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, [
-            UserRole::SuperAdmin,
-            UserRole::NotaryAdmin,
-            UserRole::Client,
-            UserRole::Notary,
-        ], true);
+        return $user->canManageNotaryRequestPortal()
+            || $user->role === UserRole::Notary;
     }
 
     public function view(User $user, NotaryRequest $notaryRequest): bool
@@ -34,16 +30,24 @@ class NotaryRequestPolicy
             return $notaryRequest->notary_user_id === $user->id;
         }
 
-        return $user->organization_id === $notaryRequest->organization_id;
+        if ($user->role === UserRole::Client) {
+            if ($notaryRequest->user_id === $user->id) {
+                return true;
+            }
+
+            if ($user->isEnotaryPortalSigner()) {
+                return $user->isNotarySignerOn($notaryRequest);
+            }
+
+            return $user->organization_id === $notaryRequest->organization_id;
+        }
+
+        return false;
     }
 
     public function create(User $user): bool
     {
-        return in_array($user->role, [
-            UserRole::SuperAdmin,
-            UserRole::NotaryAdmin,
-            UserRole::Client,
-        ], true);
+        return $user->role === UserRole::Notary;
     }
 
     public function update(User $user, NotaryRequest $notaryRequest): bool
@@ -52,7 +56,7 @@ class NotaryRequestPolicy
             return false;
         }
 
-        if ($user->role === UserRole::SuperAdmin) {
+        if (in_array($user->role, [UserRole::SuperAdmin, UserRole::NotaryAdmin], true)) {
             return true;
         }
 
@@ -60,7 +64,7 @@ class NotaryRequestPolicy
             return $notaryRequest->notary_user_id === $user->id;
         }
 
-        return $user->organization_id === $notaryRequest->organization_id;
+        return false;
     }
 
     public function approve(User $user, NotaryRequest $notaryRequest): bool

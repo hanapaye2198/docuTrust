@@ -479,7 +479,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                         @if ($mode === 'enotary') style="display: block;" @else style="display: none;" @endif
                         class="mt-6 text-center text-xs leading-relaxed text-zinc-500 dark:text-zinc-400"
                     >
-                        {{ __('eNotary signers and attorneys receive accounts from their organization or administrator. Contact support if you need access.') }}
+                        {{ __('eNotary signers: use the invitation link from your attorney to create your account. Attorneys sign in with their notary credentials.') }}
                     </p>
                 </div>
             </div>

@@ -2,10 +2,12 @@
 
 use App\Enums\UserRole;
 use App\Http\Requests\StoreNotaryClientCaseRequest;
+use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
 use App\Models\User;
 use App\Services\NotaryParticipantSyncService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -130,6 +132,8 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function save(): void
     {
+        Gate::authorize('create', NotaryRequest::class);
+
         $user = Auth::user();
         abort_unless($user !== null, 401);
 
@@ -149,16 +153,25 @@ new #[Layout('components.layouts.app')] class extends Component {
                     'title' => $eligibility['message'] ?? __('Attorney practice is not enabled.'),
                 ]);
             }
+
+            $this->signers = collect($this->signers)
+                ->filter(fn (array $signer): bool => trim((string) ($signer['full_name'] ?? '')) !== ''
+                    || trim((string) ($signer['email'] ?? '')) !== '')
+                ->values()
+                ->all();
         }
 
         if ($isNotary) {
             $rules['caseDocument'] = ['nullable', 'file', 'mimes:pdf', 'max:10240'];
-            $rules['signers'] = ['nullable', 'array'];
-            $rules['signers.*.full_name'] = ['required_with:signers', 'string', 'max:255'];
-            $rules['signers.*.email'] = ['required_with:signers', 'email', 'max:255'];
-            $rules['signers.*.phone'] = ['nullable', 'string', 'max:64'];
-            $rules['signers.*.address'] = ['nullable', 'string', 'max:500'];
-            $rules['signers.*.role'] = ['nullable', 'string', 'max:64'];
+
+            if ($this->signers !== []) {
+                $rules['signers'] = ['array'];
+                $rules['signers.*.full_name'] = ['required', 'string', 'max:255'];
+                $rules['signers.*.email'] = ['required', 'email', 'max:255'];
+                $rules['signers.*.phone'] = ['nullable', 'string', 'max:64'];
+                $rules['signers.*.address'] = ['nullable', 'string', 'max:500'];
+                $rules['signers.*.role'] = ['nullable', 'string', 'max:64'];
+            }
         }
 
         $notaryUserId = null;

@@ -24,6 +24,23 @@ class UserFactory extends Factory
      */
     protected static ?string $password;
 
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            if ($user->role !== UserRole::Notary) {
+                return;
+            }
+
+            if ($user->notaryCredential()->exists()) {
+                return;
+            }
+
+            NotaryCredential::factory()->create([
+                'user_id' => $user->id,
+            ]);
+        });
+    }
+
     /**
      * Define the model's default state.
      *
@@ -50,6 +67,7 @@ class UserFactory extends Factory
             'role' => UserRole::NotaryAdmin,
             'organization_role' => OrganizationRole::Admin,
             'mfa_enabled' => true,
+            'mobile_verified_at' => now(),
             'two_factor_secret' => null,
             'two_factor_enabled' => false,
             'two_factor_onboarding_completed_at' => now(),
@@ -89,29 +107,14 @@ class UserFactory extends Factory
             'onboarding_step' => OnboardingStep::Completed,
             'mfa_enabled' => true,
             'mobile_verified_at' => now(),
-        ])->afterCreating(function (User $user): void {
-            if ($user->role !== UserRole::Notary) {
-                return;
-            }
-
-            if ($user->notaryCredential()->exists()) {
-                return;
-            }
-
-            NotaryCredential::factory()->create([
-                'user_id' => $user->id,
-            ]);
-        });
+        ]);
     }
 
     public function notaryWithoutCredential(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'role' => UserRole::Notary,
-            'onboarding_step' => OnboardingStep::Completed,
-            'mfa_enabled' => true,
-            'mobile_verified_at' => now(),
-        ]);
+        return $this->notary()->afterCreating(function (User $user): void {
+            NotaryCredential::query()->where('user_id', $user->id)->delete();
+        });
     }
 
     public function admin(): static
