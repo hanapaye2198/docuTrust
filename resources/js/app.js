@@ -4,6 +4,7 @@ let chartModulePromise = null;
 let idleSessionModulePromise = null;
 let templatePrepareModulePromise = null;
 let signViewModulePromise = null;
+let notaryStatusPollModulePromise = null;
 
 function destroyDocuTrustChart() {
     if (docuTrustStatusChart) {
@@ -38,6 +39,12 @@ function loadSignViewModule() {
     signViewModulePromise ??= import('./sign-view');
 
     return signViewModulePromise;
+}
+
+function loadNotaryStatusPollModule() {
+    notaryStatusPollModulePromise ??= import('./notary-status-poll');
+
+    return notaryStatusPollModulePromise;
 }
 
 async function initDocuTrustDashboardChart() {
@@ -246,12 +253,24 @@ async function initSignView() {
     initView();
 }
 
+async function initNotaryStatusPoll() {
+    const hasNotaryStatusConfig = Boolean(document.getElementById('notary-status-config'));
+
+    if (!hasNotaryStatusConfig && !notaryStatusPollModulePromise) {
+        return;
+    }
+
+    const { initNotaryStatusPoll: initPoll } = await loadNotaryStatusPollModule();
+    initPoll();
+}
+
 function bootDocuTrustUi() {
     void initDocuTrustDashboardChart();
     void initDocuTrustActivityChart();
     void initTemplatePreparePage();
     void initIdleSession();
     void initSignView();
+    void initNotaryStatusPoll();
 }
 
 document.addEventListener('DOMContentLoaded', bootDocuTrustUi);
