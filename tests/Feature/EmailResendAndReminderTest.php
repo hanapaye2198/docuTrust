@@ -4,13 +4,14 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
-use App\Jobs\SendDocumentEmailJob;
 use App\Jobs\SendReminderJob;
 use App\Livewire\DocumentSignersManager;
+use App\Mail\SignerInvitationMail;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -21,7 +22,7 @@ class EmailResendAndReminderTest extends TestCase
 
     public function test_resend_invitation_dispatches_email_job(): void
     {
-        Queue::fake();
+        Mail::fake();
 
         $owner = User::factory()->create();
         $document = Document::factory()->for($owner)->create([
@@ -39,12 +40,10 @@ class EmailResendAndReminderTest extends TestCase
             ->call('resendInvitation', $signer->id)
             ->assertHasNoErrors();
 
-        Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($document, $signer): bool {
-            return $job->documentId === $document->id
-                && $job->signerId === $signer->id
-                && $job->recipientEmail === $signer->email
-                && $job->type === SendDocumentEmailJob::TYPE_SENT_TO_SIGNER
-                && $job->signUrl !== null;
+        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($signer): bool {
+            return str_contains($mail->signUrl, (string) $signer->access_token)
+                && $mail->customSubject === 'Custom subject'
+                && $mail->customMessage === 'Custom message body';
         });
     }
 

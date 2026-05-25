@@ -12,6 +12,7 @@ use App\Enums\UserRole;
 use App\Jobs\RefreshEInvoiceStatusJob;
 use App\Jobs\SubmitEInvoiceJob;
 use App\Mail\NotaryPaymentReadyMail;
+use App\Mail\SignerInvitationMail;
 use App\Models\BillingProfile;
 use App\Models\Document;
 use App\Models\DocumentHash;
@@ -371,6 +372,7 @@ class NotaryRequestPagesTest extends TestCase
     public function test_admin_can_send_linked_document_for_signature_from_notary_request_page(): void
     {
         Storage::fake('local');
+        Mail::fake();
 
         // Only the assigned attorney (notary) can send eNOTARY documents
         $notary = User::factory()->notary()->create();
@@ -404,6 +406,11 @@ class NotaryRequestPagesTest extends TestCase
         $document->refresh();
         $this->assertSame(DocumentStatus::Pending, $document->status);
         $this->assertNotNull($document->sent_at);
+
+        $signer->refresh();
+        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($signer): bool {
+            return str_contains($mail->signUrl, (string) $signer->access_token);
+        });
     }
 
     public function test_adding_request_signer_backfills_existing_enotary_document_signers(): void

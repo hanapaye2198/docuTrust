@@ -5,6 +5,7 @@
     'statusLabel' => '',
     'icon' => 'shield-check',
     'actionRoute' => null,
+    'actionRouteParameters' => [],
     'actionLabel' => null,
     'wireAction' => null,
 ])
@@ -60,7 +61,7 @@
                     {{ $actionLabel }}
                 </flux:button>
             @elseif ($actionRoute)
-                <flux:button variant="ghost" size="sm" :href="route($actionRoute)" wire:navigate>
+                <flux:button variant="ghost" size="sm" :href="route($actionRoute, $actionRouteParameters)" wire:navigate>
                     {{ $actionLabel }}
                 </flux:button>
             @endif

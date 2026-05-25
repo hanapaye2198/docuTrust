@@ -10,14 +10,47 @@ use App\Events\NotaryRequestApproved;
 use App\Events\NotaryRequestDigitalized;
 use App\Events\NotaryRequestNotarized;
 use App\Events\NotaryRequestSubmitted;
-use App\Models\DocumentSigner;
 use App\Models\Document;
+use App\Models\DocumentSigner;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
 use RuntimeException;
 
 class NotaryRequestWorkflowService
 {
+    public function maxDocumentsPerRequest(): int
+    {
+        return max(1, (int) config('docutrust.notary.max_documents_per_request', 1));
+    }
+
+    public function canAttachAnotherDocument(NotaryRequest $request, ?Document $documentBeingAttached = null): bool
+    {
+        $request->loadCount('documents');
+
+        if (
+            $documentBeingAttached !== null
+            && (int) $documentBeingAttached->notary_request_id === (int) $request->id
+        ) {
+            return true;
+        }
+
+        return $request->documents_count < $this->maxDocumentsPerRequest();
+    }
+
+    public function assertCanAttachDocument(NotaryRequest $request, ?Document $documentBeingAttached = null): void
+    {
+        if ($this->canAttachAnotherDocument($request, $documentBeingAttached)) {
+            return;
+        }
+
+        throw new RuntimeException(__('This case allows only one document. Replace the existing PDF while it is still in draft, or continue with the current instrument.'));
+    }
+
+    public function documentForRequest(NotaryRequest $request): ?Document
+    {
+        return $request->documents()->orderBy('id')->first();
+    }
+
     public function canVerifyIdentity(NotaryRequest $request): bool
     {
         return $request->identity_verified_at === null
@@ -166,7 +199,28 @@ class NotaryRequestWorkflowService
 
     public function hasCompletedSession(NotaryRequest $request): bool
     {
-        $request->loadMissing('sessions');
+        $request->loadMissing(['sessions', 'signers']);
+
+        $signerScopedSessions = $request->sessions->filter(
+            fn ($session): bool => $session->notary_signer_id !== null
+        );
+
+        if ($signerScopedSessions->isNotEmpty()) {
+            $signers = $request->signers->filter(
+                fn ($signer): bool => is_string($signer->email) && $signer->email !== ''
+            );
+
+            if ($signers->isEmpty()) {
+                return false;
+            }
+
+            return $signers->every(function ($signer) use ($signerScopedSessions): bool {
+                return $signerScopedSessions->contains(
+                    fn ($session): bool => (int) $session->notary_signer_id === (int) $signer->id
+                        && $session->status === 'completed'
+                );
+            });
+        }
 
         return $request->sessions->contains(fn ($session): bool => $session->status === 'completed');
     }
@@ -190,12 +244,37 @@ class NotaryRequestWorkflowService
 
         return $request->documents->every(function (Document $document) use ($request): bool {
             return $document->documentSigners->contains(
-                fn (DocumentSigner $signer): bool =>
-                    (int) $signer->user_id === (int) $request->notary_user_id
+                fn (DocumentSigner $signer): bool => (int) $signer->user_id === (int) $request->notary_user_id
                     && $signer->role_type === TemplateRoleType::Signer
                     && $signer->status->isCompleted()
             );
         });
+    }
+
+    public function documentHasCoreArtifacts(Document $document): bool
+    {
+        $document->loadMissing('documentHash');
+
+        $hasFinalPdf = is_string($document->final_pdf_path) && $document->final_pdf_path !== '';
+        $hasCertificate = is_string($document->certificate_path) && $document->certificate_path !== '';
+        $hasDocumentHash = $document->documentHash !== null
+            && is_string($document->documentHash->hash)
+            && $document->documentHash->hash !== '';
+
+        return $hasFinalPdf && $hasCertificate && $hasDocumentHash;
+    }
+
+    public function requestHasCoreArtifacts(NotaryRequest $request): bool
+    {
+        $request->loadMissing('documents');
+
+        if ($request->documents->isEmpty()) {
+            return false;
+        }
+
+        return $request->documents->every(
+            fn (Document $document): bool => $this->documentHasCoreArtifacts($document)
+        );
     }
 
     public function canCreateRegisterEntry(NotaryRequest $request): bool
@@ -298,6 +377,10 @@ class NotaryRequestWorkflowService
         $request->loadMissing(['documents.documentSigners']);
 
         if ($request->documents->isEmpty()) {
+            return false;
+        }
+
+        if ($request->documents->count() > $this->maxDocumentsPerRequest()) {
             return false;
         }
 
@@ -517,6 +600,8 @@ class NotaryRequestWorkflowService
 
     public function attachDocument(NotaryRequest $request, Document $document): NotaryRequest
     {
+        $this->assertCanAttachDocument($request, $document);
+
         if ($request->organization_id === null || $document->organization_id === null || $request->organization_id !== $document->organization_id) {
             throw new RuntimeException(__('The selected document does not belong to this organization.'));
         }

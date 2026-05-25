@@ -237,6 +237,33 @@ new class extends Component {
                             {{ $summary['role_label'] }}
                             · {{ __('Member since :date', ['date' => $user->created_at?->format('M Y') ?? '—']) }}
                         </p>
+
+                        @if ($user->mobile_verified_at)
+                            <div class="mt-3 inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-xs font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                <flux:icon.check-badge variant="mini" class="size-4 shrink-0" />
+                                <span>{{ __('Mobile verified') }}</span>
+                                @if ($user->mobile_number)
+                                    <span class="font-normal text-emerald-700/90 dark:text-emerald-200/80">· {{ $user->mobile_number }}</span>
+                                @endif
+                                <span class="font-normal text-emerald-700/80 dark:text-emerald-200/70">
+                                    · {{ $user->mobile_verified_at->timezone('Asia/Manila')->format('M j, Y') }}
+                                </span>
+                            </div>
+                        @elseif ($user->mobile_number)
+                            <div class="mt-3 inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                                <flux:icon.exclamation-triangle variant="mini" class="size-4 shrink-0" />
+                                <span>{{ __('Mobile not verified') }}</span>
+                                <flux:button
+                                    :href="route('onboarding.mobile')"
+                                    variant="ghost"
+                                    size="sm"
+                                    class="!h-7 !px-2 !text-xs"
+                                    wire:navigate
+                                >
+                                    {{ __('Verify now') }}
+                                </flux:button>
+                            </div>
+                        @endif
                         @if ($profilePhoto)
                             <div class="mt-3">
                                 <flux:button variant="primary" size="sm" type="button" wire:click="uploadProfilePhoto">{{ __('Save photo') }}</flux:button>
@@ -286,6 +313,7 @@ new class extends Component {
                             :status-label="$item['status_label']"
                             :icon="$item['icon']"
                             :action-route="$item['action_route']"
+                            :action-route-parameters="$item['action_route_parameters'] ?? []"
                             :action-label="$item['action_label']"
                             :wire-action="$item['wire_action'] ?? null"
                         />
@@ -377,7 +405,7 @@ new class extends Component {
                     <div class="rounded-2xl border border-zinc-200/90 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
                         <div class="mb-3 flex items-center justify-between">
                             <flux:heading size="lg">{{ __('Sessions') }}</flux:heading>
-                            <flux:button variant="ghost" size="sm" :href="route('settings.security')" wire:navigate>{{ __('Security') }}</flux:button>
+                            <flux:button variant="ghost" size="sm" :href="route('settings.profile', ['tab' => 'security'])" wire:navigate>{{ __('Security') }}</flux:button>
                         </div>
                         <div class="space-y-2">
                             @forelse ($sessions as $session)

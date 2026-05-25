@@ -23,6 +23,34 @@ class TrustProfileTest extends TestCase
             ->assertSee('Trust & verification');
     }
 
+    public function test_trust_profile_shows_verified_mobile_badge_when_mobile_is_verified(): void
+    {
+        $user = User::factory()->create([
+            'mobile_number' => '+639171234567',
+            'mobile_verified_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('settings.trust-profile'))
+            ->assertOk()
+            ->assertSee('Mobile verified')
+            ->assertSee('+639171234567');
+    }
+
+    public function test_trust_profile_prompts_mobile_verification_when_number_is_unverified(): void
+    {
+        $user = User::factory()->create([
+            'mobile_number' => '+639171234567',
+            'mobile_verified_at' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('settings.trust-profile'))
+            ->assertOk()
+            ->assertSee('Mobile not verified')
+            ->assertSee('Verify now');
+    }
+
     public function test_legal_identity_can_be_updated(): void
     {
         $user = User::factory()->create();

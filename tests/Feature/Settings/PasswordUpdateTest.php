@@ -20,7 +20,8 @@ class PasswordUpdateTest extends TestCase
 
         $this->actingAs($user);
 
-        $response = Volt::test('settings.password')
+        $response = Volt::test('settings.profile')
+            ->set('tab', 'password')
             ->set('current_password', 'password')
             ->set('password', 'new-password')
             ->set('password_confirmation', 'new-password')
@@ -39,7 +40,8 @@ class PasswordUpdateTest extends TestCase
 
         $this->actingAs($user);
 
-        $response = Volt::test('settings.password')
+        $response = Volt::test('settings.profile')
+            ->set('tab', 'password')
             ->set('current_password', 'wrong-password')
             ->set('password', 'new-password')
             ->set('password_confirmation', 'new-password')

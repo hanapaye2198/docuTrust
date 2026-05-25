@@ -4,10 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
-use App\Models\CertificateAuthority;
 use App\Models\Document;
 use App\Models\DocumentSigner;
-use App\Models\SignerCertificate;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -100,50 +98,15 @@ class DashboardTest extends TestCase
         $this->get(route('dashboard'))->assertRedirect(route('notary.dashboard'));
     }
 
-    public function test_notary_dashboard_shows_certificate_revocation_workspace(): void
+    public function test_notary_dashboard_includes_compliance_certificate_section(): void
     {
-        $owner = User::factory()->create();
-        $notary = User::factory()->notary()->create([
-            'organization_id' => $owner->organization_id,
-            'organization_role' => $owner->organization_role,
-        ]);
-        $document = Document::factory()->for($owner)->create();
-        $signer = DocumentSigner::factory()->for($document)->create();
-        $certificateAuthority = CertificateAuthority::query()->create([
-            'name' => 'DocuTrust Root CA',
-            'subject_dn' => 'CN=DocuTrust Root CA',
-            'issuer_dn' => 'CN=DocuTrust Root CA',
-            'serial_number' => 'ROOT-001',
-            'public_key_pem' => 'public-key',
-            'private_key_pem' => 'private-key',
-            'certificate_pem' => 'certificate-body',
-            'fingerprint_sha256' => str_repeat('a', 64),
-            'valid_from' => now()->subDay(),
-            'valid_to' => now()->addYears(5),
-            'is_root' => true,
-            'status' => 'active',
-        ]);
-
-        SignerCertificate::query()->create([
-            'document_signer_id' => $signer->id,
-            'certificate_authority_id' => $certificateAuthority->id,
-            'subject_dn' => 'CN=Test Signer',
-            'issuer_dn' => 'CN=DocuTrust Root CA',
-            'serial_number' => 'SERIAL-001',
-            'public_key_pem' => 'public-key',
-            'certificate_pem' => 'certificate-body',
-            'fingerprint_sha256' => 'fingerprint-001',
-            'valid_from' => now()->subDay(),
-            'valid_to' => now()->addYear(),
-            'status' => 'active',
-        ]);
+        $notary = User::factory()->notary()->create();
 
         $this->actingAs($notary)
             ->get(route('notary.dashboard'))
             ->assertOk()
-            ->assertSee('Active certificates')
-            ->assertSee('Revoked certificates')
-            ->assertSee('Revoke certificate');
+            ->assertSee(__('Compliance · signer certificates'), false)
+            ->assertSee(__('Attorney workspace'), false);
     }
 
     public function test_welcome_dashboard_link_points_to_signer_home_route(): void

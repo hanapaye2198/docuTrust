@@ -45,6 +45,20 @@
                     · {{ __('Submitted :date', ['date' => $notaryRequest->submitted_at->diffForHumans()]) }}
                 @endif
             </p>
+
+            @if ($isNotary && is_array($signingProgress) && ($signingProgress['visible'] ?? false) && $activeTab !== 'documents')
+                <div class="max-w-2xl space-y-2 pt-1">
+                    <p class="text-sm font-medium text-sky-800 dark:text-sky-200">{{ $signingProgress['summary'] }}</p>
+                    <div class="flex items-center gap-3">
+                        <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-sky-100 dark:bg-sky-950/50">
+                            <div class="h-full rounded-full bg-sky-500 transition-all duration-500" style="width: {{ max(0, min(100, (int) ($signingProgress['percent'] ?? 0))) }}%"></div>
+                        </div>
+                        <span class="shrink-0 text-xs font-semibold tabular-nums text-sky-700 dark:text-sky-300">
+                            {{ (int) ($signingProgress['completed'] ?? 0) }}/{{ (int) ($signingProgress['total'] ?? 0) }}
+                        </span>
+                    </div>
+                </div>
+            @endif
         </div>
 
         <div class="flex w-full shrink-0 flex-wrap items-center gap-2 lg:max-w-md lg:justify-end">

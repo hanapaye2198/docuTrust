@@ -3,7 +3,7 @@
 <flux:dropdown position="bottom" align="end" {{ $attributes }}>
     <button
         type="button"
-        class="flex max-w-[min(100%,16rem)] min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-zinc-200/80 bg-white/80 py-1.5 pl-1.5 pr-2.5 text-left shadow-sm transition hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+        class="flex max-w-[min(100%,16rem)] min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-zinc-200/80 bg-white py-1.5 pl-1.5 pr-2.5 text-left shadow-sm shadow-zinc-950/[0.04] transition hover:border-zinc-300/90 hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-900/60 dark:shadow-black/20 dark:hover:border-white/15 dark:hover:bg-zinc-900"
     >
         @if ($user->profile_photo_path)
             <img
@@ -33,8 +33,7 @@
 
         <flux:menu.radio.group>
             <flux:menu.item :href="route('settings.trust-profile')" icon="shield-check" wire:navigate>{{ __('Trust profile') }}</flux:menu.item>
-            <flux:menu.item :href="route('settings.profile')" icon="user-circle" wire:navigate>{{ __('Account') }}</flux:menu.item>
-            <flux:menu.item :href="route('settings.security')" icon="lock-closed" wire:navigate>{{ __('Password & security') }}</flux:menu.item>
+            <flux:menu.item :href="route('settings.profile')" icon="cog-6-tooth" wire:navigate>{{ __('Settings') }}</flux:menu.item>
         </flux:menu.radio.group>
 
         <flux:menu.separator />

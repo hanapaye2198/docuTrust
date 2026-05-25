@@ -12,6 +12,21 @@ final class Breadcrumbs
     /**
      * @return list<array{label: string, href?: string|null}>
      */
+    public static function currentLabel(): ?string
+    {
+        $items = self::items();
+        if ($items === []) {
+            return null;
+        }
+
+        $last = $items[array_key_last($items)];
+
+        return is_string($last['label'] ?? null) ? $last['label'] : null;
+    }
+
+    /**
+     * @return list<array{label: string, href?: string|null}>
+     */
     public static function items(): array
     {
         $route = request()->route();
@@ -79,6 +94,18 @@ final class Breadcrumbs
             'templates.edit' => self::templateWizardEdit($route->parameter('template')),
             'templates.use' => self::templateUse($route->parameter('template')),
             'templates.prepare' => self::templatePrepare($route->parameter('template')),
+            'settings.profile', 'settings.password', 'settings.security', 'settings.appearance' => [
+                ['label' => __('Dashboard'), 'href' => route('dashboard')],
+                ['label' => __('Settings')],
+            ],
+            'settings.trust-profile', 'settings.attorney-application' => [
+                ['label' => __('Dashboard'), 'href' => route('dashboard')],
+                ['label' => __('Trust profile')],
+            ],
+            'notary.dashboard' => [
+                ['label' => __('Dashboard'), 'href' => route('dashboard')],
+                ['label' => __('Attorney workspace')],
+            ],
             default => [],
         };
     }

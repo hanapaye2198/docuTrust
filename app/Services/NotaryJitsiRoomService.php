@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\NotaryRequest;
 use App\Models\NotarySession;
+use App\Models\NotarySigner;
 use App\Models\User;
+use Firebase\JWT\JWT;
 use Illuminate\Support\Str;
 
 /**
@@ -17,9 +19,13 @@ use Illuminate\Support\Str;
 final class NotaryJitsiRoomService
 {
     private string $baseUrl;
+
     private ?string $appId;
+
     private ?string $appSecret;
+
     private ?string $apiKeyId;
+
     private string $domain;
 
     public function __construct()
@@ -39,7 +45,12 @@ final class NotaryJitsiRoomService
      */
     public function buildRoomName(NotaryRequest $request): string
     {
-        return 'docutrust-' . $request->id . '-' . strtolower(Str::random(10));
+        return 'docutrust-'.$request->id.'-'.strtolower(Str::random(10));
+    }
+
+    public function buildRoomNameForSigner(NotaryRequest $request, NotarySigner $signer): string
+    {
+        return 'docutrust-'.$request->id.'-signer-'.$signer->id.'-'.strtolower(Str::random(8));
     }
 
     /**
@@ -49,20 +60,20 @@ final class NotaryJitsiRoomService
     {
         // For public Jitsi (no credentials), just return the plain URL
         if ($this->appId === null || $this->appSecret === null) {
-            return $this->baseUrl . '/' . $roomName;
+            return $this->baseUrl.'/'.$roomName;
         }
 
         $isJaas = str_starts_with($this->appId, 'vpaas-magic-cookie-');
 
         if ($isJaas) {
-            $url = $this->baseUrl . '/' . $this->appId . '/' . $roomName;
+            $url = $this->baseUrl.'/'.$this->appId.'/'.$roomName;
         } else {
-            $url = $this->baseUrl . '/' . $roomName;
+            $url = $this->baseUrl.'/'.$roomName;
         }
 
         $jwt = $this->generateJwt($roomName);
         if ($jwt !== null) {
-            $url .= '?jwt=' . $jwt;
+            $url .= '?jwt='.$jwt;
         }
 
         return $url;
@@ -74,20 +85,20 @@ final class NotaryJitsiRoomService
     public function meetingUrlForUser(string $roomName, User $user, bool $isModerator = false): string
     {
         if ($this->appId === null || $this->appSecret === null) {
-            return $this->baseUrl . '/' . $roomName;
+            return $this->baseUrl.'/'.$roomName;
         }
 
         $isJaas = str_starts_with($this->appId, 'vpaas-magic-cookie-');
 
         if ($isJaas) {
-            $url = $this->baseUrl . '/' . $this->appId . '/' . $roomName;
+            $url = $this->baseUrl.'/'.$this->appId.'/'.$roomName;
         } else {
-            $url = $this->baseUrl . '/' . $roomName;
+            $url = $this->baseUrl.'/'.$roomName;
         }
 
         $jwt = $this->generateJwtForUser($roomName, $user, $isModerator);
         if ($jwt !== null) {
-            $url .= '?jwt=' . $jwt;
+            $url .= '?jwt='.$jwt;
         }
 
         return $url;
@@ -125,7 +136,7 @@ final class NotaryJitsiRoomService
 
         // JaaS requires roomName in format: <AppID>/<room>
         $iframeRoomName = $isJaas
-            ? $this->appId . '/' . $roomName
+            ? $this->appId.'/'.$roomName
             : $roomName;
 
         return [
@@ -246,8 +257,8 @@ final class NotaryJitsiRoomService
             'maxParticipants' => 6,
 
             // Moderation
-            'disableRemoteMute' => !$isModerator,
-            'remoteVideoMenu' => ['disableKick' => !$isModerator],
+            'disableRemoteMute' => ! $isModerator,
+            'remoteVideoMenu' => ['disableKick' => ! $isModerator],
 
             // Branding
             'subject' => 'DocuTrust Notary Session',
@@ -305,26 +316,26 @@ final class NotaryJitsiRoomService
         if (str_contains($pem, '\\n')) {
             $pem = str_replace('\\n', "\n", $pem);
         }
-        if (!str_contains($pem, '-----BEGIN')) {
-            $pem = "-----BEGIN PRIVATE KEY-----\n" . chunk_split($pem, 64, "\n") . "-----END PRIVATE KEY-----";
+        if (! str_contains($pem, '-----BEGIN')) {
+            $pem = "-----BEGIN PRIVATE KEY-----\n".chunk_split($pem, 64, "\n").'-----END PRIVATE KEY-----';
         }
 
         $isJaas = str_starts_with($this->appId, 'vpaas-magic-cookie-');
 
         if ($isJaas) {
             $kid = $this->apiKeyId
-                ? $this->appId . '/' . $this->apiKeyId
-                : $this->appId . '/generated-key';
+                ? $this->appId.'/'.$this->apiKeyId
+                : $this->appId.'/generated-key';
 
-            return \Firebase\JWT\JWT::encode($payload, $pem, 'RS256', $kid);
+            return JWT::encode($payload, $pem, 'RS256', $kid);
         }
 
         // For self-hosted with shared secret (HS256)
         $isRsaKey = str_contains($pem, 'PRIVATE KEY');
         if ($isRsaKey) {
-            return \Firebase\JWT\JWT::encode($payload, $pem, 'RS256');
+            return JWT::encode($payload, $pem, 'RS256');
         }
 
-        return \Firebase\JWT\JWT::encode($payload, $this->appSecret, 'HS256');
+        return JWT::encode($payload, $this->appSecret, 'HS256');
     }
 }

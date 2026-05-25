@@ -48,4 +48,12 @@ class NotarySigner extends Model
     {
         return $this->hasMany(NotaryGeoLog::class)->latest();
     }
+
+    /**
+     * @return HasMany<NotarySession, $this>
+     */
+    public function sessions(): HasMany
+    {
+        return $this->hasMany(NotarySession::class);
+    }
 }

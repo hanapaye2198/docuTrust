@@ -1,6 +1,23 @@
             <div class="ui-panel p-6 sm:p-8">
-                <flux:heading size="lg" class="!mb-4">{{ __('Video session') }}</flux:heading>
-                @if ($canScheduleSession)
+                <flux:heading size="lg" class="!mb-1">{{ __('Video verification') }}</flux:heading>
+                <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+                    @if ($usesPerSignerVideo ?? false)
+                        {{ __('After everyone signs, each party gets their own video link for identity verification with you.') }}
+                    @else
+                        {{ __('Schedule a live session after all parties have signed.') }}
+                    @endif
+                </p>
+
+                @if (($usesPerSignerVideo ?? false) && $isNotary)
+                    <div class="mb-4 flex flex-wrap items-center gap-2">
+                        <flux:button variant="outline" type="button" wire:click="sendSignerVideoInvitations">
+                            {{ __('Resend video links') }}
+                        </flux:button>
+                        <flux:error name="sendSignerVideoInvitations" />
+                    </div>
+                @endif
+
+                @if ($canScheduleSession && ! ($usesPerSignerVideo ?? false))
                     <div class="mt-4 space-y-4">
                         <flux:field>
                             <flux:label>{{ __('Scheduled for') }}</flux:label>
@@ -23,13 +40,17 @@
                         <flux:button variant="outline" type="button" wire:click="scheduleSession">{{ __('Schedule session') }}</flux:button>
                         <flux:error name="scheduleSession" />
                     </div>
-                @else
+                @elseif (! ($usesPerSignerVideo ?? false))
                     <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
                         @if (!$isNotary)
                             {{ __('Only the assigned notary can schedule video sessions.') }}
                         @else
                             {{ __('Video session scheduling becomes available after all signers have completed signing.') }}
                         @endif
+                    </div>
+                @elseif ($isNotary && ! ($signingProgress['all_client_signatures_complete'] ?? false))
+                    <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                        {{ __('Video links are sent automatically after all parties finish signing.') }}
                     </div>
                 @endif
                 @if ($recentSessions->isNotEmpty())
@@ -48,8 +69,19 @@
                                             <span class="flex h-2 w-2 rounded-full bg-zinc-300 dark:bg-zinc-600"></span>
                                         @endif
                                         <div class="min-w-0">
-                                            <span class="block truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ ucfirst($session->provider_name) }}</span>
-                                            <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500 sm:mt-0">{{ $session->scheduled_for?->format('M j, g:i A') ?? '-' }}</span>
+                                            <span class="block truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                                                @if ($session->notarySigner)
+                                                    {{ $session->notarySigner->full_name }}
+                                                @else
+                                                    {{ ucfirst($session->provider_name) }}
+                                                @endif
+                                            </span>
+                                            <span class="mt-0.5 block text-xs text-zinc-400 dark:text-zinc-500 sm:mt-0">
+                                                {{ $session->scheduled_for?->format('M j, g:i A') ?? '-' }}
+                                                @if ($session->invitation_sent_at)
+                                                    · {{ __('invite sent') }}
+                                                @endif
+                                            </span>
                                         </div>
                                     </div>
                                     <span class="inline-flex w-fit rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">{{ $session->status }}</span>

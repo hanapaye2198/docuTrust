@@ -6,6 +6,7 @@ use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Enums\SignatureFieldType;
 use App\Enums\TemplateRoleType;
+use App\Events\DocumentSent;
 use App\Jobs\SendDocumentEmailJob;
 use App\Jobs\SendReminderJob;
 use App\Mail\ReminderMail;
@@ -26,7 +27,7 @@ class NotificationSystemTest extends TestCase
 
     public function test_document_sent_triggers_email_and_in_app_notification(): void
     {
-        Queue::fake();
+        Mail::fake();
 
         $owner = User::factory()->create();
         $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Draft]);
@@ -41,11 +42,10 @@ class NotificationSystemTest extends TestCase
         $this->actingAs($owner);
         LivewireVolt::test('documents.show', ['document' => $document])->call('sendForSignature');
 
-        Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($document, $signer): bool {
-            return $job->documentId === $document->id
-                && $job->signerId === $signer->id
-                && $job->recipientEmail === $signer->email
-                && $job->type === SendDocumentEmailJob::TYPE_SENT_TO_SIGNER;
+        $signer->refresh();
+
+        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($signer): bool {
+            return str_contains($mail->signUrl, (string) $signer->access_token);
         });
 
         $this->assertDatabaseHas('app_notifications', [
@@ -141,7 +141,7 @@ class NotificationSystemTest extends TestCase
             signUrl: route('sign.show', $signer->access_token),
         ))->handle();
 
-        Mail::assertQueued(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
+        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
             return $mail->requiresDocumentPassword === true
                 && $mail->documentPasswordHint === 'Shared in chat';
         });
@@ -169,7 +169,7 @@ class NotificationSystemTest extends TestCase
             signUrl: route('sign.show', $signer->access_token),
         ))->handle();
 
-        Mail::assertQueued(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
+        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
             return $mail->customSubject === 'Custom invitation subject'
                 && $mail->customMessage === "Please sign this today.\nIt is time-sensitive."
                 && $mail->envelope()->subject === 'Custom invitation subject';
@@ -252,5 +252,67 @@ class NotificationSystemTest extends TestCase
 
         $recipient->refresh();
         $this->assertSame(DocumentSignerStatus::Notified, $recipient->status);
+    }
+
+    public function test_handle_document_sent_emails_eligible_email_link_signers(): void
+    {
+        Mail::fake();
+
+        $owner = User::factory()->create();
+        $document = Document::factory()->for($owner)->create([
+            'status' => DocumentStatus::Pending,
+            'sent_at' => now(),
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'signing_order' => 1,
+        ]);
+
+        event(new DocumentSent($document->load('documentSigners')));
+
+        Mail::assertSent(SignerInvitationMail::class, 1);
+    }
+
+    public function test_sequential_signing_sends_invitation_only_to_current_signer(): void
+    {
+        Mail::fake();
+
+        $owner = User::factory()->create();
+        $document = Document::factory()->for($owner)->create([
+            'status' => DocumentStatus::Draft,
+            'signing_workflow' => Document::SIGNING_WORKFLOW_SEQUENTIAL,
+        ]);
+
+        $firstSigner = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'signing_order' => 1,
+        ]);
+        $secondSigner = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'signing_order' => 2,
+        ]);
+
+        foreach ([$firstSigner, $secondSigner] as $signer) {
+            SignatureField::query()->create([
+                'document_id' => $document->id,
+                'signer_id' => $signer->id,
+                'type' => SignatureFieldType::Signature,
+                'position_data' => ['x' => 0.1, 'y' => 0.1, 'width' => 0.2, 'height' => 0.05],
+            ]);
+        }
+
+        $this->actingAs($owner);
+        LivewireVolt::test('documents.show', ['document' => $document])->call('sendForSignature');
+
+        $firstSigner->refresh();
+        $secondSigner->refresh();
+
+        Mail::assertSent(SignerInvitationMail::class, 1);
+        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($firstSigner): bool {
+            return str_contains($mail->signUrl, (string) $firstSigner->access_token);
+        });
+        Mail::assertNotSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($secondSigner): bool {
+            return str_contains($mail->signUrl, (string) $secondSigner->access_token);
+        });
     }
 }

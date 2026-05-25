@@ -15,7 +15,20 @@ class ProfileUpdateTest extends TestCase
     {
         $this->actingAs($user = User::factory()->create());
 
-        $this->get('/settings/profile')->assertOk();
+        $this->get('/settings/profile')->assertOk()
+            ->assertSee(__('Settings'), false)
+            ->assertSee(__('Profile'), false)
+            ->assertSee(__('Password'), false)
+            ->assertSee(__('Security'), false);
+    }
+
+    public function test_legacy_settings_routes_redirect_to_settings_hub_tabs(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $this->get('/settings/password')->assertRedirect('/settings/profile?tab=password');
+        $this->get('/settings/security')->assertRedirect('/settings/profile?tab=security');
+        $this->get('/settings/appearance')->assertRedirect('/settings/profile?tab=appearance');
     }
 
     public function test_profile_information_can_be_updated(): void

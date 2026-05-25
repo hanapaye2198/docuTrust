@@ -3,8 +3,37 @@
 @endphp
 
             <div class="ui-panel p-6 sm:p-8">
-                <flux:heading size="lg" class="!mb-1">{{ __('Documents') }}</flux:heading>
-                <p class="text-sm text-zinc-600 dark:text-zinc-400">{{ __('Upload instruments, prepare fields, and send for signing.') }}</p>
+                <flux:heading size="lg" class="!mb-1">{{ __('Document') }}</flux:heading>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">{{ __('One instrument per case: signers sign, video verification, attorney signature, then the sealed instrument is ready.') }}</p>
+
+                @if ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'awaiting_attorney_signature')
+                    <div class="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100">
+                        <div class="font-semibold">{{ __('Your turn: sign the contract') }}</div>
+                        <p class="mt-1 text-violet-800/90 dark:text-violet-200/90">{{ __('Signer legitimacy was confirmed on video. Place your attorney signature, then the system will generate the final PDF, certificate, and hash.') }}</p>
+                    </div>
+                @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'awaiting_video')
+                    <div class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-100">
+                        <div class="font-semibold">{{ __('Video verification required') }}</div>
+                        <p class="mt-1 text-indigo-800/90 dark:text-indigo-200/90">{{ __('All signers have signed. Complete a video session with each party on the Video tab before you sign as attorney.') }}</p>
+                    </div>
+                @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'finalizing')
+                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                        <div class="font-semibold">{{ __('Finalizing instrument') }}</div>
+                        <p class="mt-1 text-amber-800/90 dark:text-amber-200/90">{{ __('Your signature is recorded. Generate or wait for the final PDF, completion certificate, and document hash below.') }}</p>
+                    </div>
+                @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'document_ready')
+                    <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        <div class="font-semibold">{{ __('Instrument ready') }}</div>
+                        <p class="mt-1 text-emerald-800/90 dark:text-emerald-200/90">{{ __('Signing, video verification, and attorney signature are complete. Continue on the Closing tab for register entry and digital notarization.') }}</p>
+                    </div>
+                @endif
+
+                @if ($isNotary && is_array($signingProgress) && ($signingProgress['visible'] ?? false))
+                    <div class="mt-5">
+                        @include('livewire.notary-requests.show.partials.signing-progress')
+                    </div>
+                @endif
+
                 <div class="mt-4 space-y-3">
                     @forelse ($requestDocuments as $document)
                         @php
@@ -34,7 +63,7 @@
                                             {{ trans_choice(':count approved|:count approved', $workflowState['participant_counts']['approved'], ['count' => $workflowState['participant_counts']['approved']]) }}
                                         </div>
                                     @endif
-                                    @if (is_array($artifactState))
+                                    @if (is_array($artifactState) && ($attorneyHasSigned ?? false))
                                         <div class="mt-2 flex flex-wrap gap-2">
                                             <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_final_pdf'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Final PDF') }}</span>
                                             <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_certificate'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Certificate') }}</span>
@@ -46,6 +75,10 @@
                                                 {{ implode(' ', $artifactState['issues']) }}
                                             </div>
                                         @endif
+                                    @elseif ($isNotary && $document->status->value === 'completed' && ! ($attorneyHasSigned ?? false) && ($signingProgress['video_verification_complete'] ?? false))
+                                        <div class="mt-2 text-xs text-violet-700 dark:text-violet-300">
+                                            {{ __('Final PDF, certificate, and hash are generated after you sign as attorney.') }}
+                                        </div>
                                     @endif
                                 </a>
                                 @if ($canManageLifecycle || $isNotary)
@@ -73,20 +106,10 @@
                                                     </a>
                                                 @endif
                                             @else
-                                                {{-- Normal pending: awaiting client signatures --}}
                                                 <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300">
                                                     <svg class="h-3 w-3 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
-                                                    {{ __('Awaiting signer signatures') }}
+                                                    {{ __('Awaiting signatures') }}
                                                 </span>
-                                                @if ($isNotary)
-                                                    @foreach ($document->documentSigners->filter(fn ($s) => $s->requiresAction()) as $pendingSigner)
-                                                        <flux:button class="w-full sm:w-auto" size="sm" variant="ghost" type="button"
-                                                            wire:click="resendSignerEmail({{ $document->id }}, {{ $pendingSigner->id }})"
-                                                            wire:confirm="{{ __('Resend signing email to :name?', ['name' => $pendingSigner->name]) }}">
-                                                            {{ __('Resend to :name', ['name' => $pendingSigner->name]) }}
-                                                        </flux:button>
-                                                    @endforeach
-                                                @endif
                                             @endif
                                         @elseif ($document->status->value === 'completed')
                                             @if ($isNotary && $canAttorneySign)
@@ -110,11 +133,13 @@
                                                     </span>
                                                 @endif
                                             @endif
-                                            @if (! ($artifactState['has_certificate'] ?? false))
-                                                <flux:button class="w-full sm:w-auto" variant="outline" type="button" wire:click="generateDocumentCertificate({{ $document->id }})">{{ __('Generate certificate') }}</flux:button>
-                                            @endif
-                                            @if (! ($artifactState['has_blockchain_transaction'] ?? false))
-                                                <flux:button class="w-full sm:w-auto" variant="outline" type="button" wire:click="refreshBlockchainProof({{ $document->id }})">{{ __('Refresh blockchain') }}</flux:button>
+                                            @if ($attorneyHasSigned ?? false)
+                                                @if (! ($artifactState['has_certificate'] ?? false))
+                                                    <flux:button class="w-full sm:w-auto" variant="outline" type="button" wire:click="generateDocumentCertificate({{ $document->id }})">{{ __('Generate certificate') }}</flux:button>
+                                                @endif
+                                                @if (! ($artifactState['has_blockchain_transaction'] ?? false))
+                                                    <flux:button class="w-full sm:w-auto" variant="outline" type="button" wire:click="refreshBlockchainProof({{ $document->id }})">{{ __('Refresh blockchain') }}</flux:button>
+                                                @endif
                                             @endif
                                         @endif
                                     </div>
@@ -125,19 +150,49 @@
                                     $localTestingSigners = $document->documentSigners->filter(
                                         fn ($signer) => $signer->requiresAction() && is_string($signer->access_token) && $signer->access_token !== ''
                                     );
+                                    $videoService = app(\App\Services\NotarySignerVideoInvitationService::class);
                                 @endphp
                                 @if ($localTestingSigners->isNotEmpty())
                                     <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                                        <div class="font-semibold">{{ __('Local testing signer links') }}</div>
-                                        <div class="mt-1 text-[11px] opacity-80">{{ __('Temporary shortcut for local development after sending documents for signing.') }}</div>
+                                        <div class="font-semibold">{{ __('Local testing links') }}</div>
+                                        <div class="mt-1 text-[11px] opacity-80">{{ __('Shortcuts for signing and video verification during local development.') }}</div>
                                         <div class="mt-2 flex flex-col gap-2">
                                             @foreach ($localTestingSigners as $signer)
-                                                <a href="{{ app(\App\Services\SigningMethodService::class)->signerEntryUrl($signer) }}"
-                                                   target="_blank"
-                                                   class="inline-flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-white px-3 py-2 text-left text-[11px] font-medium text-amber-900 transition hover:bg-amber-100 dark:border-amber-800 dark:bg-zinc-900 dark:text-amber-100 dark:hover:bg-amber-950/40">
-                                                    <span>{{ $signer->name }}</span>
-                                                    <span class="truncate text-[10px] opacity-70">{{ $signer->signingMethod()->value }}</span>
-                                                </a>
+                                                @php
+                                                    $requestSigner = $notaryRequest->signers->first(
+                                                        fn ($party) => strtolower(trim((string) $party->email)) === strtolower(trim((string) $signer->email))
+                                                    );
+                                                    $videoSession = $requestSigner
+                                                        ? $signerVideoSessions->first(fn ($session) => (int) $session->notary_signer_id === (int) $requestSigner->id)
+                                                        : null;
+                                                @endphp
+                                                <div class="rounded-md border border-amber-300 bg-white px-3 py-2 dark:border-amber-800 dark:bg-zinc-900">
+                                                    <div class="flex items-center justify-between gap-2">
+                                                        <span class="text-[11px] font-semibold text-amber-900 dark:text-amber-100">{{ $signer->name }}</span>
+                                                        <flux:badge size="sm" :color="$signer->status->isCompleted() ? 'emerald' : 'amber'">
+                                                            {{ $signer->status->isCompleted() ? __('Signed') : __('Pending') }}
+                                                        </flux:badge>
+                                                    </div>
+                                                    <div class="mt-2 flex flex-col gap-1.5">
+                                                        <a href="{{ app(\App\Services\SigningMethodService::class)->signerEntryUrl($signer) }}"
+                                                           target="_blank"
+                                                           class="text-[11px] font-medium text-amber-800 underline decoration-amber-400/60 underline-offset-2 dark:text-amber-200">
+                                                            {{ __('Signing link') }}
+                                                        </a>
+                                                        @if ($videoSession !== null)
+                                                            <a href="{{ $videoService->signerVideoJoinUrl($videoSession) }}"
+                                                               target="_blank"
+                                                               class="text-[11px] font-medium text-indigo-700 underline decoration-indigo-400/60 underline-offset-2 dark:text-indigo-300">
+                                                                {{ __('Video link') }}
+                                                                @if ($videoSession->invitation_sent_at)
+                                                                    · {{ __('sent') }}
+                                                                @endif
+                                                            </a>
+                                                        @elseif ($signer->status->isCompleted() && ($signingProgress['all_client_signatures_complete'] ?? false))
+                                                            <span class="text-[10px] text-amber-700 dark:text-amber-300">{{ __('Video link pending') }}</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
                                             @endforeach
                                         </div>
                                     </div>
@@ -192,9 +247,9 @@
                 </div>
 
                 {{-- Upload Document Form (Attorney / Admin) --}}
-                @if (($isNotary || $canManageLifecycle) && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
+                @if (($isNotary || $canManageLifecycle) && ($canUploadAnotherDocument ?? true) && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
                     <div class="mt-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
-                        <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload a new document for this request') }}</div>
+                        <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload document for this case') }}</div>
                         <div class="mt-3 space-y-3">
                             <flux:field>
                                 <flux:label>{{ __('Document title') }} <span class="text-rose-500">*</span></flux:label>
@@ -209,6 +264,26 @@
                             <div wire:loading wire:target="newDocumentFile" class="text-xs text-teal-600 dark:text-teal-400">{{ __('Uploading...') }}</div>
                             <flux:button variant="primary" type="button" wire:click="createDocument" wire:loading.attr="disabled" wire:target="newDocumentFile,createDocument">{{ __('Upload document') }}</flux:button>
                         </div>
+                    </div>
+                @elseif (($isNotary || $canManageLifecycle) && ! ($canUploadAnotherDocument ?? true) && $requestDocuments->isNotEmpty())
+                    <p class="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+                        {{ __('This case already has its document. Continue with prepare, send, and video verification on the instrument above.') }}
+                    </p>
+                @endif
+
+                @if ($isNotary && ($usesPerSignerVideo ?? false) && ($signingProgress['all_client_signatures_complete'] ?? false))
+                    <div class="mt-4 flex flex-wrap items-center gap-2">
+                        <flux:button
+                            variant="primary"
+                            type="button"
+                            wire:click="sendSignerVideoInvitations"
+                        >
+                            {{ __('Send video links to signers') }}
+                        </flux:button>
+                        <flux:error name="sendSignerVideoInvitations" />
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400">
+                            {{ __('Each signer receives a personal video link by email. Links are sent automatically when signing finishes if not already sent.') }}
+                        </p>
                     </div>
                 @endif
             </div>

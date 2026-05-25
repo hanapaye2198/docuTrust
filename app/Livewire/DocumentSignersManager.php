@@ -10,6 +10,7 @@ use App\Models\Contact;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\User;
+use App\Services\DocumentNotificationService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
@@ -363,7 +364,7 @@ class DocumentSignersManager extends Component
             return;
         }
 
-        app(\App\Services\DocumentNotificationService::class)->sendReminder($document, $signer);
+        app(DocumentNotificationService::class)->sendReminder($document, $signer);
         session()->flash('status', __('Reminder sent to :name.', ['name' => $signer->name]));
     }
 
@@ -378,19 +379,13 @@ class DocumentSignersManager extends Component
 
         $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
 
-        if (! $signer->requiresAction() || $signer->status !== DocumentSignerStatus::Pending) {
+        if (! $signer->requiresAction()
+            || $signer->status !== DocumentSignerStatus::Pending
+            || $signer->signingMethod() !== SigningMethod::EmailLink) {
             return;
         }
 
-        $signingMethodService = app(\App\Services\SigningMethodService::class);
-
-        \App\Jobs\SendDocumentEmailJob::dispatch(
-            documentId: $document->id,
-            signerId: $signer->id,
-            recipientEmail: $signer->email,
-            type: \App\Jobs\SendDocumentEmailJob::TYPE_SENT_TO_SIGNER,
-            signUrl: $signingMethodService->signerEntryUrl($signer),
-        );
+        app(DocumentNotificationService::class)->sendSignerInvitation($document, $signer);
 
         session()->flash('status', __('Invitation resent to :name.', ['name' => $signer->name]));
     }

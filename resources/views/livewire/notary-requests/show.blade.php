@@ -206,6 +206,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'canCreateRegisterEntry' => $this->canCreateRegisterEntry(),
             'canReviewNotary' => $this->canReviewNotary(),
             'canAttorneySign' => $this->canAttorneySign(),
+            'attorneyHasSigned' => $workflow->hasAttorneySignedAllDocuments($this->notaryRequest),
             'canDigitalizeRequest' => $workflow->canDigitalize($this->notaryRequest),
             'paymentRequired' => $workflow->paymentRequired($this->notaryRequest),
             'hasSettledPayment' => $workflow->hasSettledPayment($this->notaryRequest),
@@ -263,6 +264,16 @@ new #[Layout('components.layouts.app')] class extends Component {
                 ])
                 ->all(),
             'nextDocumentAction' => $this->nextDocumentAction($requestDocuments),
+            'signingProgress' => app(\App\Services\NotarySigningProgressService::class)->summarize(
+                $this->notaryRequest,
+                $user->role->value === 'notary' ? $user->id : null,
+            ),
+            'canUploadAnotherDocument' => $workflow->canAttachAnotherDocument($this->notaryRequest),
+            'usesPerSignerVideo' => (bool) config('docutrust.notary.auto_invite_signers_to_video', true),
+            'signerVideoSessions' => $this->notaryRequest->sessions
+                ->loadMissing('notarySigner')
+                ->filter(fn ($session) => $session->notary_signer_id !== null)
+                ->values(),
             'requestSigners' => $this->notaryRequest->signers,
             'signerInvitations' => app(EnotaryInvitationService::class)->latestInvitationsForRequest($this->notaryRequest),
             'enotaryPortalEmails' => User::query()
@@ -571,7 +582,19 @@ new #[Layout('components.layouts.app')] class extends Component {
             app(NotarySchedulingService::class)->complete($session, $this->sessionChecklist);
 
             $this->refreshRequest();
-            session()->flash('status', __('Video session completed with verification evidence.'));
+
+            $workflow = app(NotaryRequestWorkflowService::class);
+            $request = $this->notaryRequest->fresh();
+
+            if (
+                $workflow->hasCompletedSession($request)
+                && $workflow->canBeginAttorneySigning($request)
+                && ! $workflow->hasAttorneySignedAllDocuments($request)
+            ) {
+                session()->flash('status', __('All video verifications are complete. Sign the contract as attorney on the Documents tab, then the final PDF and certificate will be generated.'));
+            } else {
+                session()->flash('status', __('Video session completed with verification evidence.'));
+            }
         } catch (\RuntimeException $exception) {
             $this->addError('completeSession', $exception->getMessage());
         }
@@ -778,22 +801,26 @@ new #[Layout('components.layouts.app')] class extends Component {
         ]);
 
         try {
+            $workflow = app(NotaryRequestWorkflowService::class);
+            $workflow->assertCanAttachDocument($this->notaryRequest);
+
             $path = $this->newDocumentFile->store('documents', (string) config('filesystems.docutrust_disk', 'local'));
 
             $document = $user->documents()->create([
-                'notary_request_id' => $this->notaryRequest->id,
                 'title' => trim((string) $validated['newDocumentTitle']),
                 'file_path' => $path,
                 'status' => \App\Enums\DocumentStatus::Draft,
             ]);
 
-            app(NotaryRequestWorkflowService::class)->attachDocument($this->notaryRequest, $document);
+            $workflow->attachDocument($this->notaryRequest, $document);
 
             $this->newDocumentTitle = '';
             $this->newDocumentFile = null;
             $this->resetValidation(['newDocumentTitle', 'newDocumentFile']);
             $this->refreshRequest();
             session()->flash('status', __('Document uploaded and linked to this notary request.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('newDocumentFile', $exception->getMessage());
         } catch (\Throwable $throwable) {
             Log::channel('errors')->error('Notary request document upload failed', [
                 'notary_request_id' => $this->notaryRequest->id,
@@ -803,6 +830,25 @@ new #[Layout('components.layouts.app')] class extends Component {
             ]);
 
             $this->addError('newDocumentFile', __('Unable to upload document right now. Please try again.'));
+        }
+    }
+
+    public function sendSignerVideoInvitations(): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role->value === 'notary', 403);
+        abort_unless((int) $this->notaryRequest->notary_user_id === (int) $user->id, 403);
+
+        try {
+            $invited = app(\App\Services\NotarySignerVideoInvitationService::class)
+                ->inviteAllSignersWhenReady($this->notaryRequest->fresh(['signers', 'sessions', 'notary']));
+
+            $this->refreshRequest();
+            session()->flash('status', $invited > 0
+                ? __('Video invitations sent to :count signer(s).', ['count' => $invited])
+                : __('Video invitations were already sent to all signers.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('sendSignerVideoInvitations', $exception->getMessage());
         }
     }
 
@@ -824,6 +870,16 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         try {
             app(\App\Services\SendDocumentForSignatureService::class)->send($document);
+
+            $workflow = app(NotaryRequestWorkflowService::class);
+            if ($this->notaryRequest->fresh()->status === NotaryRequestStatus::Draft) {
+                try {
+                    $workflow->submit($this->notaryRequest->fresh());
+                } catch (\RuntimeException) {
+                    // Submit may require additional case setup; signing can still proceed.
+                }
+            }
+
             $this->refreshRequest();
             session()->flash('status', __('Document sent to signers for signing.'));
         } catch (\RuntimeException $exception) {
@@ -917,17 +973,40 @@ new #[Layout('components.layouts.app')] class extends Component {
             return;
         }
 
-        $signingMethodService = app(\App\Services\SigningMethodService::class);
+        if ($document->status !== DocumentStatus::Pending) {
+            $this->addError('resendEmail', __('Invitations can only be resent while the document is awaiting signatures.'));
 
-        \App\Jobs\SendDocumentEmailJob::dispatch(
-            documentId: $document->id,
-            signerId: $signer->id,
-            recipientEmail: $signer->email,
-            type: \App\Jobs\SendDocumentEmailJob::TYPE_SENT_TO_SIGNER,
-            signUrl: $signingMethodService->signerEntryUrl($signer),
-        );
+            return;
+        }
+
+        app(\App\Services\DocumentNotificationService::class)->sendSignerInvitation($document, $signer);
 
         session()->flash('status', __('Signing invitation resent to :name.', ['name' => $signer->name]));
+    }
+
+    public function sendSignerReminder(int $documentId, int $signerId): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role->value === 'notary', 403);
+
+        $document = Document::query()
+            ->whereKey($documentId)
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->firstOrFail();
+
+        abort_unless($document->status === DocumentStatus::Pending, 422);
+
+        $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
+
+        if (! $signer->requiresAction() || $signer->status !== DocumentSignerStatus::Pending) {
+            $this->addError('resendEmail', __('This signer has already completed their action.'));
+
+            return;
+        }
+
+        app(\App\Services\DocumentNotificationService::class)->sendReminder($document, $signer);
+
+        session()->flash('status', __('Reminder sent to :name.', ['name' => $signer->name]));
     }
 
     public function replaceDocument(int $documentId): void
@@ -1138,7 +1217,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     private function refreshRequest(): void
     {
-        $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
+        $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions.notarySigner', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
     }
 
     private function resolveCompletedLinkedDocument(int $documentId): Document
@@ -1289,7 +1368,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 return [
                     'type' => 'wire',
                     'label' => __('Sign as attorney'),
-                    'description' => __('Place your signature after identity verification is complete.'),
+                    'description' => __('Video verification is complete. Place your signature on the instrument.'),
                     'variant' => 'primary',
                     'action' => 'signAsAttorney',
                     'params' => [$unsignedDocument->id],
@@ -1356,12 +1435,47 @@ new #[Layout('components.layouts.app')] class extends Component {
             ];
         }
 
-        $pendingDocument = $documents->first(fn (Document $document): bool => $document->status->value === 'pending');
-        if ($pendingDocument !== null) {
+        $signingProgress = app(\App\Services\NotarySigningProgressService::class)->summarize(
+            $request,
+            (int) $user->id,
+        );
+
+        if ($signingProgress['phase'] === 'awaiting_video') {
             return [
                 'type' => 'tab',
-                'label' => __('Track signing progress'),
-                'description' => __('Waiting for signers to complete their signatures.'),
+                'label' => __('Complete video verification'),
+                'description' => $signingProgress['summary'],
+                'variant' => 'primary',
+                'tab' => 'session',
+            ];
+        }
+
+        if ($signingProgress['phase'] === 'finalizing') {
+            return [
+                'type' => 'tab',
+                'label' => __('Finalize instrument'),
+                'description' => $signingProgress['summary'],
+                'variant' => 'primary',
+                'tab' => 'documents',
+            ];
+        }
+
+        $pendingDocument = $documents->first(fn (Document $document): bool => $document->status->value === 'pending');
+        if ($pendingDocument !== null) {
+            if ($signingProgress['all_client_signatures_complete'] && ! ($signingProgress['video_verification_complete'] ?? false)) {
+                return [
+                    'type' => 'tab',
+                    'label' => __('Continue to video session'),
+                    'description' => $signingProgress['summary'],
+                    'variant' => 'primary',
+                    'tab' => 'session',
+                ];
+            }
+
+            return [
+                'type' => 'tab',
+                'label' => __('Signing progress'),
+                'description' => $signingProgress['summary'],
                 'variant' => 'outline',
                 'tab' => 'documents',
             ];

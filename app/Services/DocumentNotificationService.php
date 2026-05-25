@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\DocumentSignerStatus;
+use App\Enums\SigningMethod;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSent;
 use App\Events\DocumentSignerCompleted;
@@ -16,6 +17,8 @@ class DocumentNotificationService
 {
     public function __construct(
         private readonly SigningMethodService $signingMethodService,
+        private readonly DocumentSigningWorkflowService $documentSigningWorkflowService,
+        private readonly NotarySignerVideoInvitationService $notarySignerVideoInvitationService,
     ) {}
 
     public function handleDocumentSent(DocumentSent $event): void
@@ -23,17 +26,7 @@ class DocumentNotificationService
         $document = $event->document->loadMissing('documentSigners', 'user');
 
         foreach ($document->documentSigners as $signer) {
-            if (! $signer->requiresAction()) {
-                continue;
-            }
-
-            SendDocumentEmailJob::dispatch(
-                documentId: $document->id,
-                signerId: $signer->id,
-                recipientEmail: $signer->email,
-                type: SendDocumentEmailJob::TYPE_SENT_TO_SIGNER,
-                signUrl: $this->signingMethodService->signerEntryUrl($signer),
-            );
+            $this->sendSignerInvitationIfEligible($document, $signer);
         }
 
         $this->createInAppNotification(
@@ -48,7 +41,7 @@ class DocumentNotificationService
 
     public function handleSignerCompleted(DocumentSignerCompleted $event): void
     {
-        $document = $event->document->loadMissing('user');
+        $document = $event->document->loadMissing('documentSigners', 'user');
         $signer = $event->signer;
 
         if ($signer->isSigner()) {
@@ -67,6 +60,14 @@ class DocumentNotificationService
             type: SendDocumentEmailJob::TYPE_SIGNED,
         );
 
+        foreach ($document->documentSigners as $nextSigner) {
+            if ($nextSigner->id === $signer->id) {
+                continue;
+            }
+
+            $this->sendSignerInvitationIfEligible($document, $nextSigner);
+        }
+
         $this->createInAppNotification(
             $document->user_id,
             'document.signed',
@@ -75,6 +76,38 @@ class DocumentNotificationService
                 'title' => $document->title,
             ])
         );
+    }
+
+    public function sendSignerInvitation(Document $document, DocumentSigner $signer): void
+    {
+        SendDocumentEmailJob::dispatchSync(
+            documentId: $document->id,
+            signerId: $signer->id,
+            recipientEmail: $signer->email,
+            type: SendDocumentEmailJob::TYPE_SENT_TO_SIGNER,
+            signUrl: $this->signingMethodService->signerEntryUrl($signer),
+        );
+    }
+
+    public function sendSignerInvitationIfEligible(Document $document, DocumentSigner $signer): void
+    {
+        if (! $signer->requiresAction()) {
+            return;
+        }
+
+        if ($signer->signingMethod() !== SigningMethod::EmailLink) {
+            return;
+        }
+
+        if ($signer->status !== DocumentSignerStatus::Pending) {
+            return;
+        }
+
+        if ($this->documentSigningWorkflowService->canSignerModifyFields($document, $signer) !== null) {
+            return;
+        }
+
+        $this->sendSignerInvitation($document, $signer);
     }
 
     public function handleDocumentCompleted(DocumentCompleted $event): void
@@ -111,6 +144,8 @@ class DocumentNotificationService
             'document.completed',
             __('Document ":title" is fully completed.', ['title' => $document->title])
         );
+
+        $this->notarySignerVideoInvitationService->handleDocumentCompleted($document);
     }
 
     public function sendReminder(Document $document, DocumentSigner $signer): void

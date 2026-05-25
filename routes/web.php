@@ -8,6 +8,7 @@ use App\Http\Controllers\DocumentPrepareController;
 use App\Http\Controllers\DocumentSignerPagesController;
 use App\Http\Controllers\DocumentStreamController;
 use App\Http\Controllers\EmailInfrastructureExampleController;
+use App\Http\Controllers\EnotarySignerVideoJoinController;
 use App\Http\Controllers\MarketingChatbotController;
 use App\Http\Controllers\MarketingFeatureController;
 use App\Http\Controllers\NotaryCredentialDocumentController;
@@ -46,6 +47,10 @@ Route::get('/verify/notary/{token}', function (string $token) {
 
     return view('notary.verify', ['entry' => $entry]);
 })->name('notary.verify');
+
+Route::get('/enotary/video/{token}', [EnotarySignerVideoJoinController::class, 'show'])
+    ->middleware('throttle:signing-links')
+    ->name('enotary.video.join');
 
 Route::middleware('throttle:signing-links')->group(function () {
     Route::get('/sign/{token}', [SignDocumentController::class, 'show'])->name('sign.show');
@@ -178,9 +183,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('settings/trust-profile/photo', [TrustProfileAssetController::class, 'photo'])->name('settings.trust-profile.photo');
     Route::get('settings/trust-profile/signature', [TrustProfileAssetController::class, 'signature'])->name('settings.trust-profile.signature');
     Volt::route('settings/profile', 'settings.profile')->name('settings.profile');
-    Volt::route('settings/password', 'settings.password')->name('settings.password');
-    Volt::route('settings/security', 'settings.security')->name('settings.security');
-    Volt::route('settings/appearance', 'settings.appearance')->name('settings.appearance');
+    Route::redirect('settings/password', '/settings/profile?tab=password')->name('settings.password');
+    Route::redirect('settings/security', '/settings/profile?tab=security')->name('settings.security');
+    Route::redirect('settings/appearance', '/settings/profile?tab=appearance')->name('settings.appearance');
 });
 
 require __DIR__.'/auth.php';
