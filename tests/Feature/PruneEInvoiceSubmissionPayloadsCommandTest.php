@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\EInvoice;
 use App\Models\EInvoiceSubmission;
+use App\Models\NotaryRequest;
 use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,7 +17,7 @@ class PruneEInvoiceSubmissionPayloadsCommandTest extends TestCase
     public function test_prune_command_compacts_old_resolved_submission_payloads(): void
     {
         $admin = User::factory()->create();
-        $request = \App\Models\NotaryRequest::factory()->for($admin)->create([
+        $request = NotaryRequest::factory()->for($admin)->create([
             'organization_id' => $admin->organization_id,
         ]);
         $payment = Payment::query()->create([

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\EInvoiceStatus;
+use App\Enums\UserRole;
 use App\Models\BillingProfile;
 use App\Models\EInvoice;
 use App\Models\NotaryRequest;
@@ -18,7 +19,7 @@ class NotaryAdminEInvoicesPageTest extends TestCase
     public function test_notary_admin_can_view_einvoices_page_and_filter_by_status(): void
     {
         $admin = User::factory()->create([
-            'role' => \App\Enums\UserRole::NotaryAdmin,
+            'role' => UserRole::NotaryAdmin,
         ]);
 
         $client = User::factory()->client()->create([
@@ -118,7 +119,7 @@ class NotaryAdminEInvoicesPageTest extends TestCase
         ]);
 
         $outsideAdmin = User::factory()->create([
-            'role' => \App\Enums\UserRole::NotaryAdmin,
+            'role' => UserRole::NotaryAdmin,
         ]);
 
         $outsideClient = User::factory()->client()->create([

@@ -36,7 +36,7 @@ class NotarySessionScheduledMail extends Mailable implements ShouldQueue
             with: [
                 'notaryRequest' => $this->notaryRequest,
                 'session' => $this->notarySession,
-                'scheduledFor' => $this->notarySession->scheduled_for?->timezone('Asia/Manila')->format('M j, Y g:i A') . ' (PHT)',
+                'scheduledFor' => $this->notarySession->scheduled_for?->timezone('Asia/Manila')->format('M j, Y g:i A').' (PHT)',
                 'meetingUrl' => $this->notarySession->meeting_url,
             ],
         );

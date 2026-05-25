@@ -33,7 +33,7 @@ class NotaryRequestNotarizedMail extends Mailable implements ShouldQueue
             markdown: 'mail.notary.request-notarized',
             with: [
                 'notaryRequest' => $this->notaryRequest,
-                'completedAt' => $this->notaryRequest->completed_at?->timezone('Asia/Manila')->format('M j, Y g:i A') . ' (PHT)',
+                'completedAt' => $this->notaryRequest->completed_at?->timezone('Asia/Manila')->format('M j, Y g:i A').' (PHT)',
             ],
         );
     }

@@ -3,13 +3,14 @@
 namespace Tests\Feature;
 
 use App\Enums\EInvoiceStatus;
+use App\Enums\PaymentStatus;
 use App\Jobs\SubmitEInvoiceJob;
 use App\Models\BillingProfile;
-use App\Enums\PaymentStatus;
 use App\Models\EInvoice;
 use App\Models\NotaryRequest;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\NotaryPaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -282,7 +283,7 @@ class GatewayHubWebhookTest extends TestCase
             'status' => PaymentStatus::Pending->value,
         ]);
 
-        $updated = app(\App\Services\NotaryPaymentService::class)->refreshGatewayPayment($payment);
+        $updated = app(NotaryPaymentService::class)->refreshGatewayPayment($payment);
 
         $this->assertSame(PaymentStatus::Paid, $updated->status);
         $this->assertNotNull($updated->paid_at);

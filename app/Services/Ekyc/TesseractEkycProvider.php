@@ -5,6 +5,7 @@ namespace App\Services\Ekyc;
 use App\Contracts\Ekyc\EkycVerificationProvider;
 use App\Enums\EkycStatus;
 use App\Exceptions\EkycOcrUnavailableException;
+use App\Models\User;
 
 class TesseractEkycProvider implements EkycVerificationProvider
 {
@@ -21,7 +22,7 @@ class TesseractEkycProvider implements EkycVerificationProvider
             );
         }
 
-        $user = \App\Models\User::query()->find((int) $request->externalUserId);
+        $user = User::query()->find((int) $request->externalUserId);
 
         if ($user === null) {
             return new EkycProviderResult(

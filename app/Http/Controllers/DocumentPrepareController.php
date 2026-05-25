@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocumentStatus;
-use App\Enums\SigningMethod;
-use App\Enums\TemplateRoleType;
 use App\Http\Requests\StoreSignatureFieldsRequest;
 use App\Models\Document;
 use App\Models\SignatureField;
@@ -147,7 +145,7 @@ class DocumentPrepareController extends Controller
             }
         }
 
-        DB::transaction(function () use ($document, $fields, $ip, $isAttorneySigningPhase, $user, $attorneySigner): void {
+        DB::transaction(function () use ($document, $fields, $ip, $isAttorneySigningPhase, $attorneySigner): void {
             if ($isAttorneySigningPhase) {
                 // Attorney signing phase: only delete attorney's fields, keep client fields intact
                 if ($attorneySigner) {

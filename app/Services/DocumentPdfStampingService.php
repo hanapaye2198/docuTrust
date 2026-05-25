@@ -10,7 +10,6 @@ use App\Models\SignatureField;
 use App\Support\RotatableFpdi;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use setasign\Fpdi\Fpdi;
 use Throwable;
 

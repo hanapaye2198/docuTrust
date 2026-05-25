@@ -34,7 +34,7 @@ class NotaryRequestDigitalizedMail extends Mailable implements ShouldQueue
             with: [
                 'notaryRequest' => $this->notaryRequest,
                 'notaryName' => $this->notaryRequest->notary?->name ?? 'Notary Public',
-                'approvedAt' => $this->notaryRequest->approved_at?->timezone('Asia/Manila')->format('M j, Y g:i A') . ' (PHT)',
+                'approvedAt' => $this->notaryRequest->approved_at?->timezone('Asia/Manila')->format('M j, Y g:i A').' (PHT)',
             ],
         );
     }

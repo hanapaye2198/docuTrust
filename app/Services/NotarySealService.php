@@ -6,7 +6,6 @@ use App\Concerns\ResolvesSecureDisk;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use setasign\Fpdi\Fpdi;
 use Throwable;
 
