@@ -14,6 +14,7 @@ use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
+use App\Models\NotarySigner;
 use RuntimeException;
 
 class NotaryRequestWorkflowService
@@ -199,22 +200,20 @@ class NotaryRequestWorkflowService
 
     public function hasCompletedSession(NotaryRequest $request): bool
     {
-        $request->loadMissing(['sessions', 'signers']);
+        $request->loadMissing(['sessions', 'signers', 'documents.documentSigners']);
 
         $signerScopedSessions = $request->sessions->filter(
             fn ($session): bool => $session->notary_signer_id !== null
         );
 
         if ($signerScopedSessions->isNotEmpty()) {
-            $signers = $request->signers->filter(
-                fn ($signer): bool => is_string($signer->email) && $signer->email !== ''
-            );
+            $signedParties = app(NotarySignerVideoInvitationService::class)->signedPartiesForVideo($request);
 
-            if ($signers->isEmpty()) {
+            if ($signedParties === []) {
                 return false;
             }
 
-            return $signers->every(function ($signer) use ($signerScopedSessions): bool {
+            return collect($signedParties)->every(function (NotarySigner $signer) use ($signerScopedSessions): bool {
                 return $signerScopedSessions->contains(
                     fn ($session): bool => (int) $session->notary_signer_id === (int) $signer->id
                         && $session->status === 'completed'

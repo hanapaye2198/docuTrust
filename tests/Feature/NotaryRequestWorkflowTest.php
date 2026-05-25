@@ -34,6 +34,8 @@ class NotaryRequestWorkflowTest extends TestCase
 
     public function test_notary_request_can_be_scheduled_approved_and_finalized(): void
     {
+        config(['docutrust.notary.auto_invite_signers_to_video' => false]);
+
         $requester = User::factory()->create();
         $notary = User::factory()->create();
 
@@ -200,6 +202,8 @@ class NotaryRequestWorkflowTest extends TestCase
 
     public function test_notary_request_cannot_be_approved_until_client_payment_is_completed(): void
     {
+        config(['docutrust.notary.auto_invite_signers_to_video' => false]);
+
         $requester = User::factory()->create();
         $notary = User::factory()->create();
 

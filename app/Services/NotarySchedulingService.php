@@ -25,6 +25,13 @@ class NotarySchedulingService
         ?string $roomName = null,
         ?User $attorney = null,
     ): NotarySession {
+        if (
+            app(NotarySignerVideoInvitationService::class)->usesPerSignerSessions()
+            && $this->notaryRequestWorkflowService->documentsReadyForSession($request)
+        ) {
+            throw new RuntimeException(__('This case uses individual video links for each signed party. Open the Video session tab instead of scheduling one shared room.'));
+        }
+
         if (! $this->notaryRequestWorkflowService->canScheduleSession($request)) {
             throw new RuntimeException(__('This notary request cannot be scheduled right now.'));
         }

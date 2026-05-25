@@ -19,6 +19,8 @@ class NotaryJitsiSchedulingTest extends TestCase
 
     public function test_jitsi_provider_generates_room_and_meeting_url(): void
     {
+        config(['docutrust.notary.auto_invite_signers_to_video' => false]);
+
         $requester = User::factory()->create();
         $request = NotaryRequest::factory()->for($requester)->create([
             'status' => NotaryRequestStatus::Submitted,

@@ -5,7 +5,7 @@
     use App\Models\Payment;
 @endphp
 
-<x-admin.page class="h-full flex-1" gap="gap-6">
+<x-admin.page class="h-full flex-1" gap="gap-6" wide>
     @if (session('status'))
         <div class="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200">
             <svg class="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
@@ -122,7 +122,7 @@
     </div>
 
     <div class="grid items-start gap-6 lg:grid-cols-12">
-        <div class="flex min-w-0 flex-col gap-6 lg:col-span-8 xl:col-span-9">
+        <div class="flex min-w-0 flex-col gap-6 lg:col-span-9 xl:col-span-10">
             @if ($paymentRequired && ! $hasSettledPayment)
                 <div id="section-payment-alert" class="order-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
                     <div class="font-semibold">{{ __('Payment required before notarization can continue') }}</div>
@@ -932,7 +932,7 @@
             @endunless
         </div>
 
-        <aside class="flex flex-col gap-4 lg:col-span-4 xl:col-span-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+        <aside class="flex flex-col gap-4 lg:col-span-3 xl:col-span-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
             <nav class="ui-panel p-5 sm:p-6">
                 <flux:heading size="lg" class="mb-3">{{ __('On this page') }}</flux:heading>
                 <ul class="space-y-1.5 text-sm">

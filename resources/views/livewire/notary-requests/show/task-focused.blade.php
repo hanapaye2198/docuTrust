@@ -3,7 +3,7 @@
     $primaryAction = $this->primaryCaseAction;
 @endphp
 
-<x-admin.page class="h-full flex-1" gap="gap-6">
+<x-admin.page class="h-full flex-1" gap="gap-6" wide>
     @if (session('status'))
         <div class="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200">
             <flux:icon.check class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -144,8 +144,8 @@
         </flux:callout>
     @endif
 
-    <div class="grid items-start gap-6 lg:grid-cols-12">
-        <div class="flex min-w-0 flex-col gap-4 lg:col-span-8 xl:col-span-9">
+    <div class="flex min-w-0 flex-col gap-6">
+        <div class="flex min-w-0 flex-col gap-4">
             <nav class="flex flex-wrap gap-2 border-b border-zinc-200/90 pb-1 dark:border-zinc-800" aria-label="{{ __('Case workspace tabs') }}">
                 <button
                     type="button"
@@ -245,7 +245,7 @@
             </div>
         </div>
 
-        <aside class="flex flex-col gap-4 lg:col-span-4 xl:col-span-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+        <aside class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             @if ($primaryAction)
                 <div class="ui-panel border-sky-200/80 bg-sky-50/50 p-5 dark:border-sky-900/40 dark:bg-sky-950/20">
                     <div class="text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">{{ __('Do this now') }}</div>

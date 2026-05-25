@@ -115,6 +115,10 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         if ($user->role === \App\Enums\UserRole::Notary) {
             $this->activeTab = $this->resolveDefaultAttorneyTab();
+
+            if ($this->activeTab === 'session') {
+                $this->syncVideoPartiesIfReady();
+            }
         }
     }
 
@@ -125,6 +129,10 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
 
         $this->activeTab = $tab;
+
+        if ($tab === 'session') {
+            $this->syncVideoPartiesIfReady();
+        }
     }
 
     /**
@@ -213,6 +221,9 @@ new #[Layout('components.layouts.app')] class extends Component {
             'workflowSteps' => $workflow->workflowSteps($this->notaryRequest),
             'requestDocuments' => $requestDocuments,
             'recentSessions' => $this->notaryRequest->sessions,
+            'partiesForVideo' => (bool) config('docutrust.notary.require_video_session', true)
+                ? app(\App\Services\NotarySignerVideoInvitationService::class)->partiesForVideoVerification($this->notaryRequest)
+                : [],
             'journalEntries' => $this->notaryRequest->journals,
             'latestPayment' => Payment::query()
                 ->where('notary_request_id', $this->notaryRequest->id)
@@ -833,22 +844,39 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
     }
 
-    public function sendSignerVideoInvitations(): void
+    public function sendSignerVideoInvitations(bool $forceResend = false): void
+    {
+        $this->syncVideoPartiesIfReady($forceResend);
+    }
+
+    public function syncVideoPartiesIfReady(bool $forceResend = false): void
     {
         $user = Auth::user();
         abort_unless($user !== null && $user->role->value === 'notary', 403);
         abort_unless((int) $this->notaryRequest->notary_user_id === (int) $user->id, 403);
 
+        if (! config('docutrust.notary.require_video_session', true)) {
+            return;
+        }
+
         try {
             $invited = app(\App\Services\NotarySignerVideoInvitationService::class)
-                ->inviteAllSignersWhenReady($this->notaryRequest->fresh(['signers', 'sessions', 'notary']));
+                ->inviteAllSignersWhenReady(
+                    $this->notaryRequest->fresh(['signers', 'sessions', 'notary', 'documents.documentSigners']),
+                    $forceResend,
+                );
 
             $this->refreshRequest();
-            session()->flash('status', $invited > 0
-                ? __('Video invitations sent to :count signer(s).', ['count' => $invited])
-                : __('Video invitations were already sent to all signers.'));
+
+            if ($forceResend) {
+                session()->flash('status', $invited > 0
+                    ? __('Video invitations sent to :count party(ies).', ['count' => $invited])
+                    : __('Video sessions are ready. Links are shown below for each signed party.'));
+            }
         } catch (\RuntimeException $exception) {
-            $this->addError('sendSignerVideoInvitations', $exception->getMessage());
+            if ($forceResend) {
+                $this->addError('sendSignerVideoInvitations', $exception->getMessage());
+            }
         }
     }
 

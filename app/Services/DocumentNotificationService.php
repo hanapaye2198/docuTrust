@@ -12,6 +12,7 @@ use App\Jobs\SendReminderJob;
 use App\Models\AppNotification;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\NotaryRequest;
 
 class DocumentNotificationService
 {
@@ -76,6 +77,35 @@ class DocumentNotificationService
                 'title' => $document->title,
             ])
         );
+
+        $this->syncVideoInvitationsWhenAllPartiesSigned($document);
+    }
+
+    private function syncVideoInvitationsWhenAllPartiesSigned(Document $document): void
+    {
+        if ($document->notary_request_id === null || ! $this->notarySignerVideoInvitationService->shouldAutoInviteAfterSigning()) {
+            return;
+        }
+
+        $request = NotaryRequest::query()
+            ->with(['documents.documentSigners', 'signers', 'sessions', 'notary'])
+            ->find($document->notary_request_id);
+
+        if ($request === null) {
+            return;
+        }
+
+        if (! app(NotaryRequestWorkflowService::class)->documentsReadyForSession($request)) {
+            return;
+        }
+
+        try {
+            $this->notarySignerVideoInvitationService->inviteAllSignersWhenReady(
+                $request->fresh(['signers', 'sessions', 'notary', 'documents.documentSigners']),
+            );
+        } catch (RuntimeException) {
+            // Parties are not ready for video invitations yet.
+        }
     }
 
     public function sendSignerInvitation(Document $document, DocumentSigner $signer): void
