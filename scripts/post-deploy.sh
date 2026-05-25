@@ -37,10 +37,19 @@ should_run_seeders() {
   esac
 }
 
+# Ensure autoloader is up-to-date (classmap must include seeders)
+if [ -f composer.phar ]; then
+  "$PHP_BIN" composer.phar dump-autoload --optimize --no-interaction 2>/dev/null || true
+elif command -v composer >/dev/null 2>&1; then
+  composer dump-autoload --optimize --no-interaction 2>/dev/null || true
+fi
+
 "$PHP_BIN" artisan migrate --force
 
 if should_run_seeders; then
-  "$PHP_BIN" artisan db:seed --force --class="$SEEDER_CLASS"
+  # Normalize double-backslashes that may arrive from shell escaping
+  NORMALIZED_SEEDER="${SEEDER_CLASS//\\\\/\\}"
+  "$PHP_BIN" artisan db:seed --force --class="$NORMALIZED_SEEDER"
 fi
 
 "$PHP_BIN" artisan optimize:clear
