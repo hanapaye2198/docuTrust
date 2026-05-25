@@ -19,19 +19,29 @@
                 @if (($usesPerSignerVideo ?? false) && $isNotary)
                     <div class="mb-4 flex flex-wrap items-center gap-2">
                         <flux:button
+                            variant="primary"
+                            type="button"
+                            wire:click="openVideoSessionWorkspace"
+                            wire:loading.attr="disabled"
+                            wire:target="openVideoSessionWorkspace,sendSignerVideoInvitations,syncVideoPartiesIfReady"
+                        >
+                            {{ __('Send video links to all signers') }}
+                        </flux:button>
+                        <flux:button
                             variant="outline"
                             type="button"
                             wire:click="sendSignerVideoInvitations(true)"
                             wire:loading.attr="disabled"
-                            wire:target="sendSignerVideoInvitations,syncVideoPartiesIfReady"
+                            wire:target="openVideoSessionWorkspace,sendSignerVideoInvitations,syncVideoPartiesIfReady"
                         >
-                            {{ __('Resend video links by email') }}
+                            {{ __('Resend by email') }}
                         </flux:button>
                         <flux:error name="sendSignerVideoInvitations" />
                     </div>
                 @endif
 
-                @if ($allPartiesSigned && ($usesPerSignerVideo ?? false) && ($partiesForVideo ?? []) !== [])
+                @if ($allPartiesSigned && ($usesPerSignerVideo ?? false))
+                    @if (($partiesForVideo ?? []) !== [])
                     <div class="mb-6 space-y-3">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
@@ -44,7 +54,7 @@
 
                         <div class="space-y-3">
                             @foreach ($partiesForVideo as $party)
-                                <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/50" wire:key="video-party-{{ $party['notary_signer_id'] }}">
+                                <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/50" wire:key="video-party-{{ $party['notary_signer_id'] ?? $party['email'] }}">
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div class="min-w-0 flex-1">
                                             <div class="flex flex-wrap items-center gap-2">
@@ -154,10 +164,11 @@
                             @endforeach
                         </div>
                     </div>
-                @elseif ($isNotary && $allPartiesSigned && ($usesPerSignerVideo ?? false))
-                    <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                        {{ __('All parties have signed. Add party emails on the Parties tab, then resend video links.') }}
-                    </div>
+                    @else
+                        <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                            {{ __('All parties have signed. Click “Send video links to all signers” above to create a personal link for each party.') }}
+                        </div>
+                    @endif
                 @endif
 
                 @if ($canScheduleSession && ! ($usesPerSignerVideo ?? false))

@@ -304,15 +304,16 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
             'signed_at' => now(),
         ]);
 
-        app(NotarySignerVideoInvitationService::class)->inviteAllSignersWhenReady($request->fresh(['signers', 'sessions', 'notary', 'documents.documentSigners']));
-
         $this->actingAs($notary);
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
-            ->set('activeTab', 'session')
+            ->call('openVideoSessionWorkspace')
+            ->assertHasNoErrors()
             ->assertSee('Parties — individual video links')
             ->assertSee('Jane Signer')
             ->assertSee('Personal video link for Jane Signer')
             ->assertSee('enotary/video/');
+
+        Mail::assertSent(NotarySignerVideoInvitationMail::class);
     }
 }

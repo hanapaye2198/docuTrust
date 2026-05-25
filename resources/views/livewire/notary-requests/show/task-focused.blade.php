@@ -144,8 +144,8 @@
         </flux:callout>
     @endif
 
-    <div class="flex min-w-0 flex-col gap-6">
-        <div class="flex min-w-0 flex-col gap-4">
+    <div class="grid items-start gap-6 lg:grid-cols-12" wire:key="case-workspace-{{ $notaryRequest->id }}">
+        <div class="flex min-w-0 flex-col gap-4 lg:col-span-8 xl:col-span-9">
             <nav class="flex flex-wrap gap-2 border-b border-zinc-200/90 pb-1 dark:border-zinc-800" aria-label="{{ __('Case workspace tabs') }}">
                 <button
                     type="button"
@@ -245,11 +245,31 @@
             </div>
         </div>
 
-        <aside class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            @if ($primaryAction)
+        <aside class="flex flex-col gap-4 lg:col-span-4 xl:col-span-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+            @if ($primaryAction && $activeTab !== ($primaryAction['tab'] ?? $activeTab))
                 <div class="ui-panel border-sky-200/80 bg-sky-50/50 p-5 dark:border-sky-900/40 dark:bg-sky-950/20">
                     <div class="text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">{{ __('Do this now') }}</div>
                     <p class="mt-2 text-sm font-semibold text-sky-950 dark:text-sky-100">{{ $primaryAction['label'] }}</p>
+                    <p class="mt-1 text-xs leading-relaxed text-sky-800 dark:text-sky-200">{{ $primaryAction['description'] }}</p>
+                    @if ($primaryAction['type'] === 'wire')
+                        @php
+                            $sidebarWireAction = $primaryAction['action'];
+                            if (! empty($primaryAction['params'])) {
+                                $sidebarWireAction .= '('.collect($primaryAction['params'])->map(fn ($p) => is_numeric($p) ? $p : "'{$p}'")->implode(',').')';
+                            }
+                        @endphp
+                        <flux:button class="mt-3 w-full" variant="primary" size="sm" type="button" wire:click="{{ $sidebarWireAction }}">
+                            {{ $primaryAction['label'] }}
+                        </flux:button>
+                    @elseif (($primaryAction['type'] ?? '') === 'tab')
+                        <flux:button class="mt-3 w-full" variant="primary" size="sm" type="button" wire:click="setActiveTab('{{ $primaryAction['tab'] }}')">
+                            {{ $primaryAction['label'] }}
+                        </flux:button>
+                    @endif
+                </div>
+            @elseif ($primaryAction && ($primaryAction['type'] ?? '') === 'wire' && $activeTab === 'session')
+                <div class="ui-panel border-sky-200/80 bg-sky-50/50 p-5 dark:border-sky-900/40 dark:bg-sky-950/20">
+                    <div class="text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">{{ __('Do this now') }}</div>
                     <p class="mt-1 text-xs leading-relaxed text-sky-800 dark:text-sky-200">{{ $primaryAction['description'] }}</p>
                 </div>
             @elseif ($this->currentWorkflowStep)

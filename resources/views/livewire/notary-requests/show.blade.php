@@ -117,7 +117,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             $this->activeTab = $this->resolveDefaultAttorneyTab();
 
             if ($this->activeTab === 'session') {
-                $this->syncVideoPartiesIfReady();
+                $this->syncVideoPartiesIfReady(notify: false);
             }
         }
     }
@@ -131,8 +131,14 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->activeTab = $tab;
 
         if ($tab === 'session') {
-            $this->syncVideoPartiesIfReady();
+            $this->syncVideoPartiesIfReady(notify: false);
         }
+    }
+
+    public function openVideoSessionWorkspace(): void
+    {
+        $this->activeTab = 'session';
+        $this->syncVideoPartiesIfReady(forceResend: false, notify: true, deliverSynchronously: true);
     }
 
     /**
@@ -844,13 +850,16 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
     }
 
-    public function sendSignerVideoInvitations(bool $forceResend = false): void
+    public function sendSignerVideoInvitations(bool $forceResend = true): void
     {
-        $this->syncVideoPartiesIfReady($forceResend);
+        $this->syncVideoPartiesIfReady(forceResend: $forceResend, notify: true, deliverSynchronously: true);
     }
 
-    public function syncVideoPartiesIfReady(bool $forceResend = false): void
-    {
+    public function syncVideoPartiesIfReady(
+        bool $forceResend = false,
+        bool $notify = false,
+        bool $deliverSynchronously = false,
+    ): void {
         $user = Auth::user();
         abort_unless($user !== null && $user->role->value === 'notary', 403);
         abort_unless((int) $this->notaryRequest->notary_user_id === (int) $user->id, 403);
@@ -864,17 +873,18 @@ new #[Layout('components.layouts.app')] class extends Component {
                 ->inviteAllSignersWhenReady(
                     $this->notaryRequest->fresh(['signers', 'sessions', 'notary', 'documents.documentSigners']),
                     $forceResend,
+                    $deliverSynchronously,
                 );
 
             $this->refreshRequest();
 
-            if ($forceResend) {
+            if ($notify) {
                 session()->flash('status', $invited > 0
-                    ? __('Video invitations sent to :count party(ies).', ['count' => $invited])
-                    : __('Video sessions are ready. Links are shown below for each signed party.'));
+                    ? __('Video invitations sent to :count party(ies). Each signer received their own personal link.', ['count' => $invited])
+                    : __('Video sessions are ready. Personal links for each signed party are listed below.'));
             }
         } catch (\RuntimeException $exception) {
-            if ($forceResend) {
+            if ($notify) {
                 $this->addError('sendSignerVideoInvitations', $exception->getMessage());
             }
         }
@@ -1407,22 +1417,22 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         if ($this->canScheduleSession()) {
             return [
-                'type' => 'tab',
-                'label' => __('Schedule video session'),
-                'description' => __('All signers have signed. Schedule identity verification.'),
+                'type' => 'wire',
+                'label' => __('Send video links to signers'),
+                'description' => __('All signers have signed. Email each party their personal video link.'),
                 'variant' => 'primary',
-                'tab' => 'session',
+                'action' => 'openVideoSessionWorkspace',
             ];
         }
 
         $inProgressSession = $request->sessions->first(fn ($session): bool => in_array($session->status, ['scheduled', 'in_progress'], true));
         if ($inProgressSession !== null) {
             return [
-                'type' => 'tab',
-                'label' => $inProgressSession->status === 'in_progress' ? __('Join video session') : __('Open video session'),
-                'description' => __('Complete the live verification with signers.'),
+                'type' => 'wire',
+                'label' => $inProgressSession->status === 'in_progress' ? __('Join video session') : __('Send video links & open session'),
+                'description' => __('Email personal video links to each signed party, then complete verification.'),
                 'variant' => 'primary',
-                'tab' => 'session',
+                'action' => 'openVideoSessionWorkspace',
             ];
         }
 
@@ -1470,11 +1480,11 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         if ($signingProgress['phase'] === 'awaiting_video') {
             return [
-                'type' => 'tab',
-                'label' => __('Complete video verification'),
+                'type' => 'wire',
+                'label' => __('Send video links to signers'),
                 'description' => $signingProgress['summary'],
                 'variant' => 'primary',
-                'tab' => 'session',
+                'action' => 'openVideoSessionWorkspace',
             ];
         }
 
@@ -1492,11 +1502,11 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($pendingDocument !== null) {
             if ($signingProgress['all_client_signatures_complete'] && ! ($signingProgress['video_verification_complete'] ?? false)) {
                 return [
-                    'type' => 'tab',
-                    'label' => __('Continue to video session'),
+                    'type' => 'wire',
+                    'label' => __('Send video links to signers'),
                     'description' => $signingProgress['summary'],
                     'variant' => 'primary',
-                    'tab' => 'session',
+                    'action' => 'openVideoSessionWorkspace',
                 ];
             }
 
