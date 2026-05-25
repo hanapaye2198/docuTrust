@@ -65,6 +65,7 @@ function createPrepareSession(cfgEl) {
     const signers = Array.isArray(config.signers) ? config.signers : [];
     const normalizedFirstSignerId = Number(firstSignerId) > 0 ? Number(firstSignerId) : null;
     const initialFields = Array.isArray(config.initialFields) ? config.initialFields : [];
+    const initialPage = Number(config.initialPage) > 0 ? Number(config.initialPage) : 1;
     const signerPagesUrl = config.signerPagesUrl || '';
     const pdfCanvas = document.getElementById('pdf-canvas');
     const fabricEl = document.getElementById('fabric-canvas');
@@ -888,6 +889,7 @@ function createPrepareSession(cfgEl) {
         }
 
         totalPages = pdfDoc.numPages || 1;
+        currentPage = Math.min(initialPage, totalPages);
 
         initialFields.forEach((field) => {
             const pageNumber = Number(field.page_number) > 0 ? Number(field.page_number) : 1;
@@ -1047,6 +1049,17 @@ function createPrepareSession(cfgEl) {
 
             const fields = collectFields();
             fieldsPayload.value = JSON.stringify(fields);
+
+            // Append current page number so the redirect returns to the same page
+            let pageInput = saveFieldsForm.querySelector('input[name="return_to_page"]');
+            if (!pageInput) {
+                pageInput = document.createElement('input');
+                pageInput.type = 'hidden';
+                pageInput.name = 'return_to_page';
+                saveFieldsForm.appendChild(pageInput);
+            }
+            pageInput.value = String(currentPage);
+
             saveFieldsForm.submit();
         });
 

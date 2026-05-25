@@ -191,8 +191,10 @@ class DocumentPrepareController extends Controller
             ? 'notary.documents.prepare'
             : 'documents.prepare';
 
+        $returnToPage = (int) $request->input('return_to_page', 1);
+
         return redirect()
-            ->route($redirectRoute, $document)
+            ->route($redirectRoute, ['document' => $document, 'page' => $returnToPage > 0 ? $returnToPage : 1])
             ->with('status', __('Signature fields saved.'));
     }
 

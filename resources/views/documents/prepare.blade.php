@@ -258,6 +258,7 @@
                 'firstSignerId' => $firstSignerId,
                 'signers' => $signers,
                 'initialFields' => $initialFields,
+                'initialPage' => (int) request()->query('page', 1) ?: 1,
                 'signerPagesUrl' => route(auth()->user()?->role->value === 'notary' ? 'notary.documents.signer-pages.store' : 'documents.signer-pages.store', $document),
                 'messages' => [
                     'saved' => __('Saved'),
