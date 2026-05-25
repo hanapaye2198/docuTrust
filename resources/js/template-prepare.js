@@ -101,6 +101,7 @@ function createPrepareSession(cfgEl) {
     let currentPage = 1;
     let totalPages = 1;
     let isRenderingPage = true;
+    let isLoadingPageFields = false;
     let hasUnsavedChanges = false;
     let isSaving = false;
     let dragFieldType = null;
@@ -364,7 +365,7 @@ function createPrepareSession(cfgEl) {
     }
 
     function saveCurrentPageFields() {
-        if (!fabricCanvas || destroyed) {
+        if (!fabricCanvas || destroyed || isLoadingPageFields) {
             return;
         }
 
@@ -376,6 +377,7 @@ function createPrepareSession(cfgEl) {
             return;
         }
 
+        isLoadingPageFields = true;
         fabricCanvas.clear();
 
         const fields = pageFields.get(currentPage) || [];
@@ -384,6 +386,7 @@ function createPrepareSession(cfgEl) {
             fabricCanvas.add(group);
         });
 
+        isLoadingPageFields = false;
         restoreSelectionByClientId(fabricCanvas, selectedFieldClientId);
     }
 
