@@ -55,6 +55,7 @@ class DocumentPrepareController extends Controller
                     'id' => (int) $signer->id,
                     'name' => (string) $signer->name,
                     'email' => (string) $signer->email,
+                    'allowed_pages' => $signer->allowed_pages,
                 ];
             })
             ->values();
@@ -79,6 +80,7 @@ class DocumentPrepareController extends Controller
                         'id' => (int) $signer->id,
                         'name' => (string) $signer->name,
                         'email' => (string) $signer->email,
+                        'allowed_pages' => $signer->allowed_pages,
                     ];
                 })
                 ->values();

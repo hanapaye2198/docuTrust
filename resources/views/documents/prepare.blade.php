@@ -134,6 +134,24 @@
                         ];
                     @endphp
 
+                    @if (count($signers) > 1 && ! ($isAttorneySigningPhase ?? false))
+                    <section id="signer-page-assignments" class="rounded-2xl border border-zinc-200/80 bg-zinc-50/90 px-4 py-4 text-sm dark:border-zinc-800 dark:bg-zinc-900/70">
+                        <button type="button" id="toggle-page-assignments" class="flex w-full items-center justify-between gap-2 text-left">
+                            <h2 class="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{{ __('Signer page assignments') }}</h2>
+                            <svg id="page-assignments-chevron" class="size-4 text-zinc-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19 9-7 7-7-7"/></svg>
+                        </button>
+                        <div id="page-assignments-body" class="mt-3 hidden space-y-3">
+                            <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Configure which pages each signer can sign on. The signer dropdown will filter based on the current page.') }}</p>
+                            <div id="page-assignments-list" class="space-y-3">
+                                {{-- Dynamically populated by JS after PDF page count is known --}}
+                            </div>
+                            <button type="button" id="btn-save-page-assignments" class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-950/60">
+                                {{ __('Save assignments') }}
+                            </button>
+                        </div>
+                    </section>
+                    @endif
+
                     <section>
                         <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{{ __('Standard fields') }}</h2>
                         <div class="mt-3 space-y-2">
@@ -203,6 +221,21 @@
                 <div id="pdf-load-error" class="m-4 mb-0 hidden rounded-xl border border-red-200/90 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100"></div>
                 <div class="flex min-h-0 flex-1 items-start justify-center overflow-auto p-4 sm:p-6">
                     <div id="pdf-shell" class="relative inline-block min-h-[200px] min-w-[200px] shrink-0 rounded-2xl bg-white ring-1 ring-zinc-200/80 shadow-[0_18px_50px_rgba(15,23,42,0.08)] dark:bg-zinc-950 dark:ring-zinc-700/80">
+                        <div
+                            id="pdf-loading-indicator"
+                            class="absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-white/88 px-6 text-center backdrop-blur-sm dark:bg-zinc-950/88"
+                            role="status"
+                            aria-live="polite"
+                            aria-atomic="true"
+                        >
+                            <div class="w-full max-w-xs space-y-4">
+                                <div class="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-zinc-200 border-t-teal-500 dark:border-zinc-700 dark:border-t-teal-400"></div>
+                                <div class="space-y-1.5">
+                                    <p id="pdf-loading-label" class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Loading document...') }}</p>
+                                    <p id="pdf-loading-progress" class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Preparing secure preview') }}</p>
+                                </div>
+                            </div>
+                        </div>
                         <canvas id="pdf-canvas" class="relative z-0 block max-w-none rounded-xl bg-white shadow-sm"></canvas>
                         <canvas id="fabric-canvas" class="absolute left-0 top-0 z-20 block"></canvas>
                     </div>
@@ -225,16 +258,23 @@
                 'firstSignerId' => $firstSignerId,
                 'signers' => $signers,
                 'initialFields' => $initialFields,
+                'signerPagesUrl' => route(auth()->user()?->role->value === 'notary' ? 'notary.documents.signer-pages.store' : 'documents.signer-pages.store', $document),
                 'messages' => [
                     'saved' => __('Saved'),
                     'saving' => __('Saving...'),
                     'unsaved' => __('Unsaved changes'),
                     'none' => __('None'),
                     'selected' => __('Selected'),
+                    'loadingDocument' => __('Loading document...'),
+                    'loadingProgress' => __('Preparing secure preview'),
+                    'renderingPage' => __('Rendering page :page of :total...', ['page' => '__PAGE__', 'total' => '__TOTAL__']),
                     'previewLoading' => __('Preview still loading. Please wait a second, then try again.'),
                     'noSigner' => __('No signer found. Add at least one signer first.'),
                     'loadFailed' => __('Unable to load document preview. Please refresh the page and try again.'),
                     'saveBeforeSend' => __('Save your latest field changes before sending to signer.'),
+                    'pageAssignmentsSaved' => __('Page assignments saved.'),
+                    'pageAssignmentsFailed' => __('Failed to save page assignments.'),
+                    'signerNotAllowedOnPage' => __('This signer is not assigned to this page.'),
                 ],
             ]) !!}
         </script>

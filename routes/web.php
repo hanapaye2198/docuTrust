@@ -5,6 +5,7 @@ use App\Http\Controllers\AIController;
 use App\Http\Controllers\DocumentCertificateController;
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\DocumentPrepareController;
+use App\Http\Controllers\DocumentSignerPagesController;
 use App\Http\Controllers\DocumentStreamController;
 use App\Http\Controllers\EmailInfrastructureExampleController;
 use App\Http\Controllers\MarketingChatbotController;
@@ -105,6 +106,8 @@ Route::middleware(['auth', 'role:super_admin'])->group(function () {
         Route::get('report.pdf', [SignatureComplianceController::class, 'downloadPdf'])
             ->name('report.pdf');
     });
+    Volt::route('notary-admin/einvoices', 'notary-admin.einvoices')->name('notary-admin.einvoices');
+    Volt::route('notary-admin/billing-profile', 'notary-admin.billing-profile')->name('notary-admin.billing-profile');
 });
 
 Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function () {
@@ -120,6 +123,7 @@ Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function 
     Route::get('notary/documents/{document}/stream', DocumentStreamController::class)->name('notary.documents.stream');
     Route::get('notary/documents/{document}/prepare', [DocumentPrepareController::class, 'show'])->name('notary.documents.prepare');
     Route::post('notary/documents/{document}/signature-fields', [DocumentPrepareController::class, 'store'])->name('notary.documents.signature-fields.store');
+    Route::post('notary/documents/{document}/signer-pages', DocumentSignerPagesController::class)->name('notary.documents.signer-pages.store');
     Route::post('notary/documents/{document}/send', [DocumentPrepareController::class, 'send'])->name('notary.documents.send');
 });
 
@@ -152,6 +156,7 @@ Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(funct
         Route::get('documents/{document}/certificate/download', [DocumentCertificateController::class, 'download'])->name('documents.certificate.download');
         Route::get('documents/{document}/prepare', [DocumentPrepareController::class, 'show'])->name('documents.prepare');
         Route::post('documents/{document}/signature-fields', [DocumentPrepareController::class, 'store'])->name('documents.signature-fields.store');
+        Route::post('documents/{document}/signer-pages', DocumentSignerPagesController::class)->name('documents.signer-pages.store');
         Route::post('documents/{document}/send', [DocumentPrepareController::class, 'send'])->name('documents.send');
 
         Volt::route('templates', 'templates.index')->name('templates.index');
