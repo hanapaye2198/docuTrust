@@ -1070,6 +1070,14 @@ function createSignViewSession(cfgEl) {
                     hoverCursor: currentCanEditFields ? 'pointer' : 'default',
                 });
 
+                // Apply field rotation to all signed elements
+                if (rect.angle) {
+                    target.angle = rect.angle;
+                    target.setCoords && target.setCoords();
+                    badge.angle = rect.angle;
+                    hitbox.angle = rect.angle;
+                }
+
                 if (currentCanEditFields) {
                     hitbox.on('mousedown', (event) => {
                         event.e.preventDefault();
