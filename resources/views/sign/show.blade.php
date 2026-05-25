@@ -300,6 +300,21 @@
                     id="pdf-shell"
                     class="relative inline-block min-h-[200px] min-w-[200px] overflow-hidden rounded-xl shadow-xl shadow-zinc-950/15 ring-1 ring-zinc-300/70 dark:shadow-black/50 dark:ring-zinc-600/80"
                 >
+                    <div
+                        id="pdf-loading-indicator"
+                        class="absolute inset-0 z-30 flex items-center justify-center bg-white/88 px-6 text-center backdrop-blur-sm dark:bg-zinc-950/88"
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        <div class="w-full max-w-xs space-y-4">
+                            <div class="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-zinc-200 border-t-teal-500 dark:border-zinc-700 dark:border-t-teal-400"></div>
+                            <div class="space-y-1.5">
+                                <p id="pdf-loading-label" class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Loading document...') }}</p>
+                                <p id="pdf-loading-progress" class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Preparing secure preview') }}</p>
+                            </div>
+                        </div>
+                    </div>
                     <canvas id="pdf-canvas" class="block max-w-none rounded-[0.65rem] bg-white"></canvas>
                     <canvas id="fabric-canvas" class="absolute left-0 top-0 z-10 block rounded-lg"></canvas>
                 </div>
@@ -429,6 +444,10 @@
                             ]),
                     ],
                     'messages' => [
+                        'loadingDocument' => __('Loading document...'),
+                        'loadingProgress' => __('Preparing secure preview'),
+                        'renderingPage' => __('Rendering page :page of :total...', ['page' => '__PAGE__', 'total' => '__TOTAL__']),
+                        'loadFailed' => __('Unable to load the document. Please refresh the page and try again.'),
                         'signed' => __('Signed'),
                         'fieldSaved' => __('Field saved.'),
                         'genericSaveError' => __('Unable to save your signature right now. Please try again.'),

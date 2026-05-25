@@ -23,7 +23,7 @@ class DocumentArchiveService
         $archiveDisk = Storage::disk($archiveDiskName);
 
         $archiveDocumentPath = $this->archiveDocumentFile($document, $workingDiskName, $workingDisk, $archiveDiskName, $archiveDisk);
-        $archiveCertificatePath = $this->archiveCertificateFile($document, $archiveDiskName, $archiveDisk);
+        $archiveCertificatePath = $this->archiveCertificateFile($document, $workingDiskName, $archiveDiskName, $archiveDisk);
 
         $document->forceFill([
             'archive_storage_disk' => $archiveDiskName,
@@ -70,7 +70,7 @@ class DocumentArchiveService
         return $archivePath;
     }
 
-    private function archiveCertificateFile(Document $document, string $archiveDiskName, mixed $archiveDisk): ?string
+    private function archiveCertificateFile(Document $document, string $workingDiskName, string $archiveDiskName, mixed $archiveDisk): ?string
     {
         $path = $document->certificate_path;
         if (! is_string($path) || $path === '') {
@@ -85,13 +85,13 @@ class DocumentArchiveService
             return $path;
         }
 
-        $localDisk = Storage::disk('local');
-        if (! $localDisk->exists($path)) {
+        $workingDisk = Storage::disk($workingDiskName);
+        if (! $workingDisk->exists($path)) {
             return null;
         }
 
         $archivePath = sprintf('archives/certificates/%d/%s.pdf', $document->id, Str::uuid()->toString());
-        $archiveDisk->put($archivePath, $localDisk->get($path));
+        $archiveDisk->put($archivePath, $workingDisk->get($path));
 
         return $archivePath;
     }

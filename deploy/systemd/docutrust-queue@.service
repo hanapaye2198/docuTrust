@@ -1,0 +1,24 @@
+[Unit]
+Description=DocuTrust Laravel Queue Worker (%i)
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/docutrust/current
+EnvironmentFile=-/etc/default/docutrust-queue
+Environment=QUEUE_CONNECTION=redis
+Environment=QUEUE_SLEEP=1
+Environment=QUEUE_TRIES=3
+Environment=QUEUE_TIMEOUT=90
+Environment=QUEUE_MAX_TIME=3600
+Environment=QUEUE_MEMORY=512
+ExecStart=/bin/sh -lc 'INSTANCE="%i"; QUEUE_NAME="${QUEUE_NAME:-$(printf "%s" "$INSTANCE" | sed "s/-[0-9][0-9]*$//")}"; exec /usr/bin/php artisan queue:work "${QUEUE_CONNECTION}" --queue="${QUEUE_NAME}" --sleep="${QUEUE_SLEEP}" --tries="${QUEUE_TRIES}" --timeout="${QUEUE_TIMEOUT}" --max-time="${QUEUE_MAX_TIME}" --memory="${QUEUE_MEMORY}" ${QUEUE_EXTRA_ARGS:-}'
+Restart=always
+RestartSec=5
+TimeoutStopSec=120
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -7,13 +7,16 @@ use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use setasign\Fpdi\Fpdi;
 use Throwable;
 
 class NotarySealService
 {
     use ResolvesSecureDisk;
+
+    public function __construct(
+        private readonly DocumentStorageService $documentStorageService,
+    ) {}
 
     /**
      * Apply the notary seal and signature to a document PDF.
@@ -23,7 +26,7 @@ class NotarySealService
         NotaryCredential $credential,
         NotarialRegisterEntry $entry,
     ): ?string {
-        $disk = Storage::disk($this->secureDiskName());
+        $disk = $this->documentStorageService->secureDisk();
 
         if (! $disk->exists($sourcePdfPath)) {
             return null;
@@ -31,7 +34,10 @@ class NotarySealService
 
         try {
             $pdf = new Fpdi;
-            $pageCount = $pdf->setSourceFile($disk->path($sourcePdfPath));
+            $pageCount = $this->documentStorageService->withTemporaryLocalPath(
+                $sourcePdfPath,
+                fn (string $localSourcePath): int => $pdf->setSourceFile($localSourcePath)
+            );
 
             for ($pageNumber = 1; $pageNumber <= $pageCount; $pageNumber++) {
                 $templateId = $pdf->importPage($pageNumber);
@@ -46,13 +52,10 @@ class NotarySealService
             $pdf->AddPage('P', [215.9, 279.4]); // Letter size
             $this->renderSealPage($pdf, $credential, $entry);
 
-            $outputPath = sprintf(
-                'documents/notarized/%s-notarized-%s.pdf',
+            $outputPath = $this->documentStorageService->storeNotarizedDocumentPdf(
                 $entry->notary_request_id,
-                Str::uuid()->toString()
+                $pdf->Output('S')
             );
-
-            $disk->put($outputPath, $pdf->Output('S'));
 
             return $outputPath;
         } catch (Throwable $throwable) {
@@ -88,8 +91,10 @@ class NotarySealService
                     continue;
                 }
 
-                $path = sprintf('notary/qr/%s.png', $entry->qr_verification_token);
-                Storage::disk($this->secureDiskName())->put($path, $qrContent);
+                $path = $this->documentStorageService->storeVerificationQrCode(
+                    $entry->qr_verification_token,
+                    $qrContent
+                );
 
                 $entry->update(['qr_code_path' => $path]);
 
@@ -191,10 +196,15 @@ class NotarySealService
 
         // Seal image
         if ($credential->seal_image_path !== null && $credential->seal_image_path !== '') {
-            $disk = Storage::disk($this->secureDiskName());
+            $disk = $this->documentStorageService->secureDisk();
             if ($disk->exists($credential->seal_image_path)) {
                 try {
-                    $pdf->Image($disk->path($credential->seal_image_path), 25, $y - 30, 40, 40);
+                    $this->documentStorageService->withTemporaryLocalPath(
+                        $credential->seal_image_path,
+                        function (string $localSealPath) use ($pdf, $y): void {
+                            $pdf->Image($localSealPath, 25, $y - 30, 40, 40);
+                        }
+                    );
                 } catch (Throwable) {
                     // Seal image rendering failed, continue without it
                 }

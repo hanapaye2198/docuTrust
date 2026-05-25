@@ -16,7 +16,10 @@ class GenerateCertificateJob implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public int $documentId) {}
+    public function __construct(public int $documentId)
+    {
+        $this->onQueue((string) config('docutrust.queues.documents'));
+    }
 
     /**
      * Execute the job.

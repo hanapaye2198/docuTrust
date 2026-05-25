@@ -17,7 +17,9 @@ class SendOtpMail extends Mailable implements ShouldQueue
         public string $otp,
         public string $purpose = 'verification',
         public int $expiresInMinutes = 5,
-    ) {}
+    ) {
+        $this->onQueue((string) config('docutrust.queues.notifications'));
+    }
 
     public function envelope(): Envelope
     {

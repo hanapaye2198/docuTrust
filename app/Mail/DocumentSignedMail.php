@@ -18,7 +18,9 @@ class DocumentSignedMail extends Mailable implements ShouldQueue
     public function __construct(
         public Document $document,
         public DocumentSigner $signer,
-    ) {}
+    ) {
+        $this->onQueue((string) config('docutrust.queues.notifications'));
+    }
 
     /**
      * Get the message envelope.

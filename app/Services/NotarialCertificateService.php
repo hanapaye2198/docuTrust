@@ -7,7 +7,6 @@ use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
@@ -15,6 +14,10 @@ use Throwable;
 class NotarialCertificateService
 {
     use ResolvesSecureDisk;
+
+    public function __construct(
+        private readonly DocumentStorageService $documentStorageService,
+    ) {}
 
     /**
      * Generate a notarial certificate PDF for a register entry.
@@ -43,20 +46,16 @@ class NotarialCertificateService
         }
 
         try {
-            $pdf = Pdf::loadView('certificates.notarial', [
-                'entry' => $entry,
-                'credential' => $credential,
-            ])->setPaper('a4');
+            $output = $this->renderCertificatePdf($entry, $credential);
 
-            $path = sprintf(
-                'certificates/notarial/%s-%s.pdf',
-                $entry->notary_request_id,
-                Str::uuid()->toString()
+            return $this->documentStorageService->storeCertificatePdf(
+                $output,
+                sprintf(
+                    'certificates/notarial/%s-%s.pdf',
+                    $entry->notary_request_id,
+                    Str::uuid()->toString()
+                )
             );
-
-            Storage::disk($this->secureDiskName())->put($path, $pdf->output());
-
-            return $path;
         } catch (Throwable $throwable) {
             if (app()->environment('production')) {
                 throw $throwable;
@@ -71,5 +70,27 @@ class NotarialCertificateService
 
             return null;
         }
+    }
+
+    private function renderCertificatePdf(NotarialRegisterEntry $entry, NotaryCredential $credential): string
+    {
+        $qrCodePath = $entry->qr_code_path;
+        if (! is_string($qrCodePath) || $qrCodePath === '') {
+            return $this->makeCertificatePdf($entry, $credential, null);
+        }
+
+        return $this->documentStorageService->withTemporaryLocalPath(
+            $qrCodePath,
+            fn (string $localQrImagePath): string => $this->makeCertificatePdf($entry, $credential, $localQrImagePath)
+        );
+    }
+
+    private function makeCertificatePdf(NotarialRegisterEntry $entry, NotaryCredential $credential, ?string $qrCodeImagePath): string
+    {
+        return Pdf::loadView('certificates.notarial', [
+            'entry' => $entry,
+            'credential' => $credential,
+            'qrCodeImagePath' => $qrCodeImagePath,
+        ])->setPaper('a4')->output();
     }
 }

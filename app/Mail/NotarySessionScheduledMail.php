@@ -18,7 +18,9 @@ class NotarySessionScheduledMail extends Mailable implements ShouldQueue
     public function __construct(
         public readonly NotaryRequest $notaryRequest,
         public readonly NotarySession $notarySession,
-    ) {}
+    ) {
+        $this->onQueue((string) config('docutrust.queues.notifications'));
+    }
 
     public function envelope(): Envelope
     {

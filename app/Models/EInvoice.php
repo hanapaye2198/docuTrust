@@ -6,6 +6,7 @@ use App\Enums\EInvoiceStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class EInvoice extends Model
 {
@@ -108,6 +109,14 @@ class EInvoice extends Model
      */
     public function submissions(): HasMany
     {
-        return $this->hasMany(EInvoiceSubmission::class)->latest('created_at');
+        return $this->hasMany(EInvoiceSubmission::class, 'einvoice_id')->latest('created_at');
+    }
+
+    /**
+     * @return HasOne<EInvoiceSubmission, $this>
+     */
+    public function latestSubmission(): HasOne
+    {
+        return $this->hasOne(EInvoiceSubmission::class, 'einvoice_id')->latestOfMany();
     }
 }

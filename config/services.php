@@ -66,6 +66,11 @@ return [
         'base_url' => env('EIS_BASE_URL', ''),
         'timeout' => env('EIS_TIMEOUT', 30),
         'public_key_path' => env('EIS_PUBLIC_KEY_PATH', ''),
+        'signing_private_key_path' => env('EIS_SIGNING_PRIVATE_KEY_PATH', ''),
+        'rsa_padding' => env('EIS_RSA_PADDING', 'pkcs1'),
+        'auth_endpoint' => env('EIS_AUTH_ENDPOINT', '/api/authentication'),
+        'submit_endpoint' => env('EIS_SUBMIT_ENDPOINT', ''),
+        'inquiry_endpoint' => env('EIS_INQUIRY_ENDPOINT', ''),
         'callback_url' => env('EIS_CALLBACK_URL', ''),
     ],
 

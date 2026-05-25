@@ -24,7 +24,9 @@ class SignerInvitationMail extends Mailable implements ShouldQueue
         public ?string $customSubject = null,
         public ?string $customMessage = null,
         public string $participantRoleType = 'signer',
-    ) {}
+    ) {
+        $this->onQueue((string) config('docutrust.queues.notifications'));
+    }
 
     public function envelope(): Envelope
     {

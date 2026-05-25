@@ -1,10 +1,10 @@
 <?php
 
 use App\Enums\DocumentStatus;
+use App\Enums\TemplateRoleType;
 use App\Models\NotaryRequest;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Layout;
@@ -14,6 +14,12 @@ use Livewire\WithPagination;
 
 new #[Layout('components.layouts.app')] class extends Component {
     use WithPagination;
+
+    private const CLOSED_STATUSES = ['rejected', 'failed', 'notarized', 'cancelled'];
+
+    private const PER_PAGE = 10;
+
+    private const SEQUENTIAL_SIGNING_WORKFLOW = 'sequential';
 
     #[Url(as: 'q')]
     public string $search = '';
@@ -47,20 +53,17 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->resetPage();
     }
 
-    public function with(): array
+    protected function baseRequestQuery(User $user): Builder
     {
-        $user = Auth::user();
-        abort_unless($user !== null, 401);
-
         $isNotaryView = $user->role->value === 'notary';
         $isNotaryAdmin = $user->role->value === 'notary_admin';
 
-        $requestsCollection = NotaryRequest::query()
-            ->with(['requester', 'notary', 'organization', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash'])
+        return NotaryRequest::query()
+            ->with(['requester', 'notary', 'organization'])
             ->when($isNotaryView, function (Builder $builder) use ($user): void {
                 $builder->where('notary_user_id', $user->id);
             })
-            ->when(!$isNotaryView && !$isNotaryAdmin, function (Builder $builder) use ($user): void {
+            ->when(! $isNotaryView && ! $isNotaryAdmin, function (Builder $builder) use ($user): void {
                 $builder->where('organization_id', $user->organization_id);
             })
             ->when($this->search !== '', function (Builder $builder): void {
@@ -72,11 +75,204 @@ new #[Layout('components.layouts.app')] class extends Component {
                         ->orWhereHas('notary', fn (Builder $notary) => $notary->where('name', 'like', '%'.$this->search.'%'));
                 });
             })
-            ->when($this->statusFilter !== 'all', fn (Builder $builder) => $builder->where('status', $this->statusFilter))
-            ->latest('created_at')
-            ->get();
+            ->when($this->statusFilter !== 'all', fn (Builder $builder) => $builder->where('status', $this->statusFilter));
+    }
 
-        $requestSummaries = $requestsCollection->mapWithKeys(function (NotaryRequest $request): array {
+    protected function filteredRequestQuery(User $user): Builder
+    {
+        $query = $this->baseRequestQuery($user);
+
+        $this->applyQueueFilter($query, $this->queueFilter);
+        $this->applyTrustFilter($query, $this->trustFilter);
+
+        return $query;
+    }
+
+    protected function applyQueueFilter(Builder $builder, string $queueFilter): void
+    {
+        switch ($queueFilter) {
+            case 'awaiting_signatures':
+                $builder->whereHas('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Pending->value));
+
+                return;
+
+            case 'ready_to_send':
+                $builder
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Pending->value))
+                    ->whereHas('documents', fn (Builder $documents) => $this->applyReadyDraftDocumentConstraint($documents));
+
+                return;
+
+            case 'blocked':
+                $builder
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Pending->value))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyReadyDraftDocumentConstraint($documents))
+                    ->whereHas('documents', fn (Builder $documents) => $this->applyBlockedDraftDocumentConstraint($documents));
+
+                return;
+
+            case 'completed_documents':
+                $builder
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Pending->value))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyReadyDraftDocumentConstraint($documents))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyBlockedDraftDocumentConstraint($documents))
+                    ->whereHas('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Completed->value));
+
+                return;
+
+            case 'empty':
+                $builder
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Pending->value))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyReadyDraftDocumentConstraint($documents))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyBlockedDraftDocumentConstraint($documents))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Completed->value));
+
+                return;
+        }
+    }
+
+    protected function applyTrustFilter(Builder $builder, string $trustFilter): void
+    {
+        switch ($trustFilter) {
+            case 'trust_ready':
+                $builder
+                    ->whereHas('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Completed->value))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyMissingCertificateDocumentConstraint($documents))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyMissingHashDocumentConstraint($documents))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyMissingBlockchainDocumentConstraint($documents));
+
+                return;
+
+            case 'missing_certificate':
+                $builder
+                    ->whereHas('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Completed->value))
+                    ->whereHas('documents', fn (Builder $documents) => $this->applyMissingCertificateDocumentConstraint($documents));
+
+                return;
+
+            case 'missing_hash':
+                $builder
+                    ->whereHas('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Completed->value))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyMissingCertificateDocumentConstraint($documents))
+                    ->whereHas('documents', fn (Builder $documents) => $this->applyMissingHashDocumentConstraint($documents));
+
+                return;
+
+            case 'missing_blockchain':
+                $builder
+                    ->whereHas('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Completed->value))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyMissingCertificateDocumentConstraint($documents))
+                    ->whereDoesntHave('documents', fn (Builder $documents) => $this->applyMissingHashDocumentConstraint($documents))
+                    ->whereHas('documents', fn (Builder $documents) => $this->applyMissingBlockchainDocumentConstraint($documents));
+
+                return;
+
+            case 'not_applicable':
+                $builder->whereDoesntHave('documents', fn (Builder $documents) => $documents->where('status', DocumentStatus::Completed->value));
+
+                return;
+        }
+    }
+
+    protected function applyReadyDraftDocumentConstraint(Builder $builder): void
+    {
+        $builder
+            ->where('status', DocumentStatus::Draft->value)
+            ->whereHas('documentSigners', fn (Builder $signers) => $signers->where('role_type', TemplateRoleType::Signer->value))
+            ->whereHas('signatureFields')
+            ->whereDoesntHave('documentSigners', function (Builder $signers): void {
+                $signers
+                    ->where('role_type', TemplateRoleType::Signer->value)
+                    ->whereDoesntHave('signatureFields');
+            })
+            ->where(function (Builder $workflow): void {
+                $workflow
+                    ->whereRaw('COALESCE(signing_workflow, ?) != ?', [self::SEQUENTIAL_SIGNING_WORKFLOW, self::SEQUENTIAL_SIGNING_WORKFLOW])
+                    ->orWhereRaw(
+                        "(SELECT MIN(ds.signing_order) FROM document_signers ds WHERE ds.document_id = documents.id) = 1
+                        AND (SELECT MAX(ds.signing_order) FROM document_signers ds WHERE ds.document_id = documents.id) = (SELECT COUNT(*) FROM document_signers ds WHERE ds.document_id = documents.id)
+                        AND (SELECT COUNT(DISTINCT ds.signing_order) FROM document_signers ds WHERE ds.document_id = documents.id) = (SELECT COUNT(*) FROM document_signers ds WHERE ds.document_id = documents.id)"
+                    );
+            });
+    }
+
+    protected function applyBlockedDraftDocumentConstraint(Builder $builder): void
+    {
+        $builder
+            ->where('status', DocumentStatus::Draft->value)
+            ->where(function (Builder $draft): void {
+                $draft
+                    ->whereDoesntHave('documentSigners', fn (Builder $signers) => $signers->where('role_type', TemplateRoleType::Signer->value))
+                    ->orWhereDoesntHave('signatureFields')
+                    ->orWhereHas('documentSigners', function (Builder $signers): void {
+                        $signers
+                            ->where('role_type', TemplateRoleType::Signer->value)
+                            ->whereDoesntHave('signatureFields');
+                    })
+                    ->orWhere(function (Builder $workflow): void {
+                        $workflow
+                            ->whereRaw('COALESCE(signing_workflow, ?) = ?', [self::SEQUENTIAL_SIGNING_WORKFLOW, self::SEQUENTIAL_SIGNING_WORKFLOW])
+                            ->whereRaw(
+                                "(SELECT MIN(ds.signing_order) FROM document_signers ds WHERE ds.document_id = documents.id) != 1
+                                OR (SELECT MAX(ds.signing_order) FROM document_signers ds WHERE ds.document_id = documents.id) != (SELECT COUNT(*) FROM document_signers ds WHERE ds.document_id = documents.id)
+                                OR (SELECT COUNT(DISTINCT ds.signing_order) FROM document_signers ds WHERE ds.document_id = documents.id) != (SELECT COUNT(*) FROM document_signers ds WHERE ds.document_id = documents.id)"
+                            );
+                    });
+            });
+    }
+
+    protected function applyMissingCertificateDocumentConstraint(Builder $builder): void
+    {
+        $builder
+            ->where('status', DocumentStatus::Completed->value)
+            ->where(function (Builder $documents): void {
+                $documents->whereNull('certificate_path')->orWhere('certificate_path', '');
+            });
+    }
+
+    protected function applyMissingHashDocumentConstraint(Builder $builder): void
+    {
+        $builder
+            ->where('status', DocumentStatus::Completed->value)
+            ->where(function (Builder $documents): void {
+                $documents
+                    ->whereDoesntHave('documentHash')
+                    ->orWhereHas('documentHash', function (Builder $hashes): void {
+                        $hashes->whereNull('hash')->orWhere('hash', '');
+                    });
+            });
+    }
+
+    protected function applyMissingBlockchainDocumentConstraint(Builder $builder): void
+    {
+        $builder
+            ->where('status', DocumentStatus::Completed->value)
+            ->whereHas('documentHash')
+            ->where(function (Builder $documents): void {
+                $documents->whereDoesntHave('documentHash', function (Builder $hashes): void {
+                    $hashes->whereNotNull('hash')->where('hash', '!=', '');
+                })->orWhereHas('documentHash', function (Builder $hashes): void {
+                    $hashes->whereNull('transaction_id')->orWhere('transaction_id', '');
+                });
+            });
+    }
+
+    public function with(): array
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        $isNotaryView = $user->role->value === 'notary';
+        $isNotaryAdmin = $user->role->value === 'notary_admin';
+
+        $requests = $this->filteredRequestQuery($user)
+            ->latest('created_at')
+            ->paginate(self::PER_PAGE);
+        $requests->getCollection()->load(['documents.documentSigners', 'documents.signatureFields', 'documents.documentHash']);
+
+        $filteredMetricsQuery = $this->filteredRequestQuery($user);
+
+        $requestSummaries = $requests->getCollection()->mapWithKeys(function (NotaryRequest $request): array {
             $documents = $request->documents;
             $blockedCount = 0;
             $readyToSendCount = 0;
@@ -164,39 +360,20 @@ new #[Layout('components.layouts.app')] class extends Component {
             ];
         });
 
-        $filteredRequests = $requestsCollection
-            ->when($this->queueFilter !== 'all', function (Collection $collection) use ($requestSummaries): Collection {
-                return $collection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['queue_state'] ?? 'empty') === $this->queueFilter);
-            })
-            ->when($this->trustFilter !== 'all', function (Collection $collection) use ($requestSummaries): Collection {
-                return $collection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['trust_state'] ?? 'not_applicable') === $this->trustFilter);
-            })
-            ->values();
-
-        $perPage = 10;
-        $page = (int) ($this->getPage() ?: 1);
-        $requests = new \Illuminate\Pagination\LengthAwarePaginator(
-            $filteredRequests->forPage($page, $perPage)->values(),
-            $filteredRequests->count(),
-            $perPage,
-            $page,
-            ['path' => request()->url(), 'query' => request()->query()]
-        );
-
         return [
             'requests' => $requests,
             'requestSummaries' => $requestSummaries,
             'isNotaryView' => $isNotaryView,
             'isNotaryAdmin' => $isNotaryAdmin,
-            'requestCount' => $filteredRequests->count(),
-            'openCount' => $filteredRequests->filter(fn (NotaryRequest $request) => ! in_array($request->status->value, ['rejected', 'failed', 'notarized', 'cancelled'], true))->count(),
-            'closedCount' => $filteredRequests->filter(fn (NotaryRequest $request) => in_array($request->status->value, ['rejected', 'failed', 'notarized', 'cancelled'], true))->count(),
-            'blockedCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['queue_state'] ?? 'empty') === 'blocked')->count(),
-            'readyToSendCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['queue_state'] ?? 'empty') === 'ready_to_send')->count(),
-            'awaitingSignaturesCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['queue_state'] ?? 'empty') === 'awaiting_signatures')->count(),
-            'trustReadyRequestCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['trust_state'] ?? 'not_applicable') === 'trust_ready')->count(),
-            'missingCertificateRequestCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['trust_state'] ?? 'not_applicable') === 'missing_certificate')->count(),
-            'missingBlockchainRequestCount' => $requestsCollection->filter(fn (NotaryRequest $request) => ($requestSummaries[$request->id]['trust_state'] ?? 'not_applicable') === 'missing_blockchain')->count(),
+            'requestCount' => $requests->total(),
+            'openCount' => (clone $filteredMetricsQuery)->whereNotIn('status', self::CLOSED_STATUSES)->count(),
+            'closedCount' => (clone $filteredMetricsQuery)->whereIn('status', self::CLOSED_STATUSES)->count(),
+            'blockedCount' => tap($query = $this->baseRequestQuery($user), fn (Builder $builder) => $this->applyQueueFilter($builder, 'blocked'))->count(),
+            'readyToSendCount' => tap($query = $this->baseRequestQuery($user), fn (Builder $builder) => $this->applyQueueFilter($builder, 'ready_to_send'))->count(),
+            'awaitingSignaturesCount' => tap($query = $this->baseRequestQuery($user), fn (Builder $builder) => $this->applyQueueFilter($builder, 'awaiting_signatures'))->count(),
+            'trustReadyRequestCount' => tap($query = $this->baseRequestQuery($user), fn (Builder $builder) => $this->applyTrustFilter($builder, 'trust_ready'))->count(),
+            'missingCertificateRequestCount' => tap($query = $this->baseRequestQuery($user), fn (Builder $builder) => $this->applyTrustFilter($builder, 'missing_certificate'))->count(),
+            'missingBlockchainRequestCount' => tap($query = $this->baseRequestQuery($user), fn (Builder $builder) => $this->applyTrustFilter($builder, 'missing_blockchain'))->count(),
         ];
     }
 }; ?>

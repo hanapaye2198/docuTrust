@@ -19,7 +19,9 @@ class SendReminderJob implements ShouldQueue
     public function __construct(
         public int $documentId,
         public int $signerId,
-    ) {}
+    ) {
+        $this->onQueue((string) config('docutrust.queues.notifications'));
+    }
 
     /**
      * Execute the job.

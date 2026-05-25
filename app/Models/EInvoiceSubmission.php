@@ -20,6 +20,7 @@ class EInvoiceSubmission extends Model
         'response_payload',
         'submitted_at',
         'resolved_at',
+        'payload_pruned_at',
     ];
 
     /**
@@ -32,6 +33,7 @@ class EInvoiceSubmission extends Model
             'response_payload' => 'array',
             'submitted_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'payload_pruned_at' => 'datetime',
         ];
     }
 

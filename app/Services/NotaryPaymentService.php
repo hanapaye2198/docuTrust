@@ -7,6 +7,7 @@ use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryRequest;
 use App\Models\Payment;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -154,7 +155,17 @@ class NotaryPaymentService
         $payment = $payment->fresh();
 
         if (! $wasPaid && $payment->status === PaymentStatus::Paid) {
-            $this->eInvoiceService->createDraftFromPayment($payment);
+            $invoice = $this->eInvoiceService->createDraftFromPayment($payment);
+
+            try {
+                $this->eInvoiceService->queueForBackgroundSubmission($invoice);
+            } catch (RuntimeException $exception) {
+                Log::warning('Paid payment created an e-invoice draft that could not be queued automatically.', [
+                    'payment_id' => $payment->id,
+                    'einvoice_id' => $invoice->id,
+                    'message' => $exception->getMessage(),
+                ]);
+            }
         }
 
         return $payment;

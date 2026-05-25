@@ -4,11 +4,13 @@ namespace App\Services;
 
 use App\Models\Document;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class DocumentCertificateService
 {
+    public function __construct(
+        private readonly DocumentStorageService $documentStorageService,
+    ) {}
+
     public function createForCompletedDocument(Document $document): ?string
     {
         if ($document->certificate_path !== null && $document->certificate_path !== '') {
@@ -28,8 +30,7 @@ class DocumentCertificateService
             'signers' => $document->documentSigners,
         ])->setPaper('a4');
 
-        $path = 'certificates/'.Str::uuid()->toString().'.pdf';
-        Storage::disk('local')->put($path, $pdf->output());
+        $path = $this->documentStorageService->storeCertificatePdf($pdf->output());
 
         $document->update(['certificate_path' => $path]);
 
