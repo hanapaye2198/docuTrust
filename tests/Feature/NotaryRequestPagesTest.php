@@ -46,6 +46,7 @@ class NotaryRequestPagesTest extends TestCase
             ->set('title', 'Board resolution acknowledgment')
             ->set('requestType', 'acknowledgment')
             ->set('remarks', 'Bring government ID and board secretary certificate.')
+            ->set('wizardStep', 3)
             ->call('save')
             ->assertHasNoErrors()
             ->assertRedirect();
@@ -55,6 +56,65 @@ class NotaryRequestPagesTest extends TestCase
             'notary_user_id' => $attorney->id,
             'organization_id' => $attorney->organization_id,
         ]);
+    }
+
+    public function test_attorney_wizard_requires_title_before_advancing(): void
+    {
+        $attorney = User::factory()->notary()->create();
+
+        $this->actingAs($attorney);
+
+        LivewireVolt::test('notary-requests.create')
+            ->set('title', '')
+            ->call('nextStep')
+            ->assertHasErrors(['title'])
+            ->assertSet('wizardStep', 1);
+    }
+
+    public function test_attorney_can_advance_wizard_and_open_case_without_optional_steps(): void
+    {
+        $attorney = User::factory()->notary()->create();
+
+        $this->actingAs($attorney);
+
+        LivewireVolt::test('notary-requests.create')
+            ->set('title', 'SPA — Greenfield Lot 5')
+            ->set('requestType', 'acknowledgment')
+            ->call('nextStep')
+            ->assertSet('wizardStep', 2)
+            ->call('skipDocumentStep')
+            ->assertSet('wizardStep', 3)
+            ->call('skipPartiesStep')
+            ->assertHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('notary_requests', [
+            'title' => 'SPA — Greenfield Lot 5',
+            'notary_user_id' => $attorney->id,
+        ]);
+    }
+
+    public function test_attorney_wizard_rejects_partial_signer_row(): void
+    {
+        $attorney = User::factory()->notary()->create();
+
+        $this->actingAs($attorney);
+
+        LivewireVolt::test('notary-requests.create')
+            ->set('title', 'Affidavit of loss')
+            ->set('requestType', 'affidavit')
+            ->set('wizardStep', 3)
+            ->set('signers', [
+                [
+                    'full_name' => 'Juan Dela Cruz',
+                    'email' => '',
+                    'phone' => '',
+                    'address' => '',
+                    'role' => 'signer',
+                ],
+            ])
+            ->call('save')
+            ->assertHasErrors(['signers.0.full_name']);
     }
 
     public function test_notary_index_only_shows_assigned_requests(): void
@@ -504,13 +564,12 @@ class NotaryRequestPagesTest extends TestCase
             ->get(route('notary.requests.show', $request))
             ->assertOk()
             ->assertSee('Workflow')
-            ->assertSee('Upload &amp; send', false)
+            ->assertSee('Do this now')
+            ->assertSee('Documents')
+            ->assertSee('Parties')
+            ->assertSee('Closing')
             ->assertSee('Signers sign')
             ->assertSee('Video conference')
-            ->assertSee('Attorney signs')
-            ->assertSee('Register entry')
-            ->assertSee('Payment')
-            ->assertSee('Digital notarization')
             ->assertSee('Attorney review')
             ->assertSee('Attorney review becomes available after the video session is complete, the attorney has signed, the register entry exists, and the client payment has been completed.')
             ->assertDontSee('Complete attorney review')
