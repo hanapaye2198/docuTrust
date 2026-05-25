@@ -21,7 +21,7 @@ Route::post('/gatewayhub/webhook', GatewayHubWebhookController::class);
 
 // Authenticated: generate Sumsub WebSDK access token
 Route::post('/ekyc/token', EkycTokenController::class)
-    ->middleware('auth:sanctum')
+    ->middleware(['web', 'auth'])
     ->name('api.ekyc.token');
 
 // Webhook: Sumsub sends verification results here (no auth — signature-validated)
@@ -34,7 +34,7 @@ Route::post('/webhooks/sumsub', SumsubWebhookController::class)
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/notary-requests/{notaryRequest}/status', NotaryRequestStatusController::class)
         ->name('api.notary-requests.status');
 });
