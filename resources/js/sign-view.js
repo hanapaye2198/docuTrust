@@ -26,7 +26,11 @@ export function initSignView() {
         }
 
         console.error(error);
-        session.showFeedback(session.messages.genericSaveError, 'error');
+        session.setPdfLoadingState(true, {
+            label: session.messages.loadFailed || 'Unable to load the document. Please refresh the page and try again.',
+            progress: '',
+        });
+        session.showFeedback(session.messages.loadFailed || session.messages.genericSaveError, 'error');
     });
 }
 
@@ -79,6 +83,9 @@ function createSignViewSession(cfgEl) {
     const pdfCanvas = document.getElementById('pdf-canvas');
     const fabricEl = document.getElementById('fabric-canvas');
     const pdfShell = document.getElementById('pdf-shell');
+    const pdfLoadingIndicator = document.getElementById('pdf-loading-indicator');
+    const pdfLoadingLabel = document.getElementById('pdf-loading-label');
+    const pdfLoadingProgress = document.getElementById('pdf-loading-progress');
     const modal = document.getElementById('sign-modal');
     const modalTitle = document.getElementById('sign-modal-title');
     const modalDescription = document.getElementById('sign-modal-description');
@@ -186,6 +193,28 @@ function createSignViewSession(cfgEl) {
 
         feedbackEl.className = baseClasses + variantClasses;
         feedbackEl.textContent = message;
+    }
+
+    function formatRenderingPageMessage(pageNumber, pageCount) {
+        return (messages.renderingPage || 'Rendering page :page of :total...')
+            .replace('__PAGE__', String(pageNumber))
+            .replace('__TOTAL__', String(pageCount));
+    }
+
+    function setPdfLoadingState(active, { label = '', progress = '' } = {}) {
+        if (!pdfLoadingIndicator) {
+            return;
+        }
+
+        pdfLoadingIndicator.classList.toggle('hidden', !active);
+
+        if (pdfLoadingLabel) {
+            pdfLoadingLabel.textContent = label || messages.loadingDocument || 'Loading document...';
+        }
+
+        if (pdfLoadingProgress) {
+            pdfLoadingProgress.textContent = progress || messages.loadingProgress || 'Preparing secure preview';
+        }
     }
 
     function clearTrustAuthorizationPollTimer() {
@@ -496,6 +525,7 @@ function createSignViewSession(cfgEl) {
             top: position.y * ch,
             width: position.width * cw,
             height: position.height * ch,
+            angle: Number(position.angle) || 0,
         };
     }
 
@@ -659,7 +689,7 @@ function createSignViewSession(cfgEl) {
             }
         }
 
-        return new fabric.Group(nodes, { left: rect.left, top: rect.top, subTargetCheck: true });
+        return new fabric.Group(nodes, { left: rect.left, top: rect.top, angle: rect.angle || 0, subTargetCheck: true });
     }
 
     function signerInitialsValue() {
@@ -1003,7 +1033,7 @@ function createSignViewSession(cfgEl) {
             }));
         }
 
-        return new fabric.Group(nodes, { left: rect.left, top: rect.top, subTargetCheck: true });
+        return new fabric.Group(nodes, { left: rect.left, top: rect.top, angle: rect.angle || 0, subTargetCheck: true });
     }
 
     async function renderFieldObject(field, cw, ch, nextFieldId) {
@@ -1181,6 +1211,10 @@ function createSignViewSession(cfgEl) {
 
         const requestId = ++renderSequence;
         isRenderingPage = true;
+        setPdfLoadingState(true, {
+            label: messages.loadingDocument || 'Loading document...',
+            progress: formatRenderingPageMessage(pageNumber, totalPages || 1),
+        });
         updatePageUi();
 
         try {
@@ -1233,6 +1267,7 @@ function createSignViewSession(cfgEl) {
         } finally {
             if (requestId === renderSequence) {
                 isRenderingPage = false;
+                setPdfLoadingState(false);
                 updatePageUi();
             }
         }
@@ -1610,12 +1645,32 @@ function createSignViewSession(cfgEl) {
             return;
         }
 
+        setPdfLoadingState(true, {
+            label: messages.loadingDocument || 'Loading document...',
+            progress: messages.loadingProgress || 'Preparing secure preview',
+        });
         await ensureSignAssets();
         if (destroyed || typeof window.pdfjsLib === 'undefined' || typeof window.fabric === 'undefined') {
             return;
         }
 
         const loadingTask = window.pdfjsLib.getDocument(pdfUrl);
+        loadingTask.onProgress = (progress) => {
+            if (destroyed) {
+                return;
+            }
+
+            const loaded = Number(progress?.loaded || 0);
+            const total = Number(progress?.total || 0);
+            const percent = total > 0 ? Math.max(1, Math.min(100, Math.round((loaded / total) * 100))) : null;
+
+            setPdfLoadingState(true, {
+                label: messages.loadingDocument || 'Loading document...',
+                progress: percent === null
+                    ? (messages.loadingProgress || 'Preparing secure preview')
+                    : `${messages.loadingProgress || 'Preparing secure preview'} ${percent}%`,
+            });
+        };
         pdfDoc = await loadingTask.promise;
         if (destroyed) {
             return;
@@ -1624,6 +1679,11 @@ function createSignViewSession(cfgEl) {
         totalPages = pdfDoc.numPages || 1;
         currentPage = Math.min(totalPages, Math.max(1, initialPageNumber()));
         await renderPage(currentPage);
+        if (destroyed) {
+            return;
+        }
+
+        setPdfLoadingState(false);
 
         listen(btnPrevPage, 'click', async () => {
             if (currentPage <= 1 || isRenderingPage) {
@@ -1687,6 +1747,7 @@ function createSignViewSession(cfgEl) {
         isDestroyed,
         owns,
         showFeedback,
+        setPdfLoadingState,
         messages,
     };
 

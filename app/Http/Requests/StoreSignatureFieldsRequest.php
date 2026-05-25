@@ -71,6 +71,7 @@ class StoreSignatureFieldsRequest extends FormRequest
             'fields.*.position_data.y' => ['required', 'numeric', 'between:0,1'],
             'fields.*.position_data.width' => ['required', 'numeric', 'between:0,1'],
             'fields.*.position_data.height' => ['required', 'numeric', 'between:0,1'],
+            'fields.*.position_data.angle' => ['sometimes', 'numeric', 'between:0,360'],
         ];
     }
 
@@ -100,8 +101,24 @@ class StoreSignatureFieldsRequest extends FormRequest
                     $validator->errors()->add("fields.$index.position_data", __('Field extends past the bottom edge of the page.'));
                 }
 
-                if (! $document->documentSigners()->whereKey((int) $field['signer_id'])->exists()) {
+                $signer = $document->documentSigners()->whereKey((int) $field['signer_id'])->first();
+
+                if (! $signer) {
                     $validator->errors()->add("fields.$index.signer_id", __('Invalid signer for this document.'));
+
+                    continue;
+                }
+
+                // Validate page is within signer's allowed pages
+                $pageNumber = (int) ($field['page_number'] ?? 0);
+                if (! $signer->isAllowedOnPage($pageNumber)) {
+                    $validator->errors()->add(
+                        "fields.$index.page_number",
+                        __('Signer ":name" is not assigned to page :page.', [
+                            'name' => $signer->name,
+                            'page' => $pageNumber,
+                        ])
+                    );
                 }
             }
 

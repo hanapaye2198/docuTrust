@@ -7,16 +7,20 @@ use App\Enums\SignatureFieldType;
 use App\Models\Document;
 use App\Models\Signature;
 use App\Models\SignatureField;
+use App\Support\RotatableFpdi;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use setasign\Fpdi\Fpdi;
 use Throwable;
 
 class DocumentPdfStampingService
 {
     use ResolvesSecureDisk;
+
+    public function __construct(
+        private readonly DocumentStorageService $documentStorageService,
+    ) {}
 
     public function generatePreparedPdf(Document $document): ?string
     {
@@ -41,7 +45,7 @@ class DocumentPdfStampingService
             return null;
         }
 
-        $disk = Storage::disk($this->secureDiskName());
+        $disk = $this->documentStorageService->secureDisk();
         if (! $disk->exists($sourcePath)) {
             return null;
         }
@@ -53,8 +57,11 @@ class DocumentPdfStampingService
                 'documentSigners',
             ]);
 
-            $pdf = new Fpdi;
-            $pageCount = $pdf->setSourceFile($disk->path($sourcePath));
+            $pdf = new RotatableFpdi;
+            $pageCount = $this->documentStorageService->withTemporaryLocalPath(
+                $sourcePath,
+                fn (string $localSourcePath): int => $pdf->setSourceFile($localSourcePath)
+            );
 
             /** @var array<int, Collection<int, SignatureField>> $fieldsByPage */
             $fieldsByPage = $document->signatureFields
@@ -82,14 +89,11 @@ class DocumentPdfStampingService
                 }
             }
 
-            $generatedPath = sprintf(
-                'documents/generated/%s-%s-%s.pdf',
+            $generatedPath = $this->documentStorageService->storeGeneratedDocumentPdf(
                 $document->id,
                 $mode,
-                Str::uuid()->toString()
+                $pdf->Output('S')
             );
-
-            $disk->put($generatedPath, $pdf->Output('S'));
 
             if ($mode === 'final') {
                 $document->update(['final_pdf_path' => $generatedPath]);
@@ -121,6 +125,7 @@ class DocumentPdfStampingService
         $y = (float) (($position['y'] ?? 0) * $pageHeight);
         $width = (float) (($position['width'] ?? 0) * $pageWidth);
         $height = (float) (($position['height'] ?? 0) * $pageHeight);
+        $angle = (float) ($position['angle'] ?? 0);
 
         if ($width <= 0 || $height <= 0) {
             return;
@@ -128,23 +133,28 @@ class DocumentPdfStampingService
 
         $type = $field->type instanceof SignatureFieldType ? $field->type : SignatureFieldType::from((string) $field->type);
 
+        // Apply rotation around the field's center if angle is non-zero
+        $hasRotation = abs($angle) > 0.01 && $pdf instanceof RotatableFpdi;
+        if ($hasRotation) {
+            $centerX = $x + ($width / 2);
+            $centerY = $y + ($height / 2);
+            $pdf->rotateAround($angle, $centerX, $centerY);
+        }
+
         if ($mode === 'prepared') {
             $this->drawPreparedField($pdf, $type, $field, $x, $y, $width, $height);
-
-            return;
-        }
-
-        if ($mode === 'signed_preview') {
-            if ($signature === null) {
-                return;
+        } elseif ($mode === 'signed_preview') {
+            if ($signature !== null) {
+                $this->drawFinalField($pdf, $type, $field, $signature, $x, $y, $width, $height);
             }
-
+        } else {
             $this->drawFinalField($pdf, $type, $field, $signature, $x, $y, $width, $height);
-
-            return;
         }
 
-        $this->drawFinalField($pdf, $type, $field, $signature, $x, $y, $width, $height);
+        // Reset rotation by restoring the graphics state
+        if ($hasRotation) {
+            $pdf->endRotation();
+        }
     }
 
     private function drawPreparedField(Fpdi $pdf, SignatureFieldType $type, SignatureField $field, float $x, float $y, float $width, float $height): void
@@ -230,12 +240,11 @@ class DocumentPdfStampingService
             return;
         }
 
-        $disk = Storage::disk($this->secureDiskName());
+        $disk = $this->documentStorageService->secureDisk();
         if (! $disk->exists($path)) {
             return;
         }
 
-        $imagePath = $disk->path($path);
         $margin = 1.2;
         $renderWidth = max(4, $width - ($margin * 2));
         $renderHeight = max(4, $height - ($margin * 2));
@@ -247,7 +256,12 @@ class DocumentPdfStampingService
             $renderX = $x + (($width - $renderWidth) / 2);
         }
 
-        $pdf->Image($imagePath, $renderX, $y + $margin, $renderWidth, $renderHeight, 'PNG');
+        $this->documentStorageService->withTemporaryLocalPath(
+            $path,
+            function (string $localImagePath) use ($pdf, $renderX, $y, $margin, $renderWidth, $renderHeight): void {
+                $pdf->Image($localImagePath, $renderX, $y + $margin, $renderWidth, $renderHeight, 'PNG');
+            }
+        );
     }
 
     private function resolvedFieldValue(SignatureFieldType $type, SignatureField $field, ?Signature $signature = null): string

@@ -65,11 +65,15 @@ function createPrepareSession(cfgEl) {
     const signers = Array.isArray(config.signers) ? config.signers : [];
     const normalizedFirstSignerId = Number(firstSignerId) > 0 ? Number(firstSignerId) : null;
     const initialFields = Array.isArray(config.initialFields) ? config.initialFields : [];
+    const signerPagesUrl = config.signerPagesUrl || '';
     const pdfCanvas = document.getElementById('pdf-canvas');
     const fabricEl = document.getElementById('fabric-canvas');
     const pdfShell = document.getElementById('pdf-shell');
     const pdfPanel = document.getElementById('pdf-stage') || pdfShell?.parentElement;
     const pdfLoadError = document.getElementById('pdf-load-error');
+    const pdfLoadingIndicator = document.getElementById('pdf-loading-indicator');
+    const pdfLoadingLabel = document.getElementById('pdf-loading-label');
+    const pdfLoadingProgress = document.getElementById('pdf-loading-progress');
 
     const pageIndicator = document.getElementById('page-indicator');
     const btnPrevPage = document.getElementById('btn-prev-page');
@@ -111,6 +115,7 @@ function createPrepareSession(cfgEl) {
 
     const pageFields = new Map();
     const signerById = new Map(signers.map((signer) => [Number(signer.id), signer]));
+    const signerPageAssignments = new Map(signers.map((signer) => [Number(signer.id), signer.allowed_pages || null]));
     const canSendFromServer = Boolean(btnSendToSigner) && !btnSendToSigner.disabled;
 
     function debugLog(message, payload) {
@@ -155,6 +160,48 @@ function createPrepareSession(cfgEl) {
 
     function hasAvailableSigner() {
         return Number.isFinite(selectedSignerId()) && selectedSignerId() > 0;
+    }
+
+    /**
+     * Get signers allowed on the current page.
+     * A signer with allowed_pages = null is allowed on all pages.
+     */
+    function signersForCurrentPage() {
+        return signers.filter((signer) => {
+            const pages = signerPageAssignments.get(Number(signer.id));
+            if (pages === null || pages === undefined) {
+                return true; // all pages
+            }
+            return Array.isArray(pages) && pages.includes(currentPage);
+        });
+    }
+
+    /**
+     * Update the signer dropdown to only show signers allowed on the current page.
+     */
+    function filterSignerDropdownForPage() {
+        if (!fieldSigner) {
+            return;
+        }
+
+        const allowedSigners = signersForCurrentPage();
+        const previousValue = Number(fieldSigner.value);
+
+        // Clear and rebuild options
+        fieldSigner.innerHTML = '';
+        allowedSigners.forEach((signer) => {
+            const option = document.createElement('option');
+            option.value = String(signer.id);
+            option.textContent = signer.name + (signer.email ? ' - ' + signer.email : '');
+            fieldSigner.appendChild(option);
+        });
+
+        // Try to preserve the previous selection
+        if (allowedSigners.some((s) => Number(s.id) === previousValue)) {
+            fieldSigner.value = String(previousValue);
+        } else if (allowedSigners.length > 0) {
+            fieldSigner.value = String(allowedSigners[0].id);
+        }
     }
 
     function signerNameFor(id) {
@@ -266,6 +313,32 @@ function createPrepareSession(cfgEl) {
 
     function showLoadError() {
         showPdfLoadError(msgs.loadFailed || 'Unable to load document preview. Please refresh the page and try again.');
+        setPdfLoadingState(true, {
+            label: msgs.loadFailed || 'Unable to load document preview. Please refresh the page and try again.',
+            progress: '',
+        });
+    }
+
+    function formatRenderingPageMessage(pageNumber, pageCount) {
+        return (msgs.renderingPage || 'Rendering page :page of :total...')
+            .replace('__PAGE__', String(pageNumber))
+            .replace('__TOTAL__', String(pageCount));
+    }
+
+    function setPdfLoadingState(active, { label = '', progress = '' } = {}) {
+        if (!pdfLoadingIndicator || destroyed) {
+            return;
+        }
+
+        pdfLoadingIndicator.classList.toggle('hidden', !active);
+
+        if (pdfLoadingLabel) {
+            pdfLoadingLabel.textContent = label || msgs.loadingDocument || 'Loading document...';
+        }
+
+        if (pdfLoadingProgress) {
+            pdfLoadingProgress.textContent = progress || msgs.loadingProgress || 'Preparing secure preview';
+        }
     }
 
     function setShellDropHighlight(active) {
@@ -510,6 +583,9 @@ function createPrepareSession(cfgEl) {
             btnNextPage.disabled = currentPage >= totalPages || isRenderingPage;
         }
 
+        // Filter signer dropdown based on current page assignments
+        filterSignerDropdownForPage();
+
         const shouldDisableFieldButtons = !hasAvailableSigner() || isRenderingPage;
 
         if (!hasAvailableSigner()) {
@@ -627,6 +703,10 @@ function createPrepareSession(cfgEl) {
         let renderTask = null;
 
         isRenderingPage = true;
+        setPdfLoadingState(true, {
+            label: msgs.loadingDocument || 'Loading document...',
+            progress: formatRenderingPageMessage(pageNumber, totalPages || 1),
+        });
         updatePageUi();
 
         try {
@@ -697,9 +777,20 @@ function createPrepareSession(cfgEl) {
             }
 
             if (!destroyed && requestId === renderSequence) {
-                isRenderingPage = false;
-                updatePageUi();
-                debugLog('Rendering complete', { pageNumber, isRenderingPage });
+                // Use requestAnimationFrame to ensure the browser has reflowed
+                // after canvas resize before re-enabling field interactions.
+                // This prevents the issue where page 2+ fields cannot be placed
+                // because getBoundingClientRect() returns stale values.
+                requestAnimationFrame(() => {
+                    if (destroyed || requestId !== renderSequence) {
+                        return;
+                    }
+
+                    isRenderingPage = false;
+                    setPdfLoadingState(false);
+                    updatePageUi();
+                    debugLog('Rendering complete', { pageNumber, isRenderingPage });
+                });
             }
         }
     }
@@ -746,6 +837,10 @@ function createPrepareSession(cfgEl) {
             throw new Error('Missing PDF preview URL');
         }
 
+        setPdfLoadingState(true, {
+            label: msgs.loadingDocument || 'Loading document...',
+            progress: msgs.loadingProgress || 'Preparing secure preview',
+        });
         markSaved();
         updatePageUi();
 
@@ -767,6 +862,22 @@ function createPrepareSession(cfgEl) {
             url: pdfUrl,
             withCredentials: true,
         });
+        loadingTask.onProgress = (progress) => {
+            if (destroyed) {
+                return;
+            }
+
+            const loaded = Number(progress?.loaded || 0);
+            const total = Number(progress?.total || 0);
+            const percent = total > 0 ? Math.max(1, Math.min(100, Math.round((loaded / total) * 100))) : null;
+
+            setPdfLoadingState(true, {
+                label: msgs.loadingDocument || 'Loading document...',
+                progress: percent === null
+                    ? (msgs.loadingProgress || 'Preparing secure preview')
+                    : `${msgs.loadingProgress || 'Preparing secure preview'} ${percent}%`,
+            });
+        };
 
         pdfDoc = await loadingTask.promise;
         if (destroyed) {
@@ -795,6 +906,7 @@ function createPrepareSession(cfgEl) {
         }
 
         hidePdfLoadError();
+        setPdfLoadingState(false);
 
         listen(btnPrevPage, 'click', async () => {
             if (currentPage <= 1 || isRenderingPage) {
@@ -815,6 +927,33 @@ function createPrepareSession(cfgEl) {
             currentPage += 1;
             await renderPage(currentPage);
         });
+
+        // Safety net: if isRenderingPage stays true for more than 5 seconds
+        // after a page change, force-reset it. This prevents the UI from
+        // becoming permanently locked due to race conditions.
+        let renderingSafetyTimer = null;
+
+        function startRenderingSafetyNet() {
+            if (renderingSafetyTimer) {
+                clearTimeout(renderingSafetyTimer);
+            }
+
+            renderingSafetyTimer = setTimeout(() => {
+                if (!destroyed && isRenderingPage) {
+                    debugLog('Safety net: force-resetting isRenderingPage after timeout');
+                    isRenderingPage = false;
+                    setPdfLoadingState(false);
+                    updatePageUi();
+                }
+            }, 5000);
+        }
+
+        // Patch the page navigation to trigger the safety net
+        const originalBtnPrevHandler = btnPrevPage?.onclick;
+        const originalBtnNextHandler = btnNextPage?.onclick;
+
+        listen(btnPrevPage, 'click', startRenderingSafetyNet);
+        listen(btnNextPage, 'click', startRenderingSafetyNet);
 
         listen(window, 'resize', () => {
             if (resizeTimer) {
@@ -1040,6 +1179,179 @@ function createPrepareSession(cfgEl) {
             event.preventDefault();
             event.returnValue = '';
         });
+
+        // --- Page assignment panel logic ---
+        initPageAssignmentPanel();
+    }
+
+    function initPageAssignmentPanel() {
+        const toggleBtn = document.getElementById('toggle-page-assignments');
+        const body = document.getElementById('page-assignments-body');
+        const chevron = document.getElementById('page-assignments-chevron');
+        const listContainer = document.getElementById('page-assignments-list');
+        const saveBtn = document.getElementById('btn-save-page-assignments');
+
+        if (!toggleBtn || !body || !listContainer) {
+            return;
+        }
+
+        // Toggle collapse
+        listen(toggleBtn, 'click', () => {
+            const isHidden = body.classList.contains('hidden');
+            body.classList.toggle('hidden', !isHidden);
+            if (chevron) {
+                chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
+            }
+        });
+
+        // Build the assignment UI for each signer
+        function renderAssignmentList() {
+            listContainer.innerHTML = '';
+
+            signers.forEach((signer) => {
+                const signerId = Number(signer.id);
+                const currentPages = signerPageAssignments.get(signerId);
+                const isAllPages = currentPages === null || currentPages === undefined;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900/80';
+
+                const nameLabel = document.createElement('p');
+                nameLabel.className = 'text-xs font-semibold text-zinc-700 dark:text-zinc-200 mb-2';
+                nameLabel.textContent = signer.name + (signer.email ? ' — ' + signer.email : '');
+                wrapper.appendChild(nameLabel);
+
+                // Dropdown: All pages / Specific pages
+                const select = document.createElement('select');
+                select.className = 'w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100';
+                select.dataset.signerId = String(signerId);
+
+                const optAll = document.createElement('option');
+                optAll.value = 'all';
+                optAll.textContent = 'All pages';
+                optAll.selected = isAllPages;
+                select.appendChild(optAll);
+
+                const optSpecific = document.createElement('option');
+                optSpecific.value = 'specific';
+                optSpecific.textContent = 'Specific pages';
+                optSpecific.selected = !isAllPages;
+                select.appendChild(optSpecific);
+
+                wrapper.appendChild(select);
+
+                // Checkboxes container
+                const checkboxContainer = document.createElement('div');
+                checkboxContainer.className = 'mt-2 flex flex-wrap gap-2' + (isAllPages ? ' hidden' : '');
+                checkboxContainer.dataset.signerId = String(signerId);
+
+                for (let p = 1; p <= totalPages; p++) {
+                    const label = document.createElement('label');
+                    label.className = 'inline-flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-300 cursor-pointer';
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = String(p);
+                    checkbox.className = 'size-3.5 rounded border-zinc-300 text-teal-600 focus:ring-teal-500 dark:border-zinc-600 dark:bg-zinc-800';
+                    checkbox.checked = isAllPages || (Array.isArray(currentPages) && currentPages.includes(p));
+                    checkbox.dataset.signerId = String(signerId);
+                    checkbox.dataset.page = String(p);
+
+                    checkbox.addEventListener('change', () => {
+                        updateSignerPagesFromCheckboxes(signerId);
+                    });
+
+                    const span = document.createElement('span');
+                    span.textContent = 'P' + p;
+
+                    label.appendChild(checkbox);
+                    label.appendChild(span);
+                    checkboxContainer.appendChild(label);
+                }
+
+                wrapper.appendChild(checkboxContainer);
+
+                // Toggle checkboxes visibility
+                select.addEventListener('change', () => {
+                    if (select.value === 'all') {
+                        checkboxContainer.classList.add('hidden');
+                        signerPageAssignments.set(signerId, null);
+                        filterSignerDropdownForPage();
+                    } else {
+                        checkboxContainer.classList.remove('hidden');
+                        updateSignerPagesFromCheckboxes(signerId);
+                    }
+                });
+
+                listContainer.appendChild(wrapper);
+            });
+        }
+
+        function updateSignerPagesFromCheckboxes(signerId) {
+            const checkboxes = listContainer.querySelectorAll(`input[data-signer-id="${signerId}"]`);
+            const pages = [];
+            checkboxes.forEach((cb) => {
+                if (cb.checked) {
+                    pages.push(Number(cb.dataset.page));
+                }
+            });
+
+            // If all pages are checked, treat as "all pages"
+            if (pages.length === totalPages) {
+                signerPageAssignments.set(signerId, null);
+            } else {
+                signerPageAssignments.set(signerId, pages.length > 0 ? pages : null);
+            }
+
+            filterSignerDropdownForPage();
+        }
+
+        // Save button
+        if (saveBtn && signerPagesUrl) {
+            listen(saveBtn, 'click', async () => {
+                saveBtn.disabled = true;
+                saveBtn.textContent = msgs.saving || 'Saving...';
+
+                const assignments = {};
+                signerPageAssignments.forEach((pages, signerId) => {
+                    assignments[String(signerId)] = pages;
+                });
+
+                try {
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+                    const response = await fetch(signerPagesUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ assignments }),
+                    });
+
+                    if (response.ok) {
+                        saveBtn.textContent = msgs.pageAssignmentsSaved || 'Page assignments saved.';
+                        setTimeout(() => {
+                            saveBtn.textContent = 'Save assignments';
+                            saveBtn.disabled = false;
+                        }, 2000);
+                    } else {
+                        throw new Error('Save failed');
+                    }
+                } catch {
+                    saveBtn.textContent = msgs.pageAssignmentsFailed || 'Failed to save.';
+                    saveBtn.disabled = false;
+                    setTimeout(() => {
+                        saveBtn.textContent = 'Save assignments';
+                    }, 2000);
+                }
+            });
+        }
+
+        // Render after PDF is loaded (totalPages is known)
+        renderAssignmentList();
     }
 
     const api = {
