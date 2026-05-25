@@ -31,6 +31,10 @@
                 </a>
             </div>
 
+            @if (auth()->user())
+                <x-user.mobile-verification-status class="mb-3 in-data-flux-sidebar-collapsed-desktop:hidden" />
+            @endif
+
             {{-- ── Nav ── --}}
             <flux:sidebar.nav
                 class="overflow-visible px-1 py-1
@@ -59,14 +63,33 @@
                     {{ __('Workspace') }}
                 </div>
 
-                @if (in_array($navRole, [UserRole::SuperAdmin, UserRole::NotaryAdmin], true))
+                @if ($navRole === UserRole::SuperAdmin)
                     <flux:sidebar.item
                         icon="home"
                         :href="route('dashboard')"
                         :current="request()->routeIs('dashboard')"
+                        :tooltip="__('Platform Dashboard')"
+                        wire:navigate
+                    >{{ __('Platform') }}</flux:sidebar.item>
+
+                    <flux:sidebar.item
+                        icon="scale"
+                        :href="route('admin.enotary.dashboard')"
+                        :current="request()->routeIs('admin.enotary.dashboard')"
                         :tooltip="__('e-Notary Dashboard')"
                         wire:navigate
                     >{{ __('e-Notary') }}</flux:sidebar.item>
+                @elseif ($navRole === UserRole::NotaryAdmin)
+                    <flux:sidebar.item
+                        icon="home"
+                        :href="route('admin.enotary.dashboard')"
+                        :current="request()->routeIs('admin.enotary.dashboard')"
+                        :tooltip="__('e-Notary Dashboard')"
+                        wire:navigate
+                    >{{ __('e-Notary') }}</flux:sidebar.item>
+                @endif
+
+                @if (in_array($navRole, [UserRole::SuperAdmin, UserRole::NotaryAdmin], true))
 
                     <flux:sidebar.item
                         icon="chart-bar"

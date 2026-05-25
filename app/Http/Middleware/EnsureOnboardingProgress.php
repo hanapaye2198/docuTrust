@@ -51,7 +51,7 @@ class EnsureOnboardingProgress
 
     private function allowedRouteName(User $user): string
     {
-        if ($user->mobile_verified_at === null && $user->onboarding_step !== OnboardingStep::EmailVerification) {
+        if ($user->mobile_verified_at === null && $user->onboarding_step === OnboardingStep::MobileVerification) {
             return 'onboarding.mobile';
         }
 

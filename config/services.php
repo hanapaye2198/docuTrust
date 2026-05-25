@@ -48,6 +48,12 @@ return [
         'key' => env('TXTBOX_API_KEY'),
     ],
 
+    'semaphore' => [
+        'api_key' => env('SEMAPHORE_API_KEY'),
+        'sender_name' => env('SEMAPHORE_SENDER_NAME', 'DocuTrust'),
+        'timeout' => (int) env('SEMAPHORE_TIMEOUT', 15),
+    ],
+
     'gatewayhub' => [
         'base_url' => env('GATEWAYHUB_BASE_URL', 'https://gatewayhub.io'),
         'timeout' => env('GATEWAYHUB_TIMEOUT', 15),

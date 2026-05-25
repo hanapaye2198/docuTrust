@@ -193,7 +193,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function onboardingRouteName(): string
     {
-        if ($this->mobile_verified_at === null && $this->onboarding_step !== OnboardingStep::EmailVerification) {
+        if ($this->mobile_verified_at === null && $this->onboarding_step === OnboardingStep::MobileVerification) {
             return 'onboarding.mobile';
         }
 
@@ -292,7 +292,8 @@ class User extends Authenticatable implements MustVerifyEmail
 
         return match ($this->role) {
             UserRole::Notary => 'notary.dashboard',
-            UserRole::NotaryAdmin, UserRole::SuperAdmin => 'dashboard',
+            UserRole::SuperAdmin => 'dashboard',
+            UserRole::NotaryAdmin => 'admin.enotary.dashboard',
         };
     }
 

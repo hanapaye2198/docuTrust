@@ -82,26 +82,28 @@ Route::middleware(['auth', 'role:notary'])->group(function () {
 Volt::route('verify', 'pages.verify')->name('verify.index');
 
 Route::middleware(['auth', 'role:super_admin,notary_admin'])->group(function () {
-    Volt::route('dashboard', 'notary-admin.dashboard')->name('dashboard');
+    Volt::route('admin/enotary', 'notary-admin.dashboard')->name('admin.enotary.dashboard');
     Volt::route('admin/signing-dashboard', 'pages.dashboard')->name('admin.signing.dashboard');
 
     Volt::route('admin/attorney-applications', 'admin.attorney-applications-index')->name('admin.attorney-applications.index');
     Volt::route('admin/attorney-applications/{credential}', 'admin.attorney-applications-show')->name('admin.attorney-applications.show');
     Route::get('admin/attorney-applications/{credential}/document/{document}', NotaryCredentialDocumentController::class)
         ->name('admin.attorney-applications.document');
+});
 
-    Route::middleware(['role:super_admin'])->group(function () {
-        Volt::route('admin/users', 'admin.users-index')->name('admin.users.index');
-        Volt::route('admin/compliance', 'admin.compliance-dashboard')->name('admin.compliance.dashboard');
+Route::middleware(['auth', 'role:super_admin'])->group(function () {
+    Volt::route('dashboard', 'admin.platform-dashboard')->name('dashboard');
 
-        Route::prefix('admin/compliance')->name('admin.compliance.')->group(function () {
-            Route::get('report.json', [SignatureComplianceController::class, 'json'])
-                ->name('report.json');
-            Route::get('report.json/download', [SignatureComplianceController::class, 'downloadJson'])
-                ->name('report.json.download');
-            Route::get('report.pdf', [SignatureComplianceController::class, 'downloadPdf'])
-                ->name('report.pdf');
-        });
+    Volt::route('admin/users', 'admin.users-index')->name('admin.users.index');
+    Volt::route('admin/compliance', 'admin.compliance-dashboard')->name('admin.compliance.dashboard');
+
+    Route::prefix('admin/compliance')->name('admin.compliance.')->group(function () {
+        Route::get('report.json', [SignatureComplianceController::class, 'json'])
+            ->name('report.json');
+        Route::get('report.json/download', [SignatureComplianceController::class, 'downloadJson'])
+            ->name('report.json.download');
+        Route::get('report.pdf', [SignatureComplianceController::class, 'downloadPdf'])
+            ->name('report.pdf');
     });
 });
 

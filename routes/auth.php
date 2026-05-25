@@ -45,8 +45,12 @@ Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
 
 Route::middleware('auth')->group(function () {
     Route::get('two-factor/recovery-codes/download', RecoveryCodesDownloadController::class)->name('two-factor.recovery-codes.download');
-    Route::post('mobile/send-otp', [MobileVerificationController::class, 'sendOtp'])->name('mobile.send-otp');
-    Route::post('mobile/verify-otp', [MobileVerificationController::class, 'verifyOtp'])->name('mobile.verify-otp');
+    Route::post('mobile/send-otp', [MobileVerificationController::class, 'sendOtp'])
+        ->middleware('throttle:otp-sms-send')
+        ->name('mobile.send-otp');
+    Route::post('mobile/verify-otp', [MobileVerificationController::class, 'verifyOtp'])
+        ->middleware('throttle:otp-verification')
+        ->name('mobile.verify-otp');
 
     Volt::route('onboarding/email-verify', 'auth.onboarding-email-verify')->name('onboarding.email.verify');
     Volt::route('onboarding/mobile', 'auth.onboarding-mobile')->name('onboarding.mobile');

@@ -2,25 +2,26 @@
 
 namespace App\Services;
 
-use Illuminate\Http\Client\Factory as HttpFactory;
+use App\Contracts\Sms\SmsProviderInterface;
 use RuntimeException;
 
 class SmsService
 {
     public function __construct(
-        private readonly HttpFactory $http,
+        private readonly SmsProviderInterface $provider,
     ) {}
 
-    public function send(string $number, string $message): void
+    public function send(string $number, string $message, ?string $code = null): void
     {
-        $response = $this->http->asForm()->post('https://www.txtbox.com/api/send', [
-            'api_key' => (string) config('services.txtbox.key'),
-            'number' => $number,
-            'message' => $message,
-        ]);
+        $result = $this->provider->sendOtp($number, $message, $code);
 
-        if (! $response->successful()) {
-            throw new RuntimeException('TXTBOX SMS send failed.');
+        if (! $result['success']) {
+            throw new RuntimeException('SMS delivery failed.');
         }
+    }
+
+    public function formatOtpMessage(string $otp): string
+    {
+        return __('DocuTrust OTP: :otp', ['otp' => $otp]);
     }
 }

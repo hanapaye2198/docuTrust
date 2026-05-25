@@ -27,7 +27,7 @@ class DashboardTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
-        $response = $this->get('/dashboard');
+        $response = $this->get(route('admin.enotary.dashboard'));
         $response->assertStatus(200)
             ->assertSee(route('documents.index', absolute: false), false)
             ->assertSee('data-flux-sidebar-collapse', false)
@@ -50,7 +50,7 @@ class DashboardTest extends TestCase
         DocumentSigner::factory()->for($rejected)->create(['status' => DocumentSignerStatus::Signed]);
         DocumentSigner::factory()->for($draft)->create(['status' => DocumentSignerStatus::Pending]);
 
-        $this->get(route('dashboard'))
+        $this->get(route('admin.signing.dashboard'))
             ->assertOk()
             ->assertSee('Draft')
             ->assertSee('Pending')

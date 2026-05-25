@@ -21,20 +21,24 @@ class MobileVerificationControllerTest extends TestCase
         ]);
 
         $otpService = \Mockery::mock(OtpService::class);
-        $otpService->shouldReceive('generateOtp')->once()->andReturn([
-            'success' => true,
-            'code' => 'otp_generated',
-            'message' => 'OTP generated successfully.',
-            'data' => ['otp' => '123456'],
-        ]);
+        $otpService->shouldReceive('generateOtp')
+            ->once()
+            ->withAnyArgs()
+            ->andReturn([
+                'success' => true,
+                'code' => 'otp_generated',
+                'message' => 'OTP generated successfully.',
+                'data' => ['otp' => '123456', 'retry_after_seconds' => 60],
+            ]);
         app()->instance(OtpService::class, $otpService);
 
         $smsService = \Mockery::mock(SmsService::class);
-        $smsService->shouldReceive('send')->once();
+        $smsService->shouldReceive('formatOtpMessage')->andReturn('DocuTrust OTP: 123456');
+        $smsService->shouldReceive('send')->once()->withAnyArgs();
         app()->instance(SmsService::class, $smsService);
 
         $response = $this->actingAs($user)->postJson(route('mobile.send-otp'), [
-            'mobile_number' => '+15551234567',
+            'mobile_number' => '09171234567',
         ]);
 
         $response
@@ -43,7 +47,7 @@ class MobileVerificationControllerTest extends TestCase
                 'message' => 'OTP sent successfully.',
             ]);
 
-        $this->assertSame('+15551234567', $user->fresh()->mobile_number);
+        $this->assertSame('09171234567', $user->fresh()->mobile_number);
     }
 
     public function test_authenticated_user_can_verify_mobile_otp(): void
@@ -93,24 +97,28 @@ class MobileVerificationControllerTest extends TestCase
         ]);
 
         $otpService = \Mockery::mock(OtpService::class);
-        $otpService->shouldReceive('generateOtp')->once()->andReturn([
-            'success' => true,
-            'code' => 'otp_generated',
-            'message' => 'OTP generated successfully.',
-            'data' => ['otp' => '123456'],
-        ]);
+        $otpService->shouldReceive('generateOtp')
+            ->once()
+            ->withAnyArgs()
+            ->andReturn([
+                'success' => true,
+                'code' => 'otp_generated',
+                'message' => 'OTP generated successfully.',
+                'data' => ['otp' => '123456', 'retry_after_seconds' => 60],
+            ]);
         app()->instance(OtpService::class, $otpService);
 
         $smsService = \Mockery::mock(SmsService::class);
-        $smsService->shouldReceive('send')->once();
+        $smsService->shouldReceive('formatOtpMessage')->andReturn('DocuTrust OTP: 123456');
+        $smsService->shouldReceive('send')->once()->withAnyArgs();
         app()->instance(SmsService::class, $smsService);
 
         $this->actingAs($user)->postJson(route('mobile.send-otp'), [
-            'mobile_number' => '+15551234567',
+            'mobile_number' => '09171234567',
         ])->assertOk();
 
         $this->actingAs($user)->postJson(route('mobile.send-otp'), [
-            'mobile_number' => '+15551234567',
+            'mobile_number' => '09171234567',
         ])->assertStatus(429);
     }
 }

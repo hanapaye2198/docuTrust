@@ -3,8 +3,10 @@
 namespace App\Providers;
 
 use App\Contracts\CertificateAuthorityKeyStore;
+use App\Contracts\Otp\OtpServiceInterface;
 use App\Contracts\Signature\SignatureEngineInterface;
 use App\Contracts\SignerKeyStore;
+use App\Contracts\Sms\SmsProviderInterface;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSent;
 use App\Events\DocumentSignerCompleted;
@@ -17,6 +19,9 @@ use App\Services\DatabaseSignerKeyStore;
 use App\Services\DocumentNotificationService;
 use App\Services\FileBackedCertificateAuthorityKeyStore;
 use App\Services\NotaryNotificationService;
+use App\Services\OtpAuditLogger;
+use App\Services\OtpService;
+use App\Services\SemaphoreService;
 use App\Services\Signature\BasicElectronicSignatureDriver;
 use App\Services\Signature\FuturePKISignatureDriver;
 use App\View\Breadcrumbs;
@@ -45,6 +50,10 @@ class AppServiceProvider extends ServiceProvider
                 default => $this->app->make(BasicElectronicSignatureDriver::class),
             };
         });
+
+        $this->app->bind(SmsProviderInterface::class, SemaphoreService::class);
+        $this->app->bind(OtpServiceInterface::class, OtpService::class);
+        $this->app->singleton(OtpAuditLogger::class);
     }
 
     /**
@@ -56,6 +65,15 @@ class AppServiceProvider extends ServiceProvider
             $actor = (string) ($request->user()?->id ?? 'guest');
 
             return Limit::perMinute(10)->by('otp|'.$actor.'|'.$request->ip());
+        });
+
+        RateLimiter::for('otp-sms-send', function (Request $request): Limit {
+            $userId = (string) ($request->user()?->id ?? 'guest');
+            $mobile = (string) $request->input('mobile_number', $request->user()?->mobile_number ?? 'unknown');
+            $mobile = preg_replace('/\D+/', '', $mobile) ?: 'unknown';
+
+            return Limit::perMinute((int) config('otp.rate_limit_max', 3))
+                ->by('otp-sms-send|'.$userId.'|'.$mobile.'|'.$request->ip());
         });
 
         RateLimiter::for('signing-links', function (Request $request): Limit {

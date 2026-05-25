@@ -112,16 +112,27 @@ class OnboardingFlowTest extends TestCase
 
         $otpService = \Mockery::mock(OtpService::class);
         $otpService->shouldReceive('secondsUntilResendAvailable')->andReturn(0);
-        $otpService->shouldReceive('generate')->andReturn('123456');
-        $otpService->shouldReceive('verify')->andReturn(true);
+        $otpService->shouldReceive('generateOtp')->once()->andReturn([
+            'success' => true,
+            'code' => 'otp_generated',
+            'message' => 'OTP generated successfully.',
+            'data' => ['otp' => '123456', 'retry_after_seconds' => 60],
+        ]);
+        $otpService->shouldReceive('verifyOtp')->once()->andReturn([
+            'success' => true,
+            'code' => 'otp_verified',
+            'message' => 'OTP verified successfully.',
+            'data' => [],
+        ]);
         app()->instance(OtpService::class, $otpService);
 
         $smsService = \Mockery::mock(SmsService::class);
+        $smsService->shouldReceive('formatOtpMessage')->andReturn('DocuTrust OTP: 123456');
         $smsService->shouldReceive('send')->once();
         app()->instance(SmsService::class, $smsService);
 
         Volt::test('auth.onboarding-mobile')
-            ->set('mobile_number', '+15551234567')
+            ->set('mobile_number', '09171234567')
             ->call('sendOtp')
             ->set('otp', '123456')
             ->call('verifyOtp')
@@ -129,8 +140,28 @@ class OnboardingFlowTest extends TestCase
 
         $user->refresh();
         $this->assertSame(OnboardingStep::Kyc, $user->onboarding_step);
-        $this->assertSame('+15551234567', $user->mobile_number);
+        $this->assertSame('09171234567', $user->mobile_number);
         $this->assertNotNull($user->mobile_verified_at);
+    }
+
+    public function test_mobile_verification_can_be_skipped_to_kyc(): void
+    {
+        $user = User::factory()->signer()->create([
+            'onboarding_step' => OnboardingStep::MobileVerification,
+            'email_verified_at' => now(),
+            'mobile_verified_at' => null,
+            'mfa_enabled' => false,
+        ]);
+
+        $this->actingAs($user);
+
+        Volt::test('auth.onboarding-mobile')
+            ->call('skipForNow')
+            ->assertRedirect(route('onboarding.kyc', absolute: false));
+
+        $user->refresh();
+        $this->assertSame(OnboardingStep::Kyc, $user->onboarding_step);
+        $this->assertNull($user->mobile_verified_at);
     }
 
     public function test_complete_mfa_goes_to_documents_and_enables_mfa(): void

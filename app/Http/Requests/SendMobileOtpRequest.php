@@ -2,27 +2,23 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\PhilippineMobileNumber;
 use Illuminate\Foundation\Http\FormRequest;
 
 class SendMobileOtpRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return $this->user() !== null;
     }
 
     /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, list<string>>
+     * @return array<string, list<PhilippineMobileNumber|string>>
      */
     public function rules(): array
     {
         return [
-            'mobile_number' => ['required', 'string', 'max:32', 'regex:/^\+?[0-9]{10,15}$/'],
+            'mobile_number' => ['required', 'string', 'max:32', new PhilippineMobileNumber],
         ];
     }
 
@@ -32,7 +28,7 @@ class SendMobileOtpRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'mobile_number.regex' => __('Enter a valid mobile number with country code.'),
+            'mobile_number.required' => __('Enter your mobile number to receive a verification code.'),
         ];
     }
 }
