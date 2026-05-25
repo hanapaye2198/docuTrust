@@ -6,6 +6,8 @@ RELEASE_PATH="${1:?release path is required}"
 PHP_BIN="${2:-/usr/bin/php}"
 WEB_USER="${WEB_USER:-www-data}"
 WEB_GROUP="${WEB_GROUP:-$WEB_USER}"
+RUN_SEEDERS="${RUN_SEEDERS:-true}"
+SEEDER_CLASS="${SEEDER_CLASS:-Database\\Seeders\\DatabaseSeeder}"
 
 cd "$RELEASE_PATH"
 
@@ -28,7 +30,19 @@ run_privileged() {
   exit 1
 }
 
+should_run_seeders() {
+  case "${RUN_SEEDERS,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 "$PHP_BIN" artisan migrate --force
+
+if should_run_seeders; then
+  "$PHP_BIN" artisan db:seed --force --class="$SEEDER_CLASS"
+fi
+
 "$PHP_BIN" artisan optimize:clear
 "$PHP_BIN" artisan storage:link || true
 "$PHP_BIN" artisan config:cache

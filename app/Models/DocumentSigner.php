@@ -31,6 +31,7 @@ class DocumentSigner extends Model
         'access_token',
         'status',
         'signing_order',
+        'allowed_pages',
         'signed_at',
         'expires_at',
         'signing_public_key',
@@ -61,6 +62,7 @@ class DocumentSigner extends Model
             'signed_at' => 'datetime',
             'expires_at' => 'datetime',
             'signing_private_key' => 'encrypted',
+            'allowed_pages' => 'array',
         ];
     }
 
@@ -151,5 +153,20 @@ class DocumentSigner extends Model
         return $this->status instanceof DocumentSignerStatus
             ? $this->status->isCompleted()
             : false;
+    }
+
+    /**
+     * Check if this signer is allowed to sign on the given page number.
+     * A null allowed_pages value means all pages are allowed.
+     */
+    public function isAllowedOnPage(int $pageNumber): bool
+    {
+        $pages = $this->allowed_pages;
+
+        if ($pages === null || $pages === []) {
+            return true;
+        }
+
+        return in_array($pageNumber, $pages, true);
     }
 }

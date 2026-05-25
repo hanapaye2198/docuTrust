@@ -29,7 +29,9 @@ class SendDocumentEmailJob implements ShouldQueue
         public string $recipientEmail,
         public string $type,
         public ?string $signUrl = null,
-    ) {}
+    ) {
+        $this->onQueue((string) config('docutrust.queues.notifications'));
+    }
 
     /**
      * Execute the job.

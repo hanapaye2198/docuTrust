@@ -7,13 +7,17 @@ use App\Enums\DocumentStatus;
 use App\Enums\EInvoiceStatus;
 use App\Enums\NotaryRequestStatus;
 use App\Enums\PaymentStatus;
+use App\Jobs\RefreshEInvoiceStatusJob;
+use App\Jobs\SubmitEInvoiceJob;
 use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
 use App\Mail\NotaryPaymentReadyMail;
 use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
+use App\Models\BillingProfile;
 use App\Models\EInvoice;
+use App\Models\EInvoiceSubmission;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
@@ -27,6 +31,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Livewire\Volt\Volt as LivewireVolt;
@@ -807,6 +812,423 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('The internal invoice record is ready and awaiting EIS submission setup.');
     }
 
+    public function test_admin_can_queue_draft_einvoice_when_billing_profile_is_ready(): void
+    {
+        Queue::fake();
+
+        $admin = User::factory()->create();
+        $request = NotaryRequest::factory()->for($admin)->create([
+            'organization_id' => $admin->organization_id,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $admin->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $admin->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'queued-payment-1',
+            'provider_transaction_id' => 'queued-payment-1',
+            'gateway' => 'gcash',
+            'reference' => 'QUEUE-REQ-'.$request->id,
+            'amount' => 500.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid->value,
+            'paid_at' => now(),
+        ]);
+
+        $profile = BillingProfile::query()->create([
+            'organization_id' => $admin->organization_id,
+            'registered_name' => 'DocuTrust Test Seller',
+            'tin' => '123-456-789-000',
+            'branch_code' => '000',
+            'email' => 'billing@example.test',
+            'address_line' => '123 Test Street',
+            'city' => 'Davao City',
+            'state' => 'Davao del Sur',
+            'postal_code' => '8000',
+            'country_code' => 'PH',
+            'eis_environment' => 'sandbox',
+            'eis_accreditation_id' => 'ACCRED-1',
+            'eis_application_id' => 'APP-1',
+            'eis_username' => 'eis-user',
+            'eis_password' => 'eis-pass',
+            'eis_certificate_id' => 'CERT-1',
+            'is_active' => true,
+        ]);
+
+        $invoice = EInvoice::query()->create([
+            'organization_id' => $admin->organization_id,
+            'billing_profile_id' => $profile->id,
+            'notary_request_id' => $request->id,
+            'payment_id' => $payment->id,
+            'status' => EInvoiceStatus::Draft->value,
+            'invoice_number' => 'INV-20260520-QUEUE',
+            'currency' => 'PHP',
+            'total_amount' => 500.00,
+            'issue_date' => now(),
+            'seller_name' => 'DocuTrust Test Seller',
+            'seller_tin' => '123-456-789-000',
+            'seller_branch_code' => '000',
+            'seller_address' => '123 Test Street, Davao City, Davao del Sur, 8000, PH',
+            'seller_email' => 'billing@example.test',
+            'buyer_name' => 'Demo Admin',
+            'buyer_email' => $admin->email,
+            'document_title' => 'Queue test invoice',
+        ]);
+
+        $this->actingAs($admin);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('queueLatestEInvoice')
+            ->assertHasNoErrors();
+
+        $invoice->refresh();
+
+        $this->assertSame(EInvoiceStatus::Queued, $invoice->status);
+        $this->assertNotNull($invoice->queued_at);
+        $this->assertDatabaseHas('einvoice_submissions', [
+            'einvoice_id' => $invoice->id,
+            'status' => EInvoiceStatus::Queued->value,
+        ]);
+
+        $submission = EInvoiceSubmission::query()->where('einvoice_id', $invoice->id)->latest('id')->first();
+        $this->assertNotNull($submission);
+        $this->assertIsArray($submission->request_payload);
+        $this->assertSame('INV-20260520-QUEUE', $submission->request_payload['invoice_number'] ?? null);
+
+        Queue::assertPushed(SubmitEInvoiceJob::class, function (SubmitEInvoiceJob $job) use ($invoice): bool {
+            return $job->einvoiceId === $invoice->id;
+        });
+    }
+
+    public function test_admin_can_submit_queued_einvoice_to_eis(): void
+    {
+        Queue::fake();
+
+        Http::fake([
+            'https://eis.test/api/authentication' => Http::response([
+                'data' => [
+                    'authToken' => 'auth-token-1',
+                    'secretKey' => 'c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0LXNlY3JldA==',
+                ],
+            ], 200),
+            'https://eis.test/api/invoices' => Http::response([
+                'data' => [
+                    'submitId' => 'submit-123',
+                ],
+            ], 200),
+        ]);
+
+        $publicKeyPath = base_path('jaas_public.pem');
+        $privateKeyPath = $this->ensureEisSigningPrivateKeyPath();
+
+        config()->set('services.eis.base_url', 'https://eis.test');
+        config()->set('services.eis.public_key_path', $publicKeyPath);
+        config()->set('services.eis.signing_private_key_path', $privateKeyPath);
+        config()->set('services.eis.submit_endpoint', '/api/invoices');
+
+        $admin = User::factory()->create();
+        $request = NotaryRequest::factory()->for($admin)->create([
+            'organization_id' => $admin->organization_id,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $admin->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $admin->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'submit-payment-1',
+            'provider_transaction_id' => 'submit-payment-1',
+            'gateway' => 'gcash',
+            'reference' => 'SUBMIT-REQ-'.$request->id,
+            'amount' => 750.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid->value,
+            'paid_at' => now(),
+        ]);
+
+        $profile = BillingProfile::query()->create([
+            'organization_id' => $admin->organization_id,
+            'registered_name' => 'DocuTrust Test Seller',
+            'tin' => '123-456-789-000',
+            'branch_code' => '000',
+            'email' => 'billing@example.test',
+            'address_line' => '123 Test Street',
+            'city' => 'Davao City',
+            'state' => 'Davao del Sur',
+            'postal_code' => '8000',
+            'country_code' => 'PH',
+            'eis_environment' => 'sandbox',
+            'eis_accreditation_id' => 'ACCRED-1',
+            'eis_application_id' => 'APP-1',
+            'eis_username' => 'eis-user',
+            'eis_password' => 'eis-pass',
+            'eis_certificate_id' => 'CERT-1',
+            'is_active' => true,
+        ]);
+
+        $invoice = EInvoice::query()->create([
+            'organization_id' => $admin->organization_id,
+            'billing_profile_id' => $profile->id,
+            'notary_request_id' => $request->id,
+            'payment_id' => $payment->id,
+            'status' => EInvoiceStatus::Queued->value,
+            'queued_at' => now(),
+            'invoice_number' => 'INV-20260520-SUBMIT',
+            'currency' => 'PHP',
+            'total_amount' => 750.00,
+            'issue_date' => now(),
+            'seller_name' => 'DocuTrust Test Seller',
+            'seller_tin' => '123-456-789-000',
+            'seller_branch_code' => '000',
+            'seller_address' => '123 Test Street, Davao City, Davao del Sur, 8000, PH',
+            'seller_email' => 'billing@example.test',
+            'buyer_name' => 'Demo Admin',
+            'buyer_email' => $admin->email,
+            'document_title' => 'Submit test invoice',
+        ]);
+
+        $this->actingAs($admin);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('submitLatestEInvoice')
+            ->assertHasNoErrors();
+
+        $invoice->refresh();
+
+        $this->assertSame(EInvoiceStatus::Processing, $invoice->status);
+        $this->assertSame('submit-123', $invoice->submit_id);
+        $this->assertNotNull($invoice->submitted_at);
+
+        $submission = EInvoiceSubmission::query()
+            ->where('einvoice_id', $invoice->id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($submission);
+        $this->assertSame(EInvoiceStatus::Submitted->value, $submission->status);
+        $this->assertSame('submit-123', $submission->submit_id);
+        $this->assertIsArray($submission->request_payload);
+
+        Queue::assertPushed(RefreshEInvoiceStatusJob::class, function (RefreshEInvoiceStatusJob $job) use ($invoice): bool {
+            return $job->einvoiceId === $invoice->id;
+        });
+    }
+
+    public function test_admin_can_refresh_processing_einvoice_status_from_eis(): void
+    {
+        Http::fake([
+            'https://eis.test/api/authentication' => Http::response([
+                'data' => [
+                    'authToken' => 'auth-token-1',
+                    'secretKey' => 'c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0LXNlY3JldA==',
+                ],
+            ], 200),
+            'https://eis.test/api/inquiry*' => Http::response([
+                'data' => [
+                    'status' => 'accepted',
+                    'eisUniqueId' => '20260520CERT0001CTRL0001',
+                ],
+            ], 200),
+        ]);
+
+        $publicKeyPath = base_path('jaas_public.pem');
+
+        config()->set('services.eis.base_url', 'https://eis.test');
+        config()->set('services.eis.public_key_path', $publicKeyPath);
+        config()->set('services.eis.inquiry_endpoint', '/api/inquiry');
+
+        $admin = User::factory()->create();
+        $request = NotaryRequest::factory()->for($admin)->create([
+            'organization_id' => $admin->organization_id,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $admin->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $admin->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'inquiry-payment-1',
+            'provider_transaction_id' => 'inquiry-payment-1',
+            'gateway' => 'gcash',
+            'reference' => 'INQUIRY-REQ-'.$request->id,
+            'amount' => 900.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid->value,
+            'paid_at' => now(),
+        ]);
+
+        $profile = BillingProfile::query()->create([
+            'organization_id' => $admin->organization_id,
+            'registered_name' => 'DocuTrust Test Seller',
+            'tin' => '123-456-789-000',
+            'branch_code' => '000',
+            'email' => 'billing@example.test',
+            'address_line' => '123 Test Street',
+            'city' => 'Davao City',
+            'state' => 'Davao del Sur',
+            'postal_code' => '8000',
+            'country_code' => 'PH',
+            'eis_environment' => 'sandbox',
+            'eis_accreditation_id' => 'ACCRED-1',
+            'eis_application_id' => 'APP-1',
+            'eis_username' => 'eis-user',
+            'eis_password' => 'eis-pass',
+            'eis_certificate_id' => 'CERT-1',
+            'is_active' => true,
+        ]);
+
+        $invoice = EInvoice::query()->create([
+            'organization_id' => $admin->organization_id,
+            'billing_profile_id' => $profile->id,
+            'notary_request_id' => $request->id,
+            'payment_id' => $payment->id,
+            'status' => EInvoiceStatus::Processing->value,
+            'submit_id' => 'submit-123',
+            'submitted_at' => now(),
+            'invoice_number' => 'INV-20260520-INQUIRY',
+            'currency' => 'PHP',
+            'total_amount' => 900.00,
+            'issue_date' => now(),
+            'seller_name' => 'DocuTrust Test Seller',
+            'seller_tin' => '123-456-789-000',
+            'seller_branch_code' => '000',
+            'seller_address' => '123 Test Street, Davao City, Davao del Sur, 8000, PH',
+            'seller_email' => 'billing@example.test',
+            'buyer_name' => 'Demo Admin',
+            'buyer_email' => $admin->email,
+            'document_title' => 'Inquiry test invoice',
+        ]);
+
+        $this->actingAs($admin);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('refreshLatestEInvoiceStatus')
+            ->assertHasNoErrors();
+
+        $invoice->refresh();
+
+        $this->assertSame(EInvoiceStatus::Accepted, $invoice->status);
+        $this->assertSame('20260520CERT0001CTRL0001', $invoice->eis_unique_id);
+        $this->assertNotNull($invoice->accepted_at);
+
+        $submission = EInvoiceSubmission::query()
+            ->where('einvoice_id', $invoice->id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($submission);
+        $this->assertSame(EInvoiceStatus::Accepted->value, $submission->status);
+        $this->assertNotNull($submission->resolved_at);
+    }
+
+    public function test_admin_can_refresh_processing_einvoice_to_rejected_from_eis(): void
+    {
+        Http::fake([
+            'https://eis.test/api/authentication' => Http::response([
+                'data' => [
+                    'authToken' => 'auth-token-1',
+                    'secretKey' => 'c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0LXNlY3JldA==',
+                ],
+            ], 200),
+            'https://eis.test/api/inquiry*' => Http::response([
+                'data' => [
+                    'status' => 'rejected',
+                    'errorMessage' => 'Buyer TIN is invalid.',
+                ],
+            ], 200),
+        ]);
+
+        $publicKeyPath = base_path('jaas_public.pem');
+
+        config()->set('services.eis.base_url', 'https://eis.test');
+        config()->set('services.eis.public_key_path', $publicKeyPath);
+        config()->set('services.eis.inquiry_endpoint', '/api/inquiry');
+
+        $admin = User::factory()->create();
+        $request = NotaryRequest::factory()->for($admin)->create([
+            'organization_id' => $admin->organization_id,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $admin->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $admin->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'inquiry-reject-payment-1',
+            'provider_transaction_id' => 'inquiry-reject-payment-1',
+            'gateway' => 'gcash',
+            'reference' => 'INQUIRY-REJECT-REQ-'.$request->id,
+            'amount' => 910.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid->value,
+            'paid_at' => now(),
+        ]);
+
+        $profile = BillingProfile::query()->create([
+            'organization_id' => $admin->organization_id,
+            'registered_name' => 'DocuTrust Test Seller',
+            'tin' => '123-456-789-000',
+            'branch_code' => '000',
+            'email' => 'billing@example.test',
+            'address_line' => '123 Test Street',
+            'city' => 'Davao City',
+            'state' => 'Davao del Sur',
+            'postal_code' => '8000',
+            'country_code' => 'PH',
+            'eis_environment' => 'sandbox',
+            'eis_accreditation_id' => 'ACCRED-1',
+            'eis_application_id' => 'APP-1',
+            'eis_username' => 'eis-user',
+            'eis_password' => 'eis-pass',
+            'eis_certificate_id' => 'CERT-1',
+            'is_active' => true,
+        ]);
+
+        $invoice = EInvoice::query()->create([
+            'organization_id' => $admin->organization_id,
+            'billing_profile_id' => $profile->id,
+            'notary_request_id' => $request->id,
+            'payment_id' => $payment->id,
+            'status' => EInvoiceStatus::Processing->value,
+            'submit_id' => 'submit-rejected-123',
+            'submitted_at' => now(),
+            'invoice_number' => 'INV-20260520-INQREJ',
+            'currency' => 'PHP',
+            'total_amount' => 910.00,
+            'issue_date' => now(),
+            'seller_name' => 'DocuTrust Test Seller',
+            'seller_tin' => '123-456-789-000',
+            'seller_branch_code' => '000',
+            'seller_address' => '123 Test Street, Davao City, Davao del Sur, 8000, PH',
+            'seller_email' => 'billing@example.test',
+            'buyer_name' => 'Demo Admin',
+            'buyer_email' => $admin->email,
+            'document_title' => 'Inquiry rejected invoice',
+        ]);
+
+        $this->actingAs($admin);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('refreshLatestEInvoiceStatus')
+            ->assertHasNoErrors();
+
+        $invoice->refresh();
+
+        $this->assertSame(EInvoiceStatus::Rejected, $invoice->status);
+        $this->assertSame('Buyer TIN is invalid.', $invoice->error_message);
+        $this->assertNotNull($invoice->rejected_at);
+
+        $submission = EInvoiceSubmission::query()
+            ->where('einvoice_id', $invoice->id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($submission);
+        $this->assertSame(EInvoiceStatus::Rejected->value, $submission->status);
+        $this->assertNotNull($submission->resolved_at);
+    }
+
     public function test_admin_can_generate_missing_certificate_from_notary_request_page(): void
     {
         Storage::fake('local');
@@ -927,6 +1349,7 @@ class NotaryRequestPagesTest extends TestCase
         $rendered = view('certificates.notarial', [
             'entry' => $entry,
             'credential' => $credential->fresh('user'),
+            'qrCodeImagePath' => Storage::disk('local')->path($entry->qr_code_path),
         ])->render();
 
         $this->assertStringContainsString(
@@ -937,5 +1360,30 @@ class NotaryRequestPagesTest extends TestCase
             storage_path('app/'.$entry->qr_code_path),
             $rendered
         );
+    }
+
+    private function ensureEisSigningPrivateKeyPath(): string
+    {
+        $privateKeyPath = storage_path('app/testing/eis-signing-test.key');
+        $directory = dirname($privateKeyPath);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        if (! is_file($privateKeyPath)) {
+            $key = openssl_pkey_new([
+                'private_key_bits' => 2048,
+                'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            ]);
+
+            if ($key === false) {
+                $this->fail('Unable to generate an EIS signing private key for tests.');
+            }
+
+            openssl_pkey_export_to_file($key, $privateKeyPath);
+        }
+
+        return $privateKeyPath;
     }
 }

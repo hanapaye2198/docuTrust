@@ -34,7 +34,7 @@
                         default => 'zinc',
                     };
                 @endphp
-                <flux:badge size="sm" :color="$statusFluxColor" class="capitalize">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</flux:badge>
+                <flux:badge size="sm" :color="$statusFluxColor" class="capitalize" data-notary-status-badge="{{ $notaryRequest->status->value }}">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</flux:badge>
                 <flux:badge size="sm" color="zinc">{{ str_replace('_', ' ', $notaryRequest->request_type) }}</flux:badge>
             </div>
             <p class="text-sm text-zinc-500 dark:text-zinc-400">
@@ -278,4 +278,6 @@
             @endif
         </aside>
     </div>
+
+    @include('livewire.notary-requests.show.partials.notary-status-poll-config')
 </x-admin.page>

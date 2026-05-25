@@ -16,7 +16,9 @@ class GenerateDocumentPdfJob implements ShouldQueue
     public function __construct(
         public int $documentId,
         public string $mode,
-    ) {}
+    ) {
+        $this->onQueue((string) config('docutrust.queues.documents'));
+    }
 
     public function handle(DocumentPdfStampingService $documentPdfStampingService): void
     {

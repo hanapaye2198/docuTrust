@@ -3,21 +3,24 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
-use Illuminate\Support\Facades\Storage;
+use App\Services\DocumentStorageService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DocumentCertificateController extends Controller
 {
+    public function __construct(
+        private readonly DocumentStorageService $documentStorageService,
+    ) {}
+
     public function show(Document $document): StreamedResponse
     {
         $this->authorize('view', $document);
 
         abort_if($document->certificate_path === null, 404);
 
-        return Storage::disk('local')->response(
+        return $this->documentStorageService->certificateResponse(
             $document->certificate_path,
-            $document->title.'-certificate.pdf',
-            ['Content-Type' => 'application/pdf']
+            $document->title.'-certificate.pdf'
         );
     }
 
@@ -27,10 +30,9 @@ class DocumentCertificateController extends Controller
 
         abort_if($document->certificate_path === null, 404);
 
-        return Storage::disk('local')->download(
+        return $this->documentStorageService->certificateDownload(
             $document->certificate_path,
-            $document->title.'-certificate.pdf',
-            ['Content-Type' => 'application/pdf']
+            $document->title.'-certificate.pdf'
         );
     }
 }

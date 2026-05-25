@@ -9,3 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote')->hourly();
 
 Schedule::command('app:send-pending-signature-reminders')->hourly();
+Schedule::command('app:recover-stale-einvoices')->everyFiveMinutes();
+Schedule::command('app:prune-einvoice-submission-payloads')->daily();

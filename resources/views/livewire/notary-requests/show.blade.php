@@ -10,6 +10,7 @@ use App\Enums\SigningMethod;
 use App\Enums\TemplateRoleType;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\EInvoice;
 use App\Models\NotaryIdentityVerification;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
@@ -19,6 +20,7 @@ use App\Services\CompletedDocumentArtifactService;
 use App\Services\CompletedDocumentSealingService;
 use App\Services\IdentityVerificationService;
 use App\Services\LocationVerificationService;
+use App\Services\EInvoiceService;
 use App\Services\NotaryPaymentService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
@@ -1062,6 +1064,75 @@ new #[Layout('components.layouts.app')] class extends Component {
             session()->flash('status', __('Payment status verified from GatewayHub.'));
         } catch (\RuntimeException $exception) {
             $this->addError('refreshPaymentStatus', $exception->getMessage());
+        }
+    }
+
+    public function queueLatestEInvoice(): void
+    {
+        $invoice = EInvoice::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->latest('id')
+            ->first();
+
+        if (! $invoice instanceof EInvoice) {
+            $this->addError('queueLatestEInvoice', __('No e-invoice record exists for this request yet.'));
+
+            return;
+        }
+
+        try {
+            app(EInvoiceService::class)->queueForBackgroundSubmission($invoice);
+            $this->refreshRequest();
+            session()->flash('status', __('E-invoice queued for background EIS submission.'));
+        } catch (\RuntimeException $exception) {
+            $this->refreshRequest();
+            $this->addError('queueLatestEInvoice', $exception->getMessage());
+        }
+    }
+
+    public function submitLatestEInvoice(): void
+    {
+        $invoice = EInvoice::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->latest('id')
+            ->first();
+
+        if (! $invoice instanceof EInvoice) {
+            $this->addError('submitLatestEInvoice', __('No e-invoice record exists for this request yet.'));
+
+            return;
+        }
+
+        try {
+            app(EInvoiceService::class)->submitQueuedInvoice($invoice);
+            $this->refreshRequest();
+            session()->flash('status', __('E-invoice submitted to EIS.'));
+        } catch (\RuntimeException $exception) {
+            $this->refreshRequest();
+            $this->addError('submitLatestEInvoice', $exception->getMessage());
+        }
+    }
+
+    public function refreshLatestEInvoiceStatus(): void
+    {
+        $invoice = EInvoice::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->latest('id')
+            ->first();
+
+        if (! $invoice instanceof EInvoice) {
+            $this->addError('refreshLatestEInvoiceStatus', __('No e-invoice record exists for this request yet.'));
+
+            return;
+        }
+
+        try {
+            app(EInvoiceService::class)->refreshSubmittedInvoice($invoice);
+            $this->refreshRequest();
+            session()->flash('status', __('E-invoice status refreshed from EIS.'));
+        } catch (\RuntimeException $exception) {
+            $this->refreshRequest();
+            $this->addError('refreshLatestEInvoiceStatus', $exception->getMessage());
         }
     }
 

@@ -3,15 +3,25 @@
 namespace App\Services;
 
 use App\Enums\EInvoiceStatus;
+use App\Jobs\RefreshEInvoiceStatusJob;
+use App\Jobs\SubmitEInvoiceJob;
 use App\Enums\PaymentStatus;
 use App\Models\BillingProfile;
 use App\Models\EInvoice;
+use App\Models\EInvoiceSubmission;
 use App\Models\Payment;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class EInvoiceService
 {
+    public function __construct(
+        private readonly EisInvoicePayloadFactory $payloadFactory,
+        private readonly EisSubmissionService $submissionService,
+        private readonly EisInquiryService $inquiryService,
+    ) {}
+
     public function createDraftFromPayment(Payment $payment): EInvoice
     {
         $payment->loadMissing([
@@ -94,16 +104,182 @@ class EInvoiceService
 
     public function queueForSubmission(EInvoice $invoice): EInvoice
     {
-        if ($invoice->status !== EInvoiceStatus::Draft) {
+        $invoice->loadMissing(['billingProfile', 'submissions']);
+
+        if (! in_array($invoice->status, [EInvoiceStatus::Draft, EInvoiceStatus::NeedsCorrection], true)) {
             return $invoice;
         }
+
+        $errors = $this->submissionPreflightErrors($invoice);
+        if ($errors !== []) {
+            $invoice->forceFill([
+                'status' => EInvoiceStatus::NeedsCorrection,
+                'error_message' => implode(' ', $errors),
+            ])->save();
+
+            throw new RuntimeException(implode(' ', $errors));
+        }
+
+        $payload = $this->payloadFactory->make($invoice);
 
         $invoice->forceFill([
             'status' => EInvoiceStatus::Queued,
             'queued_at' => now(),
+            'error_message' => null,
         ])->save();
 
+        EInvoiceSubmission::query()->create([
+            'einvoice_id' => $invoice->id,
+            'status' => EInvoiceStatus::Queued->value,
+            'request_payload' => $payload,
+            'response_payload' => [
+                'message' => 'Queued for EIS submission.',
+            ],
+        ]);
+
         return $invoice->fresh();
+    }
+
+    public function submitQueuedInvoice(EInvoice $invoice): EInvoice
+    {
+        $invoice->loadMissing(['billingProfile', 'submissions']);
+
+        if ($invoice->status === EInvoiceStatus::Draft) {
+            $invoice = $this->queueForSubmission($invoice);
+        }
+
+        $errors = $this->submissionPreflightErrors($invoice);
+        if ($errors !== []) {
+            $invoice->forceFill([
+                'status' => EInvoiceStatus::NeedsCorrection,
+                'error_message' => implode(' ', $errors),
+            ])->save();
+
+            throw new RuntimeException(implode(' ', $errors));
+        }
+
+        $invoice = $this->submissionService->submit($invoice);
+
+        if (in_array($invoice->status, [EInvoiceStatus::Submitted, EInvoiceStatus::Processing], true)) {
+            RefreshEInvoiceStatusJob::dispatch($invoice->id)->delay(now()->addMinute());
+        }
+
+        return $invoice;
+    }
+
+    public function queueForBackgroundSubmission(EInvoice $invoice): EInvoice
+    {
+        $invoice = $this->queueForSubmission($invoice);
+
+        SubmitEInvoiceJob::dispatch($invoice->id);
+
+        return $invoice;
+    }
+
+    public function refreshSubmittedInvoice(EInvoice $invoice): EInvoice
+    {
+        $invoice->loadMissing(['billingProfile', 'submissions']);
+
+        if (! in_array($invoice->status, [
+            EInvoiceStatus::Submitted,
+            EInvoiceStatus::Processing,
+            EInvoiceStatus::Accepted,
+            EInvoiceStatus::Rejected,
+        ], true)) {
+            throw new RuntimeException('Only submitted or processing e-invoices can be refreshed from EIS.');
+        }
+
+        return $this->inquiryService->refresh($invoice);
+    }
+
+    /**
+     * @return array{queued:int, inquiry:int}
+     */
+    public function dispatchStaleInvoices(int $queuedAfterMinutes = 10, int $processingAfterMinutes = 15): array
+    {
+        $queuedCutoff = now()->subMinutes(max(1, $queuedAfterMinutes));
+        $processingCutoff = now()->subMinutes(max(1, $processingAfterMinutes));
+
+        $queuedInvoices = EInvoice::query()
+            ->where('status', EInvoiceStatus::Queued)
+            ->where(function ($query) use ($queuedCutoff): void {
+                $query->where('queued_at', '<=', $queuedCutoff)
+                    ->orWhere(function ($innerQuery) use ($queuedCutoff): void {
+                        $innerQuery->whereNull('queued_at')
+                            ->where('updated_at', '<=', $queuedCutoff);
+                    });
+            })
+            ->get(['id']);
+
+        $processingInvoices = EInvoice::query()
+            ->whereIn('status', [EInvoiceStatus::Submitted, EInvoiceStatus::Processing])
+            ->where(function ($query) use ($processingCutoff): void {
+                $query->where('submitted_at', '<=', $processingCutoff)
+                    ->orWhere(function ($innerQuery) use ($processingCutoff): void {
+                        $innerQuery->whereNull('submitted_at')
+                            ->where('updated_at', '<=', $processingCutoff);
+                    });
+            })
+            ->get(['id']);
+
+        $this->dispatchSubmitJobs($queuedInvoices);
+        $this->dispatchInquiryJobs($processingInvoices);
+
+        return [
+            'queued' => $queuedInvoices->count(),
+            'inquiry' => $processingInvoices->count(),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function submissionPreflightErrors(EInvoice $invoice): array
+    {
+        $invoice->loadMissing('billingProfile');
+
+        $profile = $invoice->billingProfile;
+        $errors = [];
+
+        if (! $profile instanceof BillingProfile || ! $profile->is_active) {
+            $errors[] = 'An active billing profile is required before queueing this e-invoice.';
+
+            return $errors;
+        }
+
+        if ($invoice->seller_name === null || trim($invoice->seller_name) === '') {
+            $errors[] = 'Seller name is missing from the e-invoice.';
+        }
+
+        if ($invoice->seller_tin === null || trim($invoice->seller_tin) === '') {
+            $errors[] = 'Seller TIN is required for EIS submission.';
+        }
+
+        if ($invoice->seller_branch_code === null || trim($invoice->seller_branch_code) === '') {
+            $errors[] = 'Seller branch code is required for EIS submission.';
+        }
+
+        if ($profile->eis_accreditation_id === null || trim($profile->eis_accreditation_id) === '') {
+            $errors[] = 'Billing profile is missing the EIS accreditation ID.';
+        }
+
+        if ($profile->eis_application_id === null || trim($profile->eis_application_id) === '') {
+            $errors[] = 'Billing profile is missing the EIS application ID.';
+        }
+
+        if ($profile->eis_username === null || trim($profile->eis_username) === '') {
+            $errors[] = 'Billing profile is missing the EIS username.';
+        }
+
+        if ($profile->eis_password === null || trim($profile->eis_password) === '') {
+            $errors[] = 'Billing profile is missing the EIS password.';
+        }
+
+        if ($profile->eis_certificate_id === null || trim($profile->eis_certificate_id) === '') {
+            $errors[] = 'Billing profile is missing the EIS certificate ID.';
+        }
+
+        return $errors;
     }
 
     private function generateInvoiceNumber(Payment $payment): string
@@ -136,5 +312,25 @@ class EInvoiceService
         }
 
         return implode(', ', $parts);
+    }
+
+    /**
+     * @param  Collection<int, EInvoice>  $invoices
+     */
+    private function dispatchSubmitJobs(Collection $invoices): void
+    {
+        foreach ($invoices as $invoice) {
+            SubmitEInvoiceJob::dispatch($invoice->id);
+        }
+    }
+
+    /**
+     * @param  Collection<int, EInvoice>  $invoices
+     */
+    private function dispatchInquiryJobs(Collection $invoices): void
+    {
+        foreach ($invoices as $invoice) {
+            RefreshEInvoiceStatusJob::dispatch($invoice->id);
+        }
     }
 }

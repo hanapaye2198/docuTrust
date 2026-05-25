@@ -38,7 +38,7 @@
                         default => 'zinc',
                     };
                 @endphp
-                <flux:badge size="sm" :color="$statusFluxColor" class="capitalize">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</flux:badge>
+                <flux:badge size="sm" :color="$statusFluxColor" class="capitalize" data-notary-status-badge="{{ $notaryRequest->status->value }}">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</flux:badge>
                 <flux:badge size="sm" color="zinc">{{ str_replace('_', ' ', $notaryRequest->request_type) }}</flux:badge>
             </div>
             <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -1169,11 +1169,7 @@
                                     <div>{{ __('O.R. number') }}: {{ $latestEInvoice->official_receipt_number ?? '-' }}</div>
                                 </div>
 
-                                @if ($latestEInvoice->status === EInvoiceStatus::Draft)
-                                    <div class="mt-4 rounded-xl border border-current/15 bg-white/50 px-4 py-3 text-sm dark:bg-zinc-950/20">
-                                        {{ __('The internal invoice record is ready and awaiting EIS submission setup.') }}
-                                    </div>
-                                @endif
+                                @include('livewire.notary-requests.show.partials.e-invoice-status-actions')
                             </div>
                         </div>
                     @endif
@@ -1213,4 +1209,6 @@
                 @endif
         </aside>
     </div>
+
+    @include('livewire.notary-requests.show.partials.notary-status-poll-config')
 </x-admin.page>

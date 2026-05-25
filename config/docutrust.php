@@ -63,4 +63,12 @@ return [
         ],
     ],
 
+    'queues' => [
+        'documents' => env('DOCUTRUST_QUEUE_DOCUMENTS', 'documents'),
+        'notifications' => env('DOCUTRUST_QUEUE_NOTIFICATIONS', 'notifications'),
+        'payments' => env('DOCUTRUST_QUEUE_PAYMENTS', 'payments'),
+        'einvoices' => env('DOCUTRUST_QUEUE_EINVOICES', 'einvoices'),
+        'blockchain' => env('DOCUTRUST_QUEUE_BLOCKCHAIN', 'blockchain'),
+    ],
+
 ];

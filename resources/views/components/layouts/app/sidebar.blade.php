@@ -106,6 +106,22 @@
                         :tooltip="__('Attorney applications')"
                         wire:navigate
                     >{{ __('Attorney apps') }}</flux:sidebar.item>
+
+                    <flux:sidebar.item
+                        icon="receipt-percent"
+                        :href="route('notary-admin.einvoices')"
+                        :current="request()->routeIs('notary-admin.einvoices')"
+                        :tooltip="__('E-Invoices')"
+                        wire:navigate
+                    >{{ __('E-Invoices') }}</flux:sidebar.item>
+
+                    <flux:sidebar.item
+                        icon="building-office-2"
+                        :href="route('notary-admin.billing-profile')"
+                        :current="request()->routeIs('notary-admin.billing-profile')"
+                        :tooltip="__('Billing Profile')"
+                        wire:navigate
+                    >{{ __('Billing Profile') }}</flux:sidebar.item>
                 @endif
 
                 @if ($navRole === UserRole::SuperAdmin)

@@ -17,9 +17,12 @@ class EkycRecord extends Model
         'user_id',
         'document_type',
         'document_path',
+        'provider',
+        'provider_reference',
         'ocr_text',
         'status',
         'rejection_reason',
+        'provider_payload',
         'verified_by',
         'verified_at',
     ];
@@ -31,6 +34,7 @@ class EkycRecord extends Model
     {
         return [
             'verified_at' => 'datetime',
+            'provider_payload' => 'array',
         ];
     }
 

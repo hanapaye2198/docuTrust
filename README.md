@@ -80,9 +80,139 @@ Install and configure:
 Then:
 
 1. Copy `deploy/nginx/docutrust.conf` into your Nginx sites config and reload Nginx.
-2. Copy `deploy/systemd/docutrust-queue.service` and `deploy/systemd/docutrust-blockchain.service` into `/etc/systemd/system/`.
+2. Copy `deploy/systemd/docutrust-queue@.service` and `deploy/systemd/docutrust-blockchain.service` into `/etc/systemd/system/`.
 3. Create `/var/www/docutrust/shared/.env` from `deploy/production.env.example`.
-4. Enable and start the services with `systemctl daemon-reload` followed by `systemctl enable --now docutrust-queue docutrust-blockchain`.
+4. Optionally create `/etc/default/docutrust-queue` from `deploy/systemd/docutrust-queue.env.example` to override worker flags such as `QUEUE_TIMEOUT`, `QUEUE_MEMORY`, or `QUEUE_EXTRA_ARGS`.
+5. Enable queue workers by lane, then start the blockchain sidecar:
+
+```bash
+systemctl daemon-reload
+systemctl enable --now \
+  docutrust-queue@default \
+  docutrust-queue@documents \
+  docutrust-queue@notifications \
+  docutrust-queue@einvoices \
+  docutrust-blockchain
+```
+
+Use additional instances of the same lane when one queue needs more throughput, for example `docutrust-queue@documents-1` plus `docutrust-queue@documents-2`. The template strips a trailing numeric suffix, so both instances still consume the `documents` Laravel queue.
+
+The legacy `deploy/systemd/docutrust-queue.service` file is still included as a compatibility fallback, but it is not the recommended production setup because it mixes all queue workloads into one worker pool.
+
+## Queue Worker Sizing
+
+Start with separate workers per lane, then scale by observed queue depth and job duration.
+
+Recommended starting layout for a small production deployment:
+
+- `docutrust-queue@default`: 1 worker, `QUEUE_TIMEOUT=90`, `QUEUE_MEMORY=256`
+- `docutrust-queue@documents-1`: 1 worker, `QUEUE_TIMEOUT=300`, `QUEUE_MEMORY=512`
+- `docutrust-queue@notifications`: 1 worker, `QUEUE_TIMEOUT=120`, `QUEUE_MEMORY=256`
+- `docutrust-queue@einvoices`: 1 worker, `QUEUE_TIMEOUT=300`, `QUEUE_MEMORY=256`
+
+Recommended starting layout for moderate traffic:
+
+- `docutrust-queue@default`: 1 worker
+- `docutrust-queue@documents-1` and `docutrust-queue@documents-2`: 2 workers total
+- `docutrust-queue@notifications-1` and `docutrust-queue@notifications-2`: 2 workers total
+- `docutrust-queue@einvoices`: 1 worker
+
+Lane guidance:
+
+- `default`: keep this small. It should carry miscellaneous short jobs, not bulk document work.
+- `documents`: give this the highest timeout and more memory. PDF stamping, sealing, archive generation, and certificate work are the most likely long-running jobs.
+- `notifications`: scale this for burst fan-out after document completion or reminder campaigns. Latency matters more than memory.
+- `einvoices`: isolate this from user-facing jobs because vendor latency and retries can stall the lane.
+
+If you need per-lane overrides, create systemd drop-ins instead of changing the shared env file for everything:
+
+```bash
+systemctl edit docutrust-queue@documents-1
+```
+
+Example drop-in:
+
+```ini
+[Service]
+Environment=QUEUE_TIMEOUT=300
+Environment=QUEUE_MEMORY=768
+Environment=QUEUE_EXTRA_ARGS=--backoff=10
+```
+
+Example templates are included in:
+
+- `deploy/systemd/docutrust-queue-documents.override.example.conf`
+- `deploy/systemd/docutrust-queue-notifications.override.example.conf`
+- `deploy/systemd/docutrust-queue-einvoices.override.example.conf`
+
+Apply one like this:
+
+```bash
+mkdir -p /etc/systemd/system/docutrust-queue@documents-1.service.d
+cp deploy/systemd/docutrust-queue-documents.override.example.conf \
+  /etc/systemd/system/docutrust-queue@documents-1.service.d/override.conf
+systemctl daemon-reload
+systemctl restart docutrust-queue@documents-1
+```
+
+Operational targets worth watching:
+
+- `documents`: queue depth should return near zero after signing bursts
+- `notifications`: p95 delivery lag should stay low even during document completion spikes
+- `einvoices`: retries should not starve other lanes
+- all lanes: failed jobs should stay at zero during baseline load tests
+
+## Load Test Rollout
+
+Use the queue split and `k6` scripts together as a staged rollout instead of jumping straight to peak traffic.
+
+1. Baseline
+Run one worker per lane and a light `k6` profile against staging. Confirm no failed jobs and that each queue drains back to idle.
+
+2. Documents stress
+Increase only `documents` concurrency first. Watch final PDF and certificate lag, memory growth, and queue depth on the `documents` lane.
+
+3. Notification burst
+Run completion-heavy flows or reminder bursts. Scale `notifications` independently if delivery lag rises while web latency stays healthy.
+
+4. Vendor isolation
+Exercise `einvoices` and webhook burst tests separately from user-facing flows. This confirms slow vendor calls do not interfere with signing and document completion.
+
+5. Soak
+Hold moderate traffic for at least 1 to 2 hours. Look for queue buildup, worker restarts, Redis pressure, and DB slow-query drift.
+
+## Operator Checks
+
+Two small scripts are included for staging and production verification:
+
+- `scripts/check-queue-workers.sh`
+  Shows `systemctl status` for the main queue lanes and blockchain sidecar.
+- `scripts/check-queue-depth.sh`
+  Reads Redis queue depth for `default`, `documents`, `notifications`, and `einvoices`.
+- `scripts/check-queue-workers.ps1`
+  PowerShell variant of the worker status check.
+- `scripts/check-queue-depth.ps1`
+  PowerShell variant of the Redis queue depth check.
+
+Examples:
+
+```bash
+bash scripts/check-queue-workers.sh
+bash scripts/check-queue-depth.sh
+```
+
+If your deployment path differs from `/var/www/docutrust`, set `APP_BASE_PATH`:
+
+```bash
+APP_BASE_PATH=/srv/docutrust bash scripts/check-queue-depth.sh
+```
+
+PowerShell examples:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\check-queue-workers.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\check-queue-depth.ps1 -AppBasePath /srv/docutrust
+```
 
 ## Root CA Key Storage
 

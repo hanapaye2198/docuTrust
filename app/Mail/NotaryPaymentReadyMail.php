@@ -18,7 +18,9 @@ class NotaryPaymentReadyMail extends Mailable implements ShouldQueue
     public function __construct(
         public readonly NotaryRequest $notaryRequest,
         public readonly Payment $payment,
-    ) {}
+    ) {
+        $this->onQueue((string) config('docutrust.queues.notifications'));
+    }
 
     public function envelope(): Envelope
     {

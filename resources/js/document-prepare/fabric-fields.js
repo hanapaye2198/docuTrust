@@ -403,8 +403,14 @@ export function createFieldGroup({
     group.borderDashArray = [6, 4];
     group.hoverCursor = 'move';
     group.moveCursor = 'move';
-    group.lockRotation = true;
-    group.setControlsVisibility({ mtr: false });
+    group.lockRotation = false;
+    group.setControlsVisibility({ mtr: true });
+
+    // Apply rotation if provided
+    if (position.angle) {
+        group.angle = Number(position.angle) || 0;
+        group.setCoords();
+    }
 
     return group;
 }
@@ -423,6 +429,7 @@ export function normalizedPositionFromObject(target, fabricCanvas) {
         y: bound.top / canvasHeight,
         width: bound.width / canvasWidth,
         height: bound.height / canvasHeight,
+        angle: Number(target.angle) || 0,
     };
 }
 
@@ -446,6 +453,7 @@ export function serializeCanvasFields(fabricCanvas) {
                 y: br.top / h,
                 width: br.width / w,
                 height: br.height / h,
+                angle: Number(obj.angle) || 0,
             },
         });
     });

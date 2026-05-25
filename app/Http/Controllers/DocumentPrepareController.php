@@ -55,6 +55,7 @@ class DocumentPrepareController extends Controller
                     'id' => (int) $signer->id,
                     'name' => (string) $signer->name,
                     'email' => (string) $signer->email,
+                    'allowed_pages' => $signer->allowed_pages,
                 ];
             })
             ->values();
@@ -79,6 +80,7 @@ class DocumentPrepareController extends Controller
                         'id' => (int) $signer->id,
                         'name' => (string) $signer->name,
                         'email' => (string) $signer->email,
+                        'allowed_pages' => $signer->allowed_pages,
                     ];
                 })
                 ->values();
@@ -189,8 +191,10 @@ class DocumentPrepareController extends Controller
             ? 'notary.documents.prepare'
             : 'documents.prepare';
 
+        $returnToPage = (int) $request->input('return_to_page', 1);
+
         return redirect()
-            ->route($redirectRoute, $document)
+            ->route($redirectRoute, ['document' => $document, 'page' => $returnToPage > 0 ? $returnToPage : 1])
             ->with('status', __('Signature fields saved.'));
     }
 

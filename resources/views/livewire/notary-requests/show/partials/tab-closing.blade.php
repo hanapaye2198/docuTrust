@@ -193,11 +193,7 @@
                                     <div>{{ __('O.R. number') }}: {{ $latestEInvoice->official_receipt_number ?? '-' }}</div>
                                 </div>
 
-                                @if ($latestEInvoice->status === EInvoiceStatus::Draft)
-                                    <div class="mt-4 rounded-xl border border-current/15 bg-white/50 px-4 py-3 text-sm dark:bg-zinc-950/20">
-                                        {{ __('The internal invoice record is ready and awaiting EIS submission setup.') }}
-                                    </div>
-                                @endif
+                                @include('livewire.notary-requests.show.partials.e-invoice-status-actions')
                             </div>
                         </div>
                     @endif

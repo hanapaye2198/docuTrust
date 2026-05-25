@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Enums\EInvoiceStatus;
+use App\Jobs\SubmitEInvoiceJob;
+use App\Models\BillingProfile;
 use App\Enums\PaymentStatus;
 use App\Models\EInvoice;
 use App\Models\NotaryRequest;
@@ -10,6 +12,7 @@ use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class GatewayHubWebhookTest extends TestCase
@@ -77,7 +80,7 @@ class GatewayHubWebhookTest extends TestCase
         $this->assertDatabaseHas('einvoices', [
             'payment_id' => $payment->id,
             'notary_request_id' => $request->id,
-            'status' => EInvoiceStatus::Draft->value,
+            'status' => EInvoiceStatus::NeedsCorrection->value,
             'total_amount' => '500.00',
         ]);
     }
@@ -134,6 +137,87 @@ class GatewayHubWebhookTest extends TestCase
         }
 
         $this->assertSame(1, EInvoice::query()->where('payment_id', $payment->id)->count());
+    }
+
+    public function test_paid_payment_with_ready_billing_profile_auto_queues_einvoice_submission(): void
+    {
+        Queue::fake();
+
+        config()->set('services.gatewayhub.webhook_secret', 'test-webhook-secret');
+
+        $user = User::factory()->client()->create();
+        $request = NotaryRequest::factory()->create([
+            'user_id' => $user->id,
+            'organization_id' => $user->organization_id,
+        ]);
+
+        BillingProfile::query()->create([
+            'organization_id' => $user->organization_id,
+            'registered_name' => 'DocuTrust Test Seller',
+            'tin' => '123-456-789-000',
+            'branch_code' => '000',
+            'email' => 'billing@example.test',
+            'address_line' => '123 Test Street',
+            'city' => 'Davao City',
+            'state' => 'Davao del Sur',
+            'postal_code' => '8000',
+            'country_code' => 'PH',
+            'eis_environment' => 'sandbox',
+            'eis_accreditation_id' => 'ACCRED-1',
+            'eis_application_id' => 'APP-1',
+            'eis_username' => 'eis-user',
+            'eis_password' => 'eis-pass',
+            'eis_certificate_id' => 'CERT-1',
+            'is_active' => true,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $user->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $user->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-uuid-2b',
+            'provider_transaction_id' => 'payment-uuid-2b',
+            'gateway' => 'gcash',
+            'reference' => 'NREQ-22-ABCDE12345',
+            'amount' => 500.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Pending->value,
+        ]);
+
+        $payload = [
+            'event' => 'payment.updated',
+            'timestamp' => '2026-02-28T12:00:00+08:00',
+            'data' => [
+                'payment_id' => 'payment-uuid-2b',
+                'status' => 'paid',
+                'amount' => 500,
+                'currency' => 'PHP',
+                'gateway' => 'gcash',
+                'reference' => 'NREQ-22-ABCDE12345',
+                'provider_reference' => 'provider-id-2b',
+                'paid_at' => '2026-02-28T12:02:00+08:00',
+            ],
+        ];
+
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        $timestamp = '1700000000';
+        $signature = hash_hmac('sha256', $timestamp.'.'.$body, 'test-webhook-secret');
+
+        $this->call('POST', '/api/gatewayhub/webhook', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_MERCHANT_TIMESTAMP' => $timestamp,
+            'HTTP_X_MERCHANT_SIGNATURE' => $signature,
+        ], $body)->assertOk();
+
+        $invoice = EInvoice::query()->where('payment_id', $payment->id)->first();
+
+        $this->assertNotNull($invoice);
+        $this->assertSame(EInvoiceStatus::Queued, $invoice->status);
+
+        Queue::assertPushed(SubmitEInvoiceJob::class, function (SubmitEInvoiceJob $job) use ($invoice): bool {
+            return $job->einvoiceId === $invoice->id;
+        });
     }
 
     public function test_rejects_a_gatewayhub_webhook_with_an_invalid_signature(): void
