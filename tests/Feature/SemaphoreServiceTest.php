@@ -25,7 +25,7 @@ class SemaphoreServiceTest extends TestCase
             ], 200),
         ]);
 
-        $result = app(SemaphoreService::class)->sendOtp('09171234567', 'DocuTrust OTP: {otp}', '482991');
+        $result = app(SemaphoreService::class)->sendOtp('09171234567', 'Your DocuTrust One-Time Password is: {otp}', '482991');
 
         $this->assertTrue($result['success']);
         $this->assertSame(99, $result['message_id']);
@@ -45,6 +45,6 @@ class SemaphoreServiceTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
 
-        app(SemaphoreService::class)->sendOtp('09171234567', 'DocuTrust OTP: 123456', '123456');
+        app(SemaphoreService::class)->sendOtp('09171234567', 'Your DocuTrust One-Time Password is: {otp}', '123456');
     }
 }

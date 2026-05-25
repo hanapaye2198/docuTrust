@@ -63,7 +63,7 @@ class MobileVerificationController extends Controller
             $plainOtp = (string) ($result['data']['otp'] ?? '');
             $smsService->send(
                 (string) $user->mobile_number,
-                $smsService->formatOtpMessage($plainOtp),
+                $smsService->formatOtpMessage(),
                 $plainOtp,
             );
         } catch (Throwable $throwable) {

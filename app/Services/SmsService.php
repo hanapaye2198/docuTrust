@@ -20,8 +20,12 @@ class SmsService
         }
     }
 
-    public function formatOtpMessage(string $otp): string
+    /**
+     * Message template for Semaphore OTP API. Use the {otp} placeholder;
+     * the provider substitutes it when the code is sent via send().
+     */
+    public function formatOtpMessage(): string
     {
-        return __('DocuTrust OTP: :otp', ['otp' => $otp]);
+        return (string) config('otp.sms_message_template', 'Your DocuTrust One-Time Password is: {otp}');
     }
 }

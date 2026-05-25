@@ -85,7 +85,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
             $plainOtp = (string) ($result['data']['otp'] ?? '');
             $smsService->send(
                 $this->mobile_number,
-                $smsService->formatOtpMessage($plainOtp),
+                $smsService->formatOtpMessage(),
                 $plainOtp,
             );
         } catch (\Throwable $throwable) {

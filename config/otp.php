@@ -7,5 +7,5 @@ return [
     'max_attempts' => (int) env('OTP_MAX_ATTEMPTS', 5),
     'rate_limit_max' => (int) env('OTP_RATE_LIMIT_MAX', 3),
     'rate_limit_window_seconds' => (int) env('OTP_RATE_LIMIT_WINDOW_SECONDS', 60),
-    'sms_message_template' => env('OTP_SMS_MESSAGE_TEMPLATE', 'DocuTrust OTP: {otp}'),
+    'sms_message_template' => env('OTP_SMS_MESSAGE_TEMPLATE', 'Your DocuTrust One-Time Password is: {otp}'),
 ];

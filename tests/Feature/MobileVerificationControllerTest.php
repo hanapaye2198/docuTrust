@@ -33,7 +33,7 @@ class MobileVerificationControllerTest extends TestCase
         app()->instance(OtpService::class, $otpService);
 
         $smsService = \Mockery::mock(SmsService::class);
-        $smsService->shouldReceive('formatOtpMessage')->andReturn('DocuTrust OTP: 123456');
+        $smsService->shouldReceive('formatOtpMessage')->andReturn('Your DocuTrust One-Time Password is: {otp}');
         $smsService->shouldReceive('send')->once()->withAnyArgs();
         app()->instance(SmsService::class, $smsService);
 
@@ -109,7 +109,7 @@ class MobileVerificationControllerTest extends TestCase
         app()->instance(OtpService::class, $otpService);
 
         $smsService = \Mockery::mock(SmsService::class);
-        $smsService->shouldReceive('formatOtpMessage')->andReturn('DocuTrust OTP: 123456');
+        $smsService->shouldReceive('formatOtpMessage')->andReturn('Your DocuTrust One-Time Password is: {otp}');
         $smsService->shouldReceive('send')->once()->withAnyArgs();
         app()->instance(SmsService::class, $smsService);
 
