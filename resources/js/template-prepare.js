@@ -88,6 +88,11 @@ function createPrepareSession(cfgEl) {
     const fieldInspectorEmpty = document.getElementById('field-inspector-empty');
     const selectedFieldType = document.getElementById('selected-field-type');
     const selectedFieldSigner = document.getElementById('selected-field-signer');
+    const selectedFieldAngle = document.getElementById('selected-field-angle');
+    const btnRotate0 = document.getElementById('btn-rotate-0');
+    const btnRotate90 = document.getElementById('btn-rotate-90');
+    const btnRotate180 = document.getElementById('btn-rotate-180');
+    const btnRotate270 = document.getElementById('btn-rotate-270');
     const btnDuplicateField = document.getElementById('btn-duplicate-field');
     const btnDeleteField = document.getElementById('btn-delete-field');
     const btnBringForward = document.getElementById('btn-bring-forward');
@@ -285,6 +290,10 @@ function createPrepareSession(cfgEl) {
         fieldInspectorEmpty.textContent = target.clientFieldId || msgs.selected || 'Selected';
         selectedFieldType.value = target.fieldType;
         selectedFieldSigner.value = String(target.signerId);
+
+        if (selectedFieldAngle) {
+            selectedFieldAngle.value = String(Math.round(Number(target.angle) || 0));
+        }
     }
 
     function clearSnapGuide() {
@@ -1079,6 +1088,34 @@ function createPrepareSession(cfgEl) {
         listen(selectedFieldSigner, 'change', () => {
             replaceActiveField({ signerId: Number(selectedFieldSigner.value) });
         });
+
+        // Rotation controls
+        function applyRotationToActiveField(angle) {
+            const active = activeFieldObject();
+            if (!active || !fabricCanvas) {
+                return;
+            }
+
+            active.angle = angle;
+            active.setCoords();
+            fabricCanvas.requestRenderAll();
+            saveCurrentPageFields();
+            markDirty();
+
+            if (selectedFieldAngle) {
+                selectedFieldAngle.value = String(angle);
+            }
+        }
+
+        listen(selectedFieldAngle, 'change', () => {
+            const angle = Math.max(0, Math.min(360, Number(selectedFieldAngle.value) || 0));
+            applyRotationToActiveField(angle);
+        });
+
+        listen(btnRotate0, 'click', () => applyRotationToActiveField(0));
+        listen(btnRotate90, 'click', () => applyRotationToActiveField(90));
+        listen(btnRotate180, 'click', () => applyRotationToActiveField(180));
+        listen(btnRotate270, 'click', () => applyRotationToActiveField(270));
 
         listen(btnDeleteField, 'click', () => {
             deleteActiveField();

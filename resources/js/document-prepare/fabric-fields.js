@@ -403,10 +403,10 @@ export function createFieldGroup({
     group.borderDashArray = [6, 4];
     group.hoverCursor = 'move';
     group.moveCursor = 'move';
-    group.lockRotation = false;
-    group.setControlsVisibility({ mtr: true });
+    group.lockRotation = true;
+    group.setControlsVisibility({ mtr: false });
 
-    // Apply rotation if provided
+    // Apply rotation if provided (set via inspector, not free-rotate handle)
     if (position.angle) {
         group.angle = Number(position.angle) || 0;
         group.setCoords();

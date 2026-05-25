@@ -498,6 +498,30 @@ function createSignViewSession(cfgEl) {
         return orderedFields().find((field) => !isSigned(field.id)) || null;
     }
 
+    /**
+     * Find the next unsigned field, preferring forward progress from the current page.
+     * Checks current page first, then later pages, then wraps to earlier pages only if needed.
+     */
+    function nextUnsignedFieldForward() {
+        const unsigned = orderedFields().filter((field) => !isSigned(field.id));
+        if (unsigned.length === 0) {
+            return null;
+        }
+
+        // First: unsigned field on current page or later
+        const forward = unsigned.find((field) => {
+            const page = Number(field.page_number) > 0 ? Number(field.page_number) : 1;
+            return page >= currentPage;
+        });
+
+        if (forward) {
+            return forward;
+        }
+
+        // Fallback: wrap to the first unsigned field (earlier pages)
+        return unsigned[0];
+    }
+
     function initialPageNumber() {
         const nextField = firstUnsignedField();
         if (!nextField) {
@@ -878,7 +902,10 @@ function createSignViewSession(cfgEl) {
         showFeedback(payload.message || messages.fieldSaved, 'success');
 
         if (currentCanEditFields) {
-            const nextField = firstUnsignedField();
+            // Navigate to the next unsigned field, preferring forward progress.
+            // First check for unsigned fields on the current page or later pages.
+            // Only go back to earlier pages if there are no forward fields left.
+            const nextField = nextUnsignedFieldForward();
             if (nextField) {
                 currentPage = Number(nextField.page_number) > 0 ? Number(nextField.page_number) : currentPage;
             }
@@ -1069,6 +1096,14 @@ function createSignViewSession(cfgEl) {
                     hasControls: false,
                     hoverCursor: currentCanEditFields ? 'pointer' : 'default',
                 });
+
+                // Apply field rotation to all signed elements
+                if (rect.angle) {
+                    target.angle = rect.angle;
+                    target.setCoords && target.setCoords();
+                    badge.angle = rect.angle;
+                    hitbox.angle = rect.angle;
+                }
 
                 if (currentCanEditFields) {
                     hitbox.on('mousedown', (event) => {
