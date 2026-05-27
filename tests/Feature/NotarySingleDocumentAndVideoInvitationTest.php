@@ -311,6 +311,7 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
             ->assertHasNoErrors()
             ->assertSee('Parties — individual video links')
             ->assertSee('Jane Signer')
+            ->assertSee('Join room')
             ->assertSee('Personal video link for Jane Signer')
             ->assertSee('enotary/video/');
 

@@ -76,16 +76,18 @@
                                             @endif
                                         </div>
 
-                                        @if ($party['has_signed'] && $isNotary && ($party['session_id'] ?? null) && ($party['session_status'] ?? '') === 'scheduled')
+                                        @if ($party['has_signed'] && ($party['session_id'] ?? null) && ($party['session_status'] ?? '') === 'scheduled')
                                             <div class="flex gap-2">
-                                                <flux:button
-                                                    variant="primary"
-                                                    size="sm"
-                                                    type="button"
-                                                    wire:click="startSession({{ $party['session_id'] }})"
-                                                >
-                                                    {{ __('Start session') }}
-                                                </flux:button>
+                                                @if ($isNotary)
+                                                    <flux:button
+                                                        variant="primary"
+                                                        size="sm"
+                                                        type="button"
+                                                        wire:click="startSession({{ $party['session_id'] }})"
+                                                    >
+                                                        {{ __('Start session') }}
+                                                    </flux:button>
+                                                @endif
                                                 <a
                                                     href="{{ route($liveSessionRoute, [$notaryRequest, $party['session_id']]) }}"
                                                     target="_blank"
