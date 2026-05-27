@@ -53,7 +53,7 @@ class AddSecurityHeaders
         }
 
         $frameSrc = $isEnotaryRoute
-            ? "'self' https://meet.jit.si https://*.jit.si https://8x8.vc"
+            ? "'self' https://meet.jit.si https://*.jit.si https://8x8.vc https://*.8x8.vc"
             : "'self'";
 
         $response->headers->set(

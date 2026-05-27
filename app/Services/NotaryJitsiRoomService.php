@@ -112,6 +112,15 @@ final class NotaryJitsiRoomService
         return $this->domain;
     }
 
+    public function externalApiScriptUrl(): string
+    {
+        if ($this->appId !== null && str_starts_with($this->appId, 'vpaas-magic-cookie-')) {
+            return $this->baseUrl.'/'.$this->appId.'/external_api.js';
+        }
+
+        return $this->baseUrl.'/external_api.js';
+    }
+
     /**
      * Get iframe API configuration for embedding Jitsi in the browser.
      *

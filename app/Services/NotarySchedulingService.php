@@ -126,6 +126,44 @@ class NotarySchedulingService
         return $session->fresh();
     }
 
+    public function cancel(NotarySession $session, ?string $reason = null): NotarySession
+    {
+        if (in_array($session->status, ['completed', 'cancelled'], true)) {
+            throw new RuntimeException(__('This video session has already ended.'));
+        }
+
+        $session->forceFill([
+            'status' => 'cancelled',
+            'ended_at' => now(),
+            'evidence' => array_merge(is_array($session->evidence) ? $session->evidence : [], [
+                'cancelled_at' => now()->toDateTimeString(),
+                'cancelled_reason' => $reason,
+            ]),
+        ])->save();
+
+        $request = $session->notaryRequest;
+
+        if ($request !== null && $request->status === NotaryRequestStatus::SessionInProgress) {
+            $request->forceFill([
+                'status' => NotaryRequestStatus::SessionScheduled,
+            ])->save();
+        }
+
+        NotaryJournal::query()->create([
+            'notary_request_id' => $session->notary_request_id,
+            'notary_user_id' => $session->notaryRequest?->notary_user_id,
+            'entry_type' => 'session_cancelled',
+            'summary' => __('Live video verification session was ended without completing verification.'),
+            'legal_assertions' => [
+                'ended_at' => now()->toDateTimeString(),
+                'cancelled_reason' => $reason,
+            ],
+            'recorded_at' => now(),
+        ]);
+
+        return $session->fresh();
+    }
+
     /**
      * Complete the session with verification checklist and evidence.
      *
