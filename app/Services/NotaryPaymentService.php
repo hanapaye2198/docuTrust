@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\PaymentStatus;
+use App\Models\AttorneyNotarialRegistry;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryRequest;
 use App\Models\Payment;
@@ -20,19 +21,20 @@ class NotaryPaymentService
 
     public function createGatewayPayment(NotaryRequest $request, string $gateway, ?int $createdByUserId = null): Payment
     {
-        $request->loadMissing(['registerEntries', 'payments']);
+        $request->loadMissing(['registerEntries', 'payments', 'attorneyNotarialRegistry']);
 
         $registerEntry = $request->registerEntries
             ->sortByDesc('created_at')
             ->first();
 
-        if (! $registerEntry instanceof NotarialRegisterEntry) {
-            throw new RuntimeException('Create a notarial register entry before requesting payment.');
-        }
+        /** @var AttorneyNotarialRegistry|null $attorneyRegistry */
+        $attorneyRegistry = $request->attorneyNotarialRegistry;
+        $amount = $registerEntry instanceof NotarialRegisterEntry
+            ? (float) $registerEntry->fees
+            : (float) ($attorneyRegistry?->fees ?? 0);
 
-        $amount = (float) $registerEntry->fees;
         if ($amount <= 0) {
-            throw new RuntimeException('The register entry must have a fee amount before payment can be created.');
+            throw new RuntimeException('Set a valid fee amount in the attorney registry before creating payment.');
         }
 
         $latestPayment = $request->payments->sortByDesc('created_at')->first();
@@ -55,7 +57,7 @@ class NotaryPaymentService
         return Payment::query()->create([
             'organization_id' => $request->organization_id,
             'notary_request_id' => $request->id,
-            'notarial_register_entry_id' => $registerEntry->id,
+            'notarial_register_entry_id' => $registerEntry?->id,
             'payer_user_id' => $request->user_id,
             'created_by_user_id' => $createdByUserId,
             'provider' => 'gatewayhub',

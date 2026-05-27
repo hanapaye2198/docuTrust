@@ -44,12 +44,26 @@ new #[Layout('components.layouts.app')] class extends Component {
         abort_unless(
             app(NotaryRequestWorkflowService::class)->canCreateRegisterEntry($notaryRequest),
             403,
-            __('Register entry can only be created after the attorney has signed the document.')
+            __('Register entry can only be created after attorney signing, payment, and attorney seal completion.')
         );
 
-        $this->notaryRequest = $notaryRequest;
+        $this->notaryRequest = $notaryRequest->loadMissing('attorneyNotarialRegistry');
         $this->documentTitle = $notaryRequest->title;
         $this->notarialActType = $notaryRequest->request_type ?? 'acknowledgment';
+
+        $draft = $this->notaryRequest->attorneyNotarialRegistry;
+        if ($draft instanceof \App\Models\AttorneyNotarialRegistry) {
+            $this->documentTitle = $draft->title;
+            $this->documentDescription = (string) ($draft->description ?? '');
+            $this->parties = is_array($draft->parties) && $draft->parties !== [] ? $draft->parties : $this->parties;
+            $this->witnesses = is_array($draft->witnesses) ? $draft->witnesses : [];
+            $this->competentEvidence = is_array($draft->competent_evidence) && $draft->competent_evidence !== []
+                ? $draft->competent_evidence
+                : $this->competentEvidence;
+            $this->notarialActType = (string) $draft->notarial_act_type;
+            $this->fees = number_format((float) $draft->fees, 2, '.', '');
+            $this->officialReceiptNumber = (string) ($draft->official_receipt_no ?? '');
+        }
     }
 
     public function addParty(): void
@@ -195,7 +209,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             }
 
             $payment = app(NotaryPaymentService::class)->createGatewayPayment(
-                $this->notaryRequest->fresh(['registerEntries', 'payments']),
+                $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']),
                 $gatewayCode,
                 Auth::id(),
             );

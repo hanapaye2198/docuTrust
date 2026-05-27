@@ -12,6 +12,7 @@ use App\Events\NotaryRequestNotarized;
 use App\Events\NotaryRequestSubmitted;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\NotaryCredential;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
@@ -100,7 +101,7 @@ class NotaryRequestWorkflowService
      */
     public function workflowSteps(NotaryRequest $request): array
     {
-        $request->loadMissing(['documents.documentSigners', 'sessions', 'registerEntries', 'payments', 'eInvoices']);
+        $request->loadMissing(['documents.documentSigners', 'sessions', 'registerEntries', 'payments', 'eInvoices', 'attorneyNotarialRegistry', 'notary']);
 
         $hasSubmitted = $request->submitted_at !== null || $request->status !== NotaryRequestStatus::Draft;
         $hasDocuments = $request->documents->isNotEmpty();
@@ -108,6 +109,8 @@ class NotaryRequestWorkflowService
         $hasCompletedSession = $this->hasCompletedSession($request);
         $attorneyHasSigned = $this->hasAttorneySignedAllDocuments($request);
         $hasRegisterEntry = $request->registerEntries->isNotEmpty();
+        $hasAttorneyRegistry = $request->attorneyNotarialRegistry !== null;
+        $hasAttorneySeal = $this->hasAttorneySealOnFile($request);
         $paymentRequired = $this->paymentRequired($request);
         $hasSettledPayment = $this->hasSettledPayment($request);
         $paymentReady = ! $paymentRequired || $hasSettledPayment;
@@ -153,7 +156,7 @@ class NotaryRequestWorkflowService
                 },
             ],
             [
-                'label' => __('Attorney signs'),
+                'label' => __('Attorney signed'),
                 'description' => __('After identity verification, the attorney signs their part of the document.'),
                 'state' => match (true) {
                     $attorneyHasSigned || $isNotarized => 'complete',
@@ -166,22 +169,35 @@ class NotaryRequestWorkflowService
                 },
             ],
             [
-                'label' => __('Register entry'),
-                'description' => __('Create notarial register entry documenting the notarial act.'),
+                'label' => __('Payment'),
+                'description' => __('Client completes payment after attorney signing using attorney registry fee details.'),
                 'state' => match (true) {
-                    $hasRegisterEntry || $isNotarized => 'complete',
-                    $attorneyHasSigned && ! $hasRegisterEntry => 'current',
-                    $isAttorneyApproved && ! $hasRegisterEntry => 'current',
+                    ! $attorneyHasSigned && ! $isAttorneyApproved && ! $isDigitalized && ! $isNotarized => 'upcoming',
+                    ! $paymentRequired && $attorneyHasSigned => 'complete',
+                    $hasSettledPayment || $isAttorneyApproved || $isDigitalized || $isNotarized => 'complete',
+                    $attorneyHasSigned && $hasAttorneyRegistry => 'current',
                     default => 'upcoming',
                 },
             ],
             [
-                'label' => __('Payment'),
-                'description' => __('Client completes the notarial payment after the register entry is created.'),
+                'label' => __('Seal (attorney personal seal)'),
+                'description' => __('Attorney uploads and confirms a personal seal before final register entry.'),
                 'state' => match (true) {
-                    ! $paymentRequired && $hasRegisterEntry => 'complete',
-                    $hasSettledPayment || $isAttorneyApproved || $isDigitalized || $isNotarized => 'complete',
-                    $hasRegisterEntry => 'current',
+                    ! $attorneyHasSigned && ! $isAttorneyApproved && ! $isDigitalized && ! $isNotarized => 'upcoming',
+                    $hasAttorneySeal || $isAttorneyApproved || $isDigitalized || $isNotarized => 'complete',
+                    $hasSettledPayment => 'current',
+                    $attorneyHasSigned && ! $paymentRequired => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'label' => __('Registry entry'),
+                'description' => __('Create the final register entry after payment and attorney seal are complete.'),
+                'state' => match (true) {
+                    ! $attorneyHasSigned && ! $isAttorneyApproved && ! $isDigitalized && ! $isNotarized => 'upcoming',
+                    $hasRegisterEntry || $isNotarized => 'complete',
+                    $hasSettledPayment && $hasAttorneySeal => 'current',
+                    $attorneyHasSigned && ! $paymentRequired && $hasAttorneySeal => 'current',
                     default => 'upcoming',
                 },
             ],
@@ -278,8 +294,8 @@ class NotaryRequestWorkflowService
 
     public function canCreateRegisterEntry(NotaryRequest $request): bool
     {
-        if ($this->hasAttorneySignedAllDocuments($request)) {
-            return true;
+        if ($this->hasAttorneySignedAllDocuments($request) && $this->hasAttorneySealOnFile($request)) {
+            return ! $this->paymentRequired($request) || $this->hasSettledPayment($request);
         }
 
         return in_array($request->status, [
@@ -338,11 +354,15 @@ class NotaryRequestWorkflowService
 
     public function paymentRequired(NotaryRequest $request): bool
     {
-        $request->loadMissing('registerEntries');
+        $request->loadMissing(['registerEntries', 'attorneyNotarialRegistry']);
 
-        return $request->registerEntries->contains(
+        if ($request->registerEntries->contains(
             fn ($entry): bool => (float) $entry->fees > 0
-        );
+        )) {
+            return true;
+        }
+
+        return (float) ($request->attorneyNotarialRegistry?->fees ?? 0) > 0;
     }
 
     public function hasSettledPayment(NotaryRequest $request): bool
@@ -369,6 +389,25 @@ class NotaryRequestWorkflowService
         }
 
         return $request->fresh();
+    }
+
+    public function hasAttorneySealOnFile(NotaryRequest $request): bool
+    {
+        $request->loadMissing('notary');
+
+        if ($request->notary === null) {
+            return false;
+        }
+
+        $credential = NotaryCredential::query()
+            ->where('user_id', $request->notary->id)
+            ->where('status', 'active')
+            ->latest()
+            ->first();
+
+        return $credential !== null
+            && is_string($credential->seal_image_path)
+            && $credential->seal_image_path !== '';
     }
 
     private function documentsReadyForSessionState(NotaryRequest $request): bool

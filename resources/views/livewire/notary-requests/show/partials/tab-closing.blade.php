@@ -5,27 +5,29 @@
 @endphp
 
 <div class="space-y-4">
-                <div id="section-register" class="ui-panel p-5 sm:p-6">
-                    <flux:heading size="lg" class="!mb-2">{{ __('Notarial register') }}</flux:heading>
-                    @if ($canCreateRegisterEntry)
-                        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Create the official notarial register entry with all 9 required fields.') }}</p>
-                        <div class="mt-4">
-                            <flux:button variant="primary" :href="route('notary.register-entry', $notaryRequest)" wire:navigate>{{ __('Create register entry') }}</flux:button>
-                        </div>
-                    @else
-                        <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                            {{ __('Register entry creation becomes available after the attorney has signed the linked documents.') }}
-                        </div>
-                    @endif
-                    @if ($notaryRequest->registerEntries->isNotEmpty())
-                        <div class="mt-4 space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-700">
-                            @foreach ($notaryRequest->registerEntries as $entry)
-                                <div class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                                    <div class="font-medium text-zinc-800 dark:text-zinc-200">{{ __('Entry') }} {{ str_pad($entry->entry_number, 3, '0', STR_PAD_LEFT) }} — {{ ucfirst(str_replace('_', ' ', $entry->notarial_act_type)) }}</div>
-                                    <div class="text-zinc-500 dark:text-zinc-400">{{ $entry->document_title }}</div>
-                                    <div class="text-xs text-zinc-400 dark:text-zinc-500">{{ $entry->notarized_at?->timezone('Asia/Manila')->format('M j, Y g:i:s A') }} (PHT)</div>
-                                </div>
-                            @endforeach
+                <div id="section-attorney-registry" class="ui-panel p-5 sm:p-6">
+                    <flux:heading size="lg" class="!mb-2">{{ __('Attorney notarial registry') }}</flux:heading>
+                    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                        {{ __('Capture entry no., title, parties, witnesses, identity evidence, act type, fees, O.R. no., and attorney signature details before payment.') }}
+                    </p>
+                    <div class="mt-4 flex flex-wrap items-center gap-2">
+                        <flux:button variant="primary" :href="route('notary.attorney-registry', $notaryRequest)" wire:navigate>{{ __('Open attorney registry') }}</flux:button>
+                        @if ($attorneyRegistryDraft)
+                            <flux:badge color="emerald">{{ __('Saved') }}</flux:badge>
+                        @else
+                            <flux:badge color="amber">{{ __('Not yet saved') }}</flux:badge>
+                        @endif
+                    </div>
+                    @if ($attorneyRegistryDraft)
+                        <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                            <div class="font-medium">{{ $attorneyRegistryDraft->title }}</div>
+                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                {{ __('Entry no.: :entry | Act: :act | Fee: PHP :fee', [
+                                    'entry' => $attorneyRegistryDraft->entry_no ?: __('(auto)'),
+                                    'act' => ucfirst(str_replace('_', ' ', $attorneyRegistryDraft->notarial_act_type)),
+                                    'fee' => number_format((float) $attorneyRegistryDraft->fees, 2),
+                                ]) }}
+                            </div>
                         </div>
                     @endif
                 </div>
@@ -35,7 +37,9 @@
                     <flux:heading size="lg" class="!mb-2">{{ __('Payment') }}</flux:heading>
                     @php
                         $latestRegisterEntry = $notaryRequest->registerEntries->sortByDesc('created_at')->first();
-                        $paymentDue = $latestRegisterEntry ? (float) $latestRegisterEntry->fees : 0.0;
+                        $paymentDue = $latestRegisterEntry
+                            ? (float) $latestRegisterEntry->fees
+                            : (float) ($attorneyRegistryDraft?->fees ?? 0);
                         $currentPaymentExpired = $latestPayment instanceof Payment
                             && $latestPayment->status === PaymentStatus::Pending
                             && $latestPayment->expires_at?->isPast();
@@ -54,9 +58,15 @@
                             <div class="mt-1 text-xl font-semibold text-zinc-900 dark:text-zinc-100">PHP {{ number_format($paymentDue, 2) }}</div>
                             <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Based on register entry :entry', ['entry' => str_pad((string) $latestRegisterEntry->entry_number, 3, '0', STR_PAD_LEFT)]) }}</div>
                         </div>
+                    @elseif ($attorneyRegistryDraft && (float) $attorneyRegistryDraft->fees > 0)
+                        <div class="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900/40">
+                            <div class="font-medium text-zinc-900 dark:text-zinc-100">{{ __('Amount due') }}</div>
+                            <div class="mt-1 text-xl font-semibold text-zinc-900 dark:text-zinc-100">PHP {{ number_format($paymentDue, 2) }}</div>
+                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Based on attorney registry draft') }}</div>
+                        </div>
                     @else
                         <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                            {{ __('Create a notarial register entry with fees before generating a GatewayHub payment.') }}
+                            {{ __('Save attorney registry details with fees before generating a GatewayHub payment.') }}
                         </div>
                     @endif
 
@@ -127,7 +137,7 @@
                         </div>
                     @endif
 
-                    @if ($latestRegisterEntry && $paymentDue > 0 && (! ($latestPayment instanceof Payment) || $latestPayment->status !== PaymentStatus::Paid))
+                    @if ($paymentDue > 0 && (! ($latestPayment instanceof Payment) || $latestPayment->status !== PaymentStatus::Paid))
                         <div class="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
                             <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $currentPaymentExpired ? __('Generate a new GatewayHub payment') : __('Create GatewayHub payment') }}</div>
                             @if ($enabledPaymentGateways !== [])
@@ -199,6 +209,49 @@
                     @endif
                 </div>
             @endif
+
+                @if ($isNotary)
+                <div id="section-attorney-seal" class="ui-panel scroll-mt-6 p-5 sm:p-6">
+                    <flux:heading size="lg" class="!mb-2">{{ __('Seal (attorney personal seal)') }}</flux:heading>
+                    @if ($hasAttorneySealOnFile)
+                        <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+                            {{ __('Attorney personal seal is on file and ready for register entry/final notarization.') }}
+                        </div>
+                    @else
+                        <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                            {{ __('Upload your personal seal in credentials to continue.') }}
+                        </div>
+                        <div class="mt-4">
+                            <flux:button variant="outline" :href="route('notary.credentials')" wire:navigate>{{ __('Open credentials') }}</flux:button>
+                        </div>
+                    @endif
+                </div>
+                @endif
+
+                <div id="section-register" class="ui-panel p-5 sm:p-6">
+                    <flux:heading size="lg" class="!mb-2">{{ __('Notarial register') }}</flux:heading>
+                    @if ($canCreateRegisterEntry)
+                        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Create the final official register entry after payment and attorney seal are completed.') }}</p>
+                        <div class="mt-4">
+                            <flux:button variant="primary" :href="route('notary.register-entry', $notaryRequest)" wire:navigate>{{ __('Create register entry') }}</flux:button>
+                        </div>
+                    @else
+                        <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                            {{ __('Register entry creation becomes available after attorney signing, payment completion, and attorney seal availability.') }}
+                        </div>
+                    @endif
+                    @if ($notaryRequest->registerEntries->isNotEmpty())
+                        <div class="mt-4 space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+                            @foreach ($notaryRequest->registerEntries as $entry)
+                                <div class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                                    <div class="font-medium text-zinc-800 dark:text-zinc-200">{{ __('Entry') }} {{ str_pad($entry->entry_number, 3, '0', STR_PAD_LEFT) }} — {{ ucfirst(str_replace('_', ' ', $entry->notarial_act_type)) }}</div>
+                                    <div class="text-zinc-500 dark:text-zinc-400">{{ $entry->document_title }}</div>
+                                    <div class="text-xs text-zinc-400 dark:text-zinc-500">{{ $entry->notarized_at?->timezone('Asia/Manila')->format('M j, Y g:i:s A') }} (PHT)</div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
 
                 @if ($isNotary)
                 <div id="section-review" class="ui-panel scroll-mt-6 p-5 sm:p-6">

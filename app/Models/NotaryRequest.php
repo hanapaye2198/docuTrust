@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class NotaryRequest extends Model
 {
@@ -172,6 +173,14 @@ class NotaryRequest extends Model
     public function eInvoices(): HasMany
     {
         return $this->hasMany(EInvoice::class)->latest('created_at');
+    }
+
+    /**
+     * @return HasOne<AttorneyNotarialRegistry, $this>
+     */
+    public function attorneyNotarialRegistry(): HasOne
+    {
+        return $this->hasOne(AttorneyNotarialRegistry::class);
     }
 
     public function markSubmitted(): void

@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\NotaryRequestStatus;
 use App\Models\Document;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
@@ -44,7 +43,7 @@ class NotarialRegisterService
         }
 
         if (! $this->notaryRequestWorkflowService->canCreateRegisterEntry($request)) {
-            throw new RuntimeException(__('Register entries can only be created after the attorney has signed the document.'));
+            throw new RuntimeException(__('Register entries can only be created after attorney signing, payment, and attorney seal completion.'));
         }
 
         $documentTitle = trim((string) ($data['document_title'] ?? ''));

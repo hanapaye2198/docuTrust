@@ -22,6 +22,7 @@ use App\Services\IdentityVerificationService;
 use App\Services\LocationVerificationService;
 use App\Services\EInvoiceService;
 use App\Services\NotaryPaymentService;
+use App\Services\NotaryNotificationService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
 use App\Services\EnotaryInvitationService;
@@ -103,7 +104,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         $user = Auth::user();
         abort_unless($user !== null, 401);
 
-        $notaryRequest->load(['requester', 'notary', 'documents', 'sessions', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
+        $notaryRequest->load(['requester', 'notary', 'documents', 'sessions', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'attorneyNotarialRegistry', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
 
         Gate::authorize('view', $notaryRequest);
 
@@ -218,6 +219,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'canVerifyIdentity' => $this->canVerifyIdentity(),
             'canVerifyLocation' => $this->canVerifyLocation(),
             'canCreateRegisterEntry' => $this->canCreateRegisterEntry(),
+            'hasAttorneySealOnFile' => $workflow->hasAttorneySealOnFile($this->notaryRequest),
             'canReviewNotary' => $this->canReviewNotary(),
             'canAttorneySign' => $this->canAttorneySign(),
             'attorneyHasSigned' => $workflow->hasAttorneySignedAllDocuments($this->notaryRequest),
@@ -242,6 +244,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 ->orderByDesc('id')
                 ->get(),
             'latestEInvoice' => $this->notaryRequest->eInvoices->sortByDesc('created_at')->first(),
+            'attorneyRegistryDraft' => $this->notaryRequest->attorneyNotarialRegistry,
             'finalizationReadiness' => $readiness,
             'documentWorkflowStates' => $requestDocuments
                 ->mapWithKeys(fn (Document $document) => [
@@ -1153,10 +1156,17 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         try {
             $payment = app(NotaryPaymentService::class)->createGatewayPayment(
-                $this->notaryRequest->fresh(['registerEntries', 'payments']),
+                $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']),
                 $validated['paymentGateway'],
                 Auth::id(),
             );
+
+            if ($payment->wasRecentlyCreated) {
+                app(NotaryNotificationService::class)->notifyPaymentReady(
+                    $this->notaryRequest->fresh(['requester', 'notary']),
+                    $payment,
+                );
+            }
 
             $this->refreshRequest();
 
@@ -1255,7 +1265,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     private function refreshRequest(): void
     {
-        $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions.notarySigner', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
+        $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions.notarySigner', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'attorneyNotarialRegistry', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
     }
 
     private function resolveCompletedLinkedDocument(int $documentId): Document
@@ -1383,11 +1393,48 @@ new #[Layout('components.layouts.app')] class extends Component {
             ];
         }
 
+        $hasAttorneyRegistryDraft = $request->attorneyNotarialRegistry !== null;
+        $hasAttorneySealOnFile = $workflow->hasAttorneySealOnFile($request);
+        $paymentRequired = $workflow->paymentRequired($request);
+        $hasSettledPayment = $workflow->hasSettledPayment($request);
+
+        if ($workflow->hasAttorneySignedAllDocuments($request) && ! $hasAttorneyRegistryDraft) {
+            return [
+                'type' => 'link',
+                'label' => __('Prepare attorney registry'),
+                'description' => __('Capture entry no., parties, identity evidence, fees, and notarial act details before payment.'),
+                'variant' => 'primary',
+                'href' => route('notary.attorney-registry', $request),
+                'tab' => 'closing',
+            ];
+        }
+
+        if ($paymentRequired && ! $hasSettledPayment && $hasAttorneyRegistryDraft) {
+            return [
+                'type' => 'tab',
+                'label' => __('Collect payment'),
+                'description' => __('Generate or share the payment link based on the attorney registry fee amount.'),
+                'variant' => 'primary',
+                'tab' => 'closing',
+            ];
+        }
+
+        if (($hasSettledPayment || ! $paymentRequired) && ! $hasAttorneySealOnFile && $workflow->hasAttorneySignedAllDocuments($request)) {
+            return [
+                'type' => 'link',
+                'label' => __('Upload attorney seal'),
+                'description' => __('Add your personal seal in credentials before creating the final registry entry.'),
+                'variant' => 'primary',
+                'href' => route('notary.credentials'),
+                'tab' => 'closing',
+            ];
+        }
+
         if ($workflow->canCreateRegisterEntry($request)) {
             return [
                 'type' => 'link',
                 'label' => __('Create register entry'),
-                'description' => __('Record the act in the notarial register before payment and sealing.'),
+                'description' => __('Finalize the register entry after payment and attorney seal completion.'),
                 'variant' => 'primary',
                 'href' => route('notary.register-entry', $request),
                 'tab' => 'closing',

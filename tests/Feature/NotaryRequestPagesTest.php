@@ -13,6 +13,7 @@ use App\Jobs\RefreshEInvoiceStatusJob;
 use App\Jobs\SubmitEInvoiceJob;
 use App\Mail\NotaryPaymentReadyMail;
 use App\Mail\SignerInvitationMail;
+use App\Models\AttorneyNotarialRegistry;
 use App\Models\BillingProfile;
 use App\Models\Document;
 use App\Models\DocumentHash;
@@ -576,17 +577,20 @@ class NotaryRequestPagesTest extends TestCase
             ->get(route('notary.requests.show', $request))
             ->assertOk()
             ->assertSee('Workflow')
-            ->assertSee('Do this now')
             ->assertSee('Documents')
             ->assertSee('Parties')
             ->assertSee('Closing')
             ->assertSee('Signers sign')
             ->assertSee('Video conference')
+            ->assertSee('Attorney signed')
+            ->assertSee('Payment')
+            ->assertSee('Seal (attorney personal seal)')
+            ->assertSee('Registry entry')
             ->assertSee('Attorney review')
             ->assertSee('Attorney review becomes available after the video session is complete, the attorney has signed, the register entry exists, and the client payment has been completed.')
             ->assertDontSee('Complete attorney review')
             ->assertSee('Notarial register')
-            ->assertSee('Register entry creation becomes available after the attorney has signed the linked documents.')
+            ->assertSee('Register entry creation becomes available after attorney signing, payment completion, and attorney seal availability.')
             ->assertDontSee('Create register entry');
     }
 
@@ -600,6 +604,57 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($notary)
             ->get(route('notary.register-entry', $request))
             ->assertForbidden();
+    }
+
+    public function test_notary_can_save_attorney_registry_draft_after_attorney_signing(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary.attorney-registry', ['notaryRequest' => $request])
+            ->set('entryNo', 'DRAFT-001')
+            ->set('title', 'Affidavit of Loss Registry')
+            ->set('description', 'Registry details prior to payment.')
+            ->set('parties', [
+                ['name' => 'Juan Dela Cruz', 'address' => 'Davao City'],
+            ])
+            ->set('competentEvidence', [
+                ['person_name' => 'Juan Dela Cruz', 'id_type' => 'Passport', 'id_number' => 'P12345'],
+            ])
+            ->set('notarialActType', 'affidavit')
+            ->set('fees', '500.00')
+            ->set('officialReceiptNo', 'OR-123')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('attorney_notarial_registries', [
+            'notary_request_id' => $request->id,
+            'entry_no' => 'DRAFT-001',
+            'title' => 'Affidavit of Loss Registry',
+            'notarial_act_type' => 'affidavit',
+            'official_receipt_no' => 'OR-123',
+        ]);
+
+        $this->assertNotNull(AttorneyNotarialRegistry::query()->where('notary_request_id', $request->id)->first());
     }
 
     public function test_register_entry_page_auto_creates_gatewayhub_payment_when_fees_are_provided(): void
