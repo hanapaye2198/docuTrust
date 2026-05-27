@@ -173,10 +173,18 @@
                     <flux:sidebar.item
                         icon="clipboard-document-list"
                         :href="route('notary.requests.index')"
-                        :current="request()->routeIs('notary.requests.*')"
+                        :current="request()->routeIs('notary.requests.*') && ! request()->routeIs('notary.attorney-registries.*')"
                         :tooltip="__('Notary Requests')"
                         wire:navigate
                     >{{ __('Notary Requests') }}</flux:sidebar.item>
+
+                    <flux:sidebar.item
+                        icon="book-open"
+                        :href="route('notary.attorney-registries.index')"
+                        :current="request()->routeIs('notary.attorney-registries.*', 'notary.attorney-registry')"
+                        :tooltip="__('Notary registry')"
+                        wire:navigate
+                    >{{ __('Notary registry') }}</flux:sidebar.item>
                 @endif
 
                 @if ($navUser->canManageNotaryRequestPortal())

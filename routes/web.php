@@ -122,6 +122,7 @@ Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function 
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
     Volt::route('notary/requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary.requests.session.live')->middleware(AllowMediaPermissions::class);
+    Volt::route('notary/attorney-registries', 'notary.attorney-registries.index')->name('notary.attorney-registries.index');
     Volt::route('notary/requests/{notaryRequest}/attorney-registry', 'notary.attorney-registry')->name('notary.attorney-registry');
     Volt::route('notary/requests/{notaryRequest}/register-entry', 'notary.register-entry')->name('notary.register-entry');
 

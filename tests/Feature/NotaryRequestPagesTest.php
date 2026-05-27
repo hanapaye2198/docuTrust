@@ -657,6 +657,32 @@ class NotaryRequestPagesTest extends TestCase
         $this->assertNotNull(AttorneyNotarialRegistry::query()->where('notary_request_id', $request->id)->first());
     }
 
+    public function test_notary_can_access_attorney_registries_index_and_sees_sidebar_link(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'title' => 'SPA for Property Transfer',
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'title' => 'Registry Title',
+            'entry_no' => 'ENT-42',
+        ]);
+
+        $this->actingAs($notary)
+            ->get(route('notary.attorney-registries.index'))
+            ->assertOk()
+            ->assertSee('SPA for Property Transfer')
+            ->assertSee('ENT-42');
+
+        $this->actingAs($notary)
+            ->get(route('notary.dashboard'))
+            ->assertOk()
+            ->assertSee(__('Notary registry'));
+    }
+
     public function test_register_entry_page_auto_creates_gatewayhub_payment_when_fees_are_provided(): void
     {
         Mail::fake();
