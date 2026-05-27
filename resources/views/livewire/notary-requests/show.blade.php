@@ -1415,6 +1415,27 @@ new #[Layout('components.layouts.app')] class extends Component {
             }
         }
 
+        $joinableSession = $request->sessions
+            ->filter(fn ($session): bool => $session->notary_signer_id !== null
+                && in_array($session->status, ['scheduled', 'in_progress'], true))
+            ->sortBy(fn ($session): int => $session->status === 'in_progress' ? 0 : 1)
+            ->first();
+
+        if ($joinableSession !== null) {
+            $partyName = $joinableSession->notarySigner?->full_name;
+
+            return [
+                'type' => 'link',
+                'label' => __('Join video call'),
+                'description' => $partyName !== null && $partyName !== ''
+                    ? __('Enter the live verification room with :name.', ['name' => $partyName])
+                    : __('Enter the live verification room with the signer.'),
+                'variant' => 'primary',
+                'href' => route('notary.requests.session.live', [$request, $joinableSession]),
+                'tab' => 'session',
+            ];
+        }
+
         if ($this->canScheduleSession()) {
             return [
                 'type' => 'wire',
@@ -1422,17 +1443,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 'description' => __('All signers have signed. Email each party their personal video link.'),
                 'variant' => 'primary',
                 'action' => 'openVideoSessionWorkspace',
-            ];
-        }
-
-        $inProgressSession = $request->sessions->first(fn ($session): bool => in_array($session->status, ['scheduled', 'in_progress'], true));
-        if ($inProgressSession !== null) {
-            return [
-                'type' => 'wire',
-                'label' => $inProgressSession->status === 'in_progress' ? __('Join video session') : __('Send video links & open session'),
-                'description' => __('Email personal video links to each signed party, then complete verification.'),
-                'variant' => 'primary',
-                'action' => 'openVideoSessionWorkspace',
+                'tab' => 'session',
             ];
         }
 
@@ -1481,10 +1492,11 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($signingProgress['phase'] === 'awaiting_video') {
             return [
                 'type' => 'wire',
-                'label' => __('Send video links to signers'),
+                'label' => __('Open video workspace'),
                 'description' => $signingProgress['summary'],
                 'variant' => 'primary',
                 'action' => 'openVideoSessionWorkspace',
+                'tab' => 'session',
             ];
         }
 
@@ -1503,10 +1515,11 @@ new #[Layout('components.layouts.app')] class extends Component {
             if ($signingProgress['all_client_signatures_complete'] && ! ($signingProgress['video_verification_complete'] ?? false)) {
                 return [
                     'type' => 'wire',
-                    'label' => __('Send video links to signers'),
+                    'label' => __('Open video workspace'),
                     'description' => $signingProgress['summary'],
                     'variant' => 'primary',
                     'action' => 'openVideoSessionWorkspace',
+                    'tab' => 'session',
                 ];
             }
 

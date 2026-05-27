@@ -12,9 +12,54 @@
                         <p class="mt-1 text-violet-800/90 dark:text-violet-200/90">{{ __('Signer legitimacy was confirmed on video. Place your attorney signature, then the system will generate the final PDF, certificate, and hash.') }}</p>
                     </div>
                 @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'awaiting_video')
+                    @php
+                        $joinableVideoParties = collect($partiesForVideo ?? [])->filter(
+                            fn (array $party): bool => ($party['has_signed'] ?? false)
+                                && ($party['session_id'] ?? null)
+                                && in_array($party['session_status'] ?? '', ['scheduled', 'in_progress'], true)
+                        );
+                    @endphp
                     <div class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-100">
                         <div class="font-semibold">{{ __('Video verification required') }}</div>
-                        <p class="mt-1 text-indigo-800/90 dark:text-indigo-200/90">{{ __('All signers have signed. Complete a video session with each party on the Video tab before you sign as attorney.') }}</p>
+                        <p class="mt-1 text-indigo-800/90 dark:text-indigo-200/90">
+                            @if ($joinableVideoParties->isNotEmpty())
+                                {{ __('A signer may already be waiting in the video room. Join the call below or open the full video workspace.') }}
+                            @else
+                                {{ __('All signers have signed. Send video links, then complete a verification call with each party before you sign as attorney.') }}
+                            @endif
+                        </p>
+                        @if ($joinableVideoParties->isNotEmpty())
+                            <div class="mt-3 flex flex-wrap items-center gap-2">
+                                @foreach ($joinableVideoParties as $party)
+                                    @include('livewire.notary-requests.show.partials.video-join-link', [
+                                        'notaryRequest' => $notaryRequest,
+                                        'sessionId' => $party['session_id'],
+                                        'label' => __('Join call with :name', ['name' => $party['full_name']]),
+                                    ])
+                                @endforeach
+                                <flux:button
+                                    variant="outline"
+                                    size="sm"
+                                    type="button"
+                                    wire:click="setActiveTab('session')"
+                                >
+                                    {{ __('Open video workspace') }}
+                                </flux:button>
+                            </div>
+                        @else
+                            <div class="mt-3">
+                                <flux:button
+                                    variant="primary"
+                                    size="sm"
+                                    type="button"
+                                    wire:click="openVideoSessionWorkspace"
+                                    wire:loading.attr="disabled"
+                                    wire:target="openVideoSessionWorkspace,sendSignerVideoInvitations,syncVideoPartiesIfReady"
+                                >
+                                    {{ __('Send video links & open workspace') }}
+                                </flux:button>
+                            </div>
+                        @endif
                     </div>
                 @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'finalizing')
                     <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
@@ -272,14 +317,45 @@
                 @endif
 
                 @if ($isNotary && ($usesPerSignerVideo ?? false) && ($signingProgress['all_client_signatures_complete'] ?? false))
+                    @php
+                        $hasJoinableVideoSessions = collect($partiesForVideo ?? [])->contains(
+                            fn (array $party): bool => ($party['has_signed'] ?? false)
+                                && ($party['session_id'] ?? null)
+                                && in_array($party['session_status'] ?? '', ['scheduled', 'in_progress'], true)
+                        );
+                    @endphp
                     <div class="mt-4 flex flex-wrap items-center gap-2">
-                        <flux:button
-                            variant="primary"
-                            type="button"
-                            wire:click="sendSignerVideoInvitations"
-                        >
-                            {{ __('Send video links to signers') }}
-                        </flux:button>
+                        @if ($hasJoinableVideoSessions)
+                            <flux:button
+                                variant="outline"
+                                type="button"
+                                wire:click="sendSignerVideoInvitations(true)"
+                                wire:loading.attr="disabled"
+                                wire:target="sendSignerVideoInvitations,syncVideoPartiesIfReady"
+                            >
+                                {{ __('Resend video links by email') }}
+                            </flux:button>
+                        @else
+                            <flux:button
+                                variant="primary"
+                                type="button"
+                                wire:click="sendSignerVideoInvitations"
+                                wire:loading.attr="disabled"
+                                wire:target="sendSignerVideoInvitations,syncVideoPartiesIfReady"
+                            >
+                                {{ __('Send video links to signers') }}
+                            </flux:button>
+                        @endif
+                        @if ($hasJoinableVideoSessions)
+                            <flux:button
+                                variant="ghost"
+                                size="sm"
+                                type="button"
+                                wire:click="setActiveTab('session')"
+                            >
+                                {{ __('Open video workspace') }}
+                            </flux:button>
+                        @endif
                         <flux:error name="sendSignerVideoInvitations" />
                         <p class="text-xs text-zinc-500 dark:text-zinc-400">
                             {{ __('Each signer receives a personal video link by email. Links are sent automatically when signing finishes if not already sent.') }}

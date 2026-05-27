@@ -311,10 +311,88 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
             ->assertHasNoErrors()
             ->assertSee('Parties — individual video links')
             ->assertSee('Jane Signer')
-            ->assertSee('Join room')
+            ->assertSee('Join video call')
             ->assertSee('Personal video link for Jane Signer')
             ->assertSee('enotary/video/');
 
-        Mail::assertSent(NotarySignerVideoInvitationMail::class);
+        $this->assertNotNull($request->fresh()->sessions->first()?->invitation_sent_at);
+    }
+
+    public function test_documents_tab_shows_join_video_call_when_session_is_scheduled(): void
+    {
+        Mail::fake();
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'waiting@example.test',
+            'full_name' => 'Waiting Signer',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $party->email,
+            'name' => $party->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'scheduled',
+            'room_name' => 'docutrust-waiting-room',
+            'meeting_url' => 'https://meet.jit.si/docutrust-waiting-room',
+            'access_token' => 'waiting-video-token',
+            'scheduled_for' => now()->addHour(),
+            'invitation_sent_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
+            ->call('setActiveTab', 'documents')
+            ->assertSee('Join call with Waiting Signer')
+            ->assertSee('Join video call')
+            ->assertSee(route('notary.requests.session.live', [$request, $request->sessions()->first()]), false);
+    }
+
+    public function test_primary_action_links_to_live_session_when_video_room_is_ready(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Ready Signer',
+        ]);
+
+        $session = $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'scheduled',
+            'room_name' => 'docutrust-ready-room',
+            'meeting_url' => 'https://meet.jit.si/docutrust-ready-room',
+            'access_token' => 'ready-video-token',
+            'scheduled_for' => now()->addHour(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
+            ->assertSee('Join video call')
+            ->assertSee(route('notary.requests.session.live', [$request, $session]), false);
     }
 }

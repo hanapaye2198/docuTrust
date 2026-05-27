@@ -1,9 +1,6 @@
 @php
     $allPartiesSigned = (bool) ($signingProgress['all_client_signatures_complete'] ?? false);
     $signedParties = collect($partiesForVideo ?? [])->filter(fn (array $party): bool => $party['has_signed'] ?? false);
-    $liveSessionRoute = auth()->user()?->role->value === 'notary'
-        ? 'notary.requests.session.live'
-        : 'notary-requests.session.live';
 @endphp
 
             <div class="ui-panel p-6 sm:p-8">
@@ -76,28 +73,11 @@
                                             @endif
                                         </div>
 
-                                        @if ($party['has_signed'] && ($party['session_id'] ?? null) && ($party['session_status'] ?? '') === 'scheduled')
-                                            <div class="flex gap-2">
-                                                @if ($isNotary)
-                                                    <flux:button
-                                                        variant="primary"
-                                                        size="sm"
-                                                        type="button"
-                                                        wire:click="startSession({{ $party['session_id'] }})"
-                                                    >
-                                                        {{ __('Start session') }}
-                                                    </flux:button>
-                                                @endif
-                                                <a
-                                                    href="{{ route($liveSessionRoute, [$notaryRequest, $party['session_id']]) }}"
-                                                    target="_blank"
-                                                    class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900"
-                                                >
-                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
-                                                    {{ __('Join room') }}
-                                                </a>
-                                            </div>
-                                        @endif
+                                        @include('livewire.notary-requests.show.partials.video-party-actions', [
+                                            'party' => $party,
+                                            'notaryRequest' => $notaryRequest,
+                                            'isNotary' => $isNotary,
+                                        ])
                                     </div>
 
                                     @if ($party['has_signed'])
@@ -139,15 +119,6 @@
                                         @endif
 
                                         @if (($party['session_status'] ?? '') === 'in_progress' && ($party['session_id'] ?? null))
-                                            <div class="mt-3 flex flex-wrap gap-2">
-                                                <a
-                                                    href="{{ route($liveSessionRoute, [$notaryRequest, $party['session_id']]) }}"
-                                                    target="_blank"
-                                                    class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900"
-                                                >
-                                                    {{ __('Join video room') }}
-                                                </a>
-                                            </div>
                                             @if ($isNotary)
                                                 <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
                                                     <span class="text-xs font-semibold text-amber-800 dark:text-amber-300">{{ __('Attorney verification checklist') }}</span>
