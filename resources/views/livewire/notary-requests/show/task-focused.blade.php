@@ -139,7 +139,7 @@
                 {{ __('The register entry is recorded. Client payment must be completed before review and digital notarization can finish.') }}
             </flux:callout.text>
             <div class="mt-2">
-                <flux:button size="sm" variant="outline" type="button" wire:click="setActiveTab('closing')">{{ __('Open payment') }}</flux:button>
+                <flux:button size="sm" variant="outline" type="button" wire:click="openPaymentSection">{{ __('Open payment') }}</flux:button>
             </div>
         </flux:callout>
     @endif
@@ -147,9 +147,9 @@
     <div class="grid items-start gap-6 lg:grid-cols-12" wire:key="case-workspace-{{ $notaryRequest->id }}">
         <div class="flex min-w-0 flex-col gap-4 lg:col-span-8 xl:col-span-9">
             <nav class="flex flex-wrap gap-2 border-b border-zinc-200/90 pb-1 dark:border-zinc-800" aria-label="{{ __('Case workspace tabs') }}">
-                <button
-                    type="button"
-                    wire:click="setActiveTab('documents')"
+                <a
+                    href="{{ request()->fullUrlWithQuery(['tab' => 'documents']) }}"
+                    wire:navigate
                     @class([
                         'rounded-lg px-4 py-2 text-sm font-semibold transition',
                         'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'documents',
@@ -157,10 +157,10 @@
                     ])
                 >
                     {{ __('Documents') }}
-                </button>
-                <button
-                    type="button"
-                    wire:click="setActiveTab('parties')"
+                </a>
+                <a
+                    href="{{ request()->fullUrlWithQuery(['tab' => 'parties']) }}"
+                    wire:navigate
                     @class([
                         'rounded-lg px-4 py-2 text-sm font-semibold transition',
                         'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'parties',
@@ -171,11 +171,11 @@
                     @if ($requestSigners->isNotEmpty())
                         <span class="ml-1 text-xs opacity-70">{{ $requestSigners->count() }}</span>
                     @endif
-                </button>
+                </a>
                 @if ($panels['session'])
-                    <button
-                        type="button"
-                        wire:click="setActiveTab('session')"
+                    <a
+                        href="{{ request()->fullUrlWithQuery(['tab' => 'session']) }}"
+                        wire:navigate
                         @class([
                             'rounded-lg px-4 py-2 text-sm font-semibold transition',
                             'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'session',
@@ -183,25 +183,25 @@
                         ])
                     >
                         {{ __('Video session') }}
-                    </button>
+                    </a>
                 @endif
                 @if ($panels['closing'])
-                    <button
-                        type="button"
-                        wire:click="setActiveTab('closing')"
+                    <a
+                        href="{{ request()->fullUrlWithQuery(['tab' => 'closing']) }}"
+                        wire:navigate
                         @class([
                             'rounded-lg px-4 py-2 text-sm font-semibold transition',
                             'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'closing',
                             'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' => $activeTab !== 'closing',
                         ])
                     >
-                        {{ __('Closing') }}
-                    </button>
+                        {{ __('Settlement') }}
+                    </a>
                 @endif
                 @if ($panels['audit'])
-                    <button
-                        type="button"
-                        wire:click="setActiveTab('audit')"
+                    <a
+                        href="{{ request()->fullUrlWithQuery(['tab' => 'audit']) }}"
+                        wire:navigate
                         @class([
                             'rounded-lg px-4 py-2 text-sm font-semibold transition',
                             'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'audit',
@@ -209,7 +209,7 @@
                         ])
                     >
                         {{ __('Audit') }}
-                    </button>
+                    </a>
                 @endif
             </nav>
 
@@ -306,7 +306,7 @@
                     <div class="ui-panel p-5">
                         <flux:heading size="sm" class="mb-2">{{ __('Payment due') }}</flux:heading>
                         <p class="text-lg font-bold text-zinc-900 dark:text-zinc-100">PHP {{ number_format((float) $sidebarRegisterEntry->fees, 2) }}</p>
-                        <flux:button class="mt-3 w-full" size="sm" variant="outline" type="button" wire:click="setActiveTab('closing')">{{ __('View payment') }}</flux:button>
+                        <flux:button class="mt-3 w-full" size="sm" variant="outline" type="button" wire:click="openPaymentSection">{{ __('View payment') }}</flux:button>
                     </div>
                 @endif
             @endif
@@ -315,3 +315,21 @@
 
     @include('livewire.notary-requests.show.partials.notary-status-poll-config')
 </x-admin.page>
+
+<script>
+    window.addEventListener('scroll-to-section', (event) => {
+        const targetId = event?.detail?.id;
+        if (!targetId) {
+            return;
+        }
+
+        window.setTimeout(() => {
+            const element = document.getElementById(targetId);
+            if (!element) {
+                return;
+            }
+
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 60);
+    });
+</script>

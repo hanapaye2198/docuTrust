@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocumentStatus;
+use App\Enums\SigningMethod;
+use App\Enums\TemplateRoleType;
 use App\Http\Requests\StoreSignatureFieldsRequest;
 use App\Models\Document;
 use App\Models\SignatureField;
 use App\Services\NotaryParticipantSyncService;
+use App\Services\NotaryRequestWorkflowService;
 use App\Services\SendDocumentForSignatureService;
 use App\Services\SignatureAuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use RuntimeException;
@@ -21,8 +25,41 @@ class DocumentPrepareController extends Controller
         $this->authorize('update', $document);
 
         if ($document->notary_request_id !== null) {
-            if (auth()->id() !== $document->notaryRequest->notary_user_id) {
+            if (Auth::id() !== $document->notaryRequest->notary_user_id) {
                 abort(403);
+            }
+
+            $user = Auth::user();
+
+            // If the document is fully completed and this is the assigned attorney,
+            // auto-transition to attorney-signing preparation so the CTA link is always actionable.
+            if ($document->status === DocumentStatus::Completed && $user?->role->value === 'notary') {
+                try {
+                    app(NotaryRequestWorkflowService::class)->beginAttorneySigning($document->notaryRequest);
+                } catch (RuntimeException $exception) {
+                    return redirect()
+                        ->route('notary.requests.show', $document->notaryRequest)
+                        ->with('error', $exception->getMessage());
+                }
+
+                $attorneySigner = $document->documentSigners()
+                    ->where('user_id', $user->id)
+                    ->first();
+
+                if ($attorneySigner === null) {
+                    $attorneySigner = $document->documentSigners()->create([
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'user_id' => $user->id,
+                        'role_type' => TemplateRoleType::Signer,
+                        'signing_method' => SigningMethod::AccountVerified,
+                        'status' => 'pending',
+                        'signing_order' => 999,
+                    ]);
+                }
+
+                $document->update(['status' => DocumentStatus::Pending]);
+                $document->refresh();
             }
 
             // Auto-sync NotarySigner records into DocumentSigner for field placement
@@ -30,7 +67,7 @@ class DocumentPrepareController extends Controller
         }
 
         // For eNOTARY documents, allow pending status (attorney signing phase)
-        if ($document->notary_request_id !== null && auth()->id() === $document->notaryRequest->notary_user_id) {
+        if ($document->notary_request_id !== null && Auth::id() === $document->notaryRequest->notary_user_id) {
             if (! in_array($document->status, [DocumentStatus::Draft, DocumentStatus::Pending], true)) {
                 abort(403);
             }
@@ -60,7 +97,7 @@ class DocumentPrepareController extends Controller
 
         $firstSignerId = $signers->first()['id'] ?? null;
 
-        $user = auth()->user();
+        $user = Auth::user();
         $isAttorneySigningPhase = $document->notary_request_id !== null
             && $user?->role->value === 'notary'
             && $document->status === DocumentStatus::Pending
@@ -124,7 +161,7 @@ class DocumentPrepareController extends Controller
         }
 
         $ip = (string) $request->ip();
-        $user = auth()->user();
+        $user = Auth::user();
         $isAttorneySigningPhase = $document->notary_request_id !== null
             && $user?->role->value === 'notary'
             && $document->status === DocumentStatus::Pending
@@ -200,7 +237,7 @@ class DocumentPrepareController extends Controller
     {
         $this->authorize('update', $document);
 
-        $isNotary = auth()->user()?->role->value === 'notary';
+        $isNotary = Auth::user()?->role->value === 'notary';
         $prepareRoute = $isNotary ? 'notary.documents.prepare' : 'documents.prepare';
 
         try {
@@ -225,7 +262,7 @@ class DocumentPrepareController extends Controller
 
     private function resolveStreamUrl(Document $document): string
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         // For eNOTARY attorney signing phase (document is pending after clients signed),
         // use a signed-only preview so completed signer marks appear in the PDF background

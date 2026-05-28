@@ -741,7 +741,12 @@
                                             @endphp
                                             @if ($isAttorneySigningPhase)
                                                 {{-- Attorney signing phase: show prepare/sign links --}}
-                                                <flux:button class="w-full sm:w-auto" variant="outline" :href="route('notary.documents.prepare', $document)" wire:navigate>{{ __('Prepare Attorney Fields') }}</flux:button>
+                                                <a
+                                                    href="{{ route('notary.documents.prepare', $document) }}"
+                                                    class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 sm:w-auto"
+                                                >
+                                                    {{ __('Prepare Attorney Fields') }}
+                                                </a>
                                                 @php
                                                     $attorneySigner = $document->documentSigners->first(fn ($s) => (int) $s->user_id === (int) auth()->id());
                                                 @endphp
@@ -775,7 +780,12 @@
                                                     $attorneyHasSigned = $attorneySigner && $attorneySigner->status->value === 'signed';
                                                 @endphp
                                                 @if (! $attorneyHasSigned)
-                                                    <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="signAsAttorney({{ $document->id }})">{{ __('Prepare Attorney Fields') }}</flux:button>
+                                                    <a
+                                                        href="{{ route('notary.documents.prepare', $document) }}"
+                                                        class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:w-auto"
+                                                    >
+                                                        {{ __('Prepare Attorney Fields') }}
+                                                    </a>
                                                     @if ($attorneySigner)
                                                         <a href="{{ route('notary.sign.account.show', $attorneySigner->id) }}"
                                                            class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300 dark:hover:bg-indigo-950/50 sm:w-auto">

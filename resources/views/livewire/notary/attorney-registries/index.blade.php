@@ -93,7 +93,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     @empty
                         <tr>
                             <td colspan="7" class="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
-                                {{ __('No registry records yet. Save a draft from any notary request’s Closing tab.') }}
+                                {{ __('No registry records yet. Save a draft from any notary request’s Settlement tab.') }}
                             </td>
                         </tr>
                     @endforelse

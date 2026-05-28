@@ -36,6 +36,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 
@@ -95,6 +96,7 @@ new #[Layout('components.layouts.app')] class extends Component {
      */
     public array $sessionChecklist = [];
 
+    #[Url(as: 'tab')]
     public string $activeTab = 'documents';
 
     public bool $showAuditPanel = false;
@@ -121,11 +123,14 @@ new #[Layout('components.layouts.app')] class extends Component {
                 $this->syncVideoPartiesIfReady(notify: false);
             }
         }
+
+        $this->ensureActiveTabIsAvailable();
     }
 
     public function setActiveTab(string $tab): void
     {
         if (! in_array($tab, $this->availableTabs(), true)) {
+            $this->ensureActiveTabIsAvailable();
             return;
         }
 
@@ -140,6 +145,16 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         $this->activeTab = 'session';
         $this->syncVideoPartiesIfReady(forceResend: false, notify: true, deliverSynchronously: true);
+    }
+
+    public function openPaymentSection(): void
+    {
+        if (! in_array('closing', $this->availableTabs(), true)) {
+            return;
+        }
+
+        $this->activeTab = 'closing';
+        $this->dispatch('scroll-to-section', id: 'section-payment');
     }
 
     /**
@@ -201,10 +216,29 @@ new #[Layout('components.layouts.app')] class extends Component {
         return 'documents';
     }
 
+    private function ensureActiveTabIsAvailable(): void
+    {
+        $availableTabs = $this->availableTabs();
+        if (in_array($this->activeTab, $availableTabs, true)) {
+            return;
+        }
+
+        $preferredTab = 'documents';
+        $user = Auth::user();
+        if ($user?->role === \App\Enums\UserRole::Notary) {
+            $preferredTab = $this->resolveDefaultAttorneyTab();
+        }
+
+        $this->activeTab = in_array($preferredTab, $availableTabs, true)
+            ? $preferredTab
+            : ($availableTabs[0] ?? 'documents');
+    }
+
     public function with(): array
     {
         $user = Auth::user();
         abort_unless($user !== null, 401);
+        $this->ensureActiveTabIsAvailable();
 
         $workflow = app(NotaryRequestWorkflowService::class);
         $readiness = $workflow->finalizationReadiness($this->notaryRequest);
@@ -1161,18 +1195,16 @@ new #[Layout('components.layouts.app')] class extends Component {
                 Auth::id(),
             );
 
-            if ($payment->wasRecentlyCreated) {
-                app(NotaryNotificationService::class)->notifyPaymentReady(
-                    $this->notaryRequest->fresh(['requester', 'notary']),
-                    $payment,
-                );
-            }
+            app(NotaryNotificationService::class)->notifyPaymentReady(
+                $this->notaryRequest->fresh(['requester', 'notary']),
+                $payment,
+            );
 
             $this->refreshRequest();
 
             session()->flash('status', $payment->wasRecentlyCreated
                 ? __('Payment created. Display the QR code or checkout link to the customer.')
-                : __('An active pending payment already exists for this request.'));
+                : __('An active pending payment already exists. Payment email was sent again to the customer.'));
         } catch (\RuntimeException $exception) {
             $this->addError('createGatewayPayment', $exception->getMessage());
         }
@@ -1308,7 +1340,14 @@ new #[Layout('components.layouts.app')] class extends Component {
             return false;
         }
 
-        return app(NotaryRequestWorkflowService::class)->canScheduleSession($this->notaryRequest);
+        $workflowAllows = app(NotaryRequestWorkflowService::class)->canScheduleSession($this->notaryRequest);
+        if (! $workflowAllows) {
+            return false;
+        }
+
+        $progress = app(\App\Services\NotarySigningProgressService::class)->summarize($this->notaryRequest, (int) $user->id);
+
+        return ! (bool) ($progress['video_verification_complete'] ?? false);
     }
 
     private function canReviewNotary(): bool

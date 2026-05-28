@@ -3,7 +3,7 @@
 @endphp
 
             <div class="ui-panel p-6 sm:p-8">
-                <flux:heading size="lg" class="!mb-1">{{ __('Document') }}</flux:heading>
+                <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{{ __('Document') }}</h2>
                 <p class="text-sm text-zinc-600 dark:text-zinc-400">{{ __('One instrument per case: signers sign, video verification, attorney signature, then the sealed instrument is ready.') }}</p>
 
                 @if ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'awaiting_attorney_signature')
@@ -48,16 +48,15 @@
                             </div>
                         @else
                             <div class="mt-3">
-                                <flux:button
-                                    variant="primary"
-                                    size="sm"
+                                <button
                                     type="button"
                                     wire:click="openVideoSessionWorkspace"
                                     wire:loading.attr="disabled"
                                     wire:target="openVideoSessionWorkspace,sendSignerVideoInvitations,syncVideoPartiesIfReady"
+                                    class="inline-flex items-center justify-center rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-600 dark:hover:bg-teal-500"
                                 >
                                     {{ __('Send video links & open workspace') }}
-                                </flux:button>
+                                </button>
                             </div>
                         @endif
                     </div>
@@ -69,7 +68,7 @@
                 @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'document_ready')
                     <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
                         <div class="font-semibold">{{ __('Instrument ready') }}</div>
-                        <p class="mt-1 text-emerald-800/90 dark:text-emerald-200/90">{{ __('Signing, video verification, and attorney signature are complete. Continue on the Closing tab for register entry and digital notarization.') }}</p>
+                        <p class="mt-1 text-emerald-800/90 dark:text-emerald-200/90">{{ __('Signing, video verification, and attorney signature are complete. Continue on the Settlement tab for register entry and digital notarization.') }}</p>
                     </div>
                 @endif
 
@@ -139,7 +138,12 @@
                                             @endphp
                                             @if ($isAttorneySigningPhase)
                                                 {{-- Attorney signing phase: show prepare/sign links --}}
-                                                <flux:button class="w-full sm:w-auto" variant="outline" :href="route('notary.documents.prepare', $document)" wire:navigate>{{ __('Prepare Attorney Fields') }}</flux:button>
+                                                <a
+                                                    href="{{ route('notary.documents.prepare', $document) }}"
+                                                    class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 sm:w-auto"
+                                                >
+                                                    {{ __('Prepare Attorney Fields') }}
+                                                </a>
                                                 @php
                                                     $attorneySigner = $document->documentSigners->first(fn ($s) => (int) $s->user_id === (int) auth()->id());
                                                 @endphp
@@ -163,7 +167,12 @@
                                                     $attorneyHasSigned = $attorneySigner && $attorneySigner->status->value === 'signed';
                                                 @endphp
                                                 @if (! $attorneyHasSigned)
-                                                    <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="signAsAttorney({{ $document->id }})">{{ __('Prepare Attorney Fields') }}</flux:button>
+                                                    <a
+                                                        href="{{ route('notary.documents.prepare', $document) }}"
+                                                        class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:w-auto"
+                                                    >
+                                                        {{ __('Prepare Attorney Fields') }}
+                                                    </a>
                                                     @if ($attorneySigner)
                                                         <a href="{{ route('notary.sign.account.show', $attorneySigner->id) }}"
                                                            class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300 dark:hover:bg-indigo-950/50 sm:w-auto">
@@ -316,7 +325,12 @@
                     </p>
                 @endif
 
-                @if ($isNotary && ($usesPerSignerVideo ?? false) && ($signingProgress['all_client_signatures_complete'] ?? false))
+                @if (
+                    $isNotary
+                    && ($usesPerSignerVideo ?? false)
+                    && ($signingProgress['all_client_signatures_complete'] ?? false)
+                    && ! ($signingProgress['video_verification_complete'] ?? false)
+                )
                     @php
                         $hasJoinableVideoSessions = collect($partiesForVideo ?? [])->contains(
                             fn (array $party): bool => ($party['has_signed'] ?? false)

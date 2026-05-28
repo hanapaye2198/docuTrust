@@ -226,6 +226,123 @@ class NotarySigningProgressTest extends TestCase
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->assertSee('Your turn: sign the contract')
-            ->assertSee('Sign as attorney');
+            ->assertSee('Sign as attorney')
+            ->assertDontSee('Send video links to signers')
+            ->assertDontSee('Send video links to all signers');
+    }
+
+    public function test_sign_as_attorney_redirects_to_prepare_page_after_video_verification(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionCompleted,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'signer@example.test',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $party->email,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'completed',
+            'room_name' => 'docutrust-test',
+            'meeting_url' => 'https://meet.jit.si/docutrust-test',
+            'scheduled_for' => now(),
+            'ended_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('signAsAttorney', $document->id)
+            ->assertRedirect(route('notary.documents.prepare', $document));
+    }
+
+    public function test_prepare_attorney_fields_link_opens_prepare_page_from_completed_document(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionCompleted,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'signer@example.test',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $party->email,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'completed',
+            'room_name' => 'docutrust-test',
+            'meeting_url' => 'https://meet.jit.si/docutrust-test',
+            'scheduled_for' => now(),
+            'ended_at' => now(),
+        ]);
+
+        $this->actingAs($notary)
+            ->get(route('notary.documents.prepare', $document))
+            ->assertOk();
+
+        $document->refresh();
+        $this->assertSame(DocumentStatus::Pending, $document->status);
+        $this->assertDatabaseHas('document_signers', [
+            'document_id' => $document->id,
+            'user_id' => $notary->id,
+            'status' => DocumentSignerStatus::Pending->value,
+        ]);
+    }
+
+    public function test_authenticated_attorney_sign_page_shows_continue_process_button_after_signing(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Pending,
+        ]);
+
+        $attorneySigner = DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'email' => $notary->email,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $this->actingAs($notary)
+            ->get(route('notary.sign.account.show', $attorneySigner->id))
+            ->assertOk()
+            ->assertSee('Continue process')
+            ->assertSee(route('notary.requests.show', ['notaryRequest' => $request->id, 'tab' => 'closing']), false);
     }
 }

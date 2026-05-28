@@ -1,10 +1,11 @@
 @php
     $allPartiesSigned = (bool) ($signingProgress['all_client_signatures_complete'] ?? false);
     $signedParties = collect($partiesForVideo ?? [])->filter(fn (array $party): bool => $party['has_signed'] ?? false);
+    $videoVerificationComplete = (bool) ($signingProgress['video_verification_complete'] ?? false);
 @endphp
 
             <div class="ui-panel p-6 sm:p-8">
-                <flux:heading size="lg" class="!mb-1">{{ __('Video verification') }}</flux:heading>
+                <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{{ __('Video verification') }}</h2>
                 <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
                     @if ($usesPerSignerVideo ?? false)
                         {{ __('After everyone signs, each party gets their own private video room and link. Complete a separate verification call with every signed party before you sign as attorney.') }}
@@ -13,27 +14,52 @@
                     @endif
                 </p>
 
-                @if (($usesPerSignerVideo ?? false) && $isNotary)
+                @if (($usesPerSignerVideo ?? false) && $isNotary && ! $videoVerificationComplete)
                     <div class="mb-4 flex flex-wrap items-center gap-2">
-                        <flux:button
-                            variant="primary"
+                        <button
                             type="button"
                             wire:click="openVideoSessionWorkspace"
                             wire:loading.attr="disabled"
                             wire:target="openVideoSessionWorkspace,sendSignerVideoInvitations,syncVideoPartiesIfReady"
+                            class="inline-flex items-center justify-center rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-600 dark:hover:bg-teal-500"
                         >
                             {{ __('Send video links to all signers') }}
-                        </flux:button>
-                        <flux:button
-                            variant="outline"
+                        </button>
+                        <button
                             type="button"
                             wire:click="sendSignerVideoInvitations(true)"
                             wire:loading.attr="disabled"
                             wire:target="openVideoSessionWorkspace,sendSignerVideoInvitations,syncVideoPartiesIfReady"
+                            class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                         >
                             {{ __('Resend by email') }}
-                        </flux:button>
-                        <flux:error name="sendSignerVideoInvitations" />
+                        </button>
+                        @error('sendSignerVideoInvitations')
+                            <p class="w-full text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </div>
+                @elseif (($usesPerSignerVideo ?? false) && $isNotary && $videoVerificationComplete)
+                    <div class="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/25 dark:text-emerald-100">
+                        <div class="font-semibold">{{ __('Video verification completed') }}</div>
+                        <p class="mt-1 text-emerald-800/90 dark:text-emerald-200/90">
+                            {{ __('All required sessions are complete. Next: sign the instrument as attorney.') }}
+                        </p>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                wire:click="setActiveTab('documents')"
+                                class="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                            >
+                                {{ __('Go to Documents') }}
+                            </button>
+                            <button
+                                type="button"
+                                wire:click="setActiveTab('closing')"
+                                class="inline-flex items-center justify-center rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50 dark:border-emerald-900/50 dark:bg-zinc-900 dark:text-emerald-200 dark:hover:bg-emerald-950/20"
+                            >
+                                {{ __('Go to Settlement') }}
+                            </button>
+                        </div>
                     </div>
                 @endif
 

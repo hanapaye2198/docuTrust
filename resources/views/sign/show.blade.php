@@ -54,6 +54,18 @@
         && $signedFieldCount > 0
         && ! $showFieldEditing;
 
+    $continueProcessUrl = null;
+    if (
+        $isNotaryUser
+        && $signer->document->notary_request_id !== null
+        && $signer->status === DocumentSignerStatus::Signed
+    ) {
+        $continueProcessUrl = route('notary.requests.show', [
+            'notaryRequest' => $signer->document->notary_request_id,
+            'tab' => 'closing',
+        ]);
+    }
+
     if ($documentAccessLocked) {
         $showFieldEditing = false;
         $showFieldSigning = false;
@@ -202,6 +214,25 @@
                         </div>
                     @endif
                 </dl>
+
+                @if (is_string($continueProcessUrl))
+                    <div class="rounded-2xl border border-indigo-200/90 bg-indigo-50/80 p-4 dark:border-indigo-900/40 dark:bg-indigo-950/25">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p class="text-sm font-semibold text-indigo-900 dark:text-indigo-100">{{ __('Attorney signing complete') }}</p>
+                                <p class="mt-1 text-xs text-indigo-800/90 dark:text-indigo-200/90">
+                                    {{ __('Continue to Settlement to complete registry, payment, seal, and digital notarization.') }}
+                                </p>
+                            </div>
+                            <a
+                                href="{{ $continueProcessUrl }}"
+                                class="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                            >
+                                {{ __('Continue process') }}
+                            </a>
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
 

@@ -1450,6 +1450,96 @@ class NotaryRequestPagesTest extends TestCase
         );
     }
 
+    public function test_notary_request_show_allows_switching_to_closing_tab(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::Submitted,
+        ]);
+
+        Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Draft,
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('setActiveTab', 'closing')
+            ->assertSet('activeTab', 'closing');
+    }
+
+    public function test_notary_request_open_payment_section_sets_closing_tab(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Pending,
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('openPaymentSection')
+            ->assertSet('activeTab', 'closing');
+    }
+
+    public function test_create_gateway_payment_resends_payment_ready_email_when_pending_payment_exists(): void
+    {
+        Mail::fake();
+
+        $client = User::factory()->enotarySigner()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+            'title' => 'Payment follow-up request',
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 1250.00,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $request->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $client->id,
+            'created_by_user_id' => $notary->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-existing-1',
+            'provider_transaction_id' => 'payment-existing-1',
+            'gateway' => 'gcash',
+            'reference' => 'NREQ-EXISTING-1',
+            'amount' => 1250.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Pending,
+            'checkout_url' => 'https://gatewayhub.test/checkout/existing',
+            'expires_at' => now()->addHour(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('enabledPaymentGateways', [['code' => 'gcash', 'name' => 'Gcash']])
+            ->set('paymentGateway', 'gcash')
+            ->call('createGatewayPayment')
+            ->assertHasNoErrors();
+
+        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment): bool {
+            return $mail->notaryRequest->is($request)
+                && $mail->payment->is($payment);
+        });
+    }
+
     private function ensureEisSigningPrivateKeyPath(): string
     {
         $privateKeyPath = storage_path('app/testing/eis-signing-test.key');
