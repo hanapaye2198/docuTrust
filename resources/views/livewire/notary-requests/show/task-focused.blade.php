@@ -139,7 +139,12 @@
                 {{ __('The register entry is recorded. Client payment must be completed before review and digital notarization can finish.') }}
             </flux:callout.text>
             <div class="mt-2">
-                <flux:button size="sm" variant="outline" type="button" wire:click="openPaymentSection">{{ __('Open payment') }}</flux:button>
+                <a
+                    href="{{ route('notary.requests.show', ['notaryRequest' => $notaryRequest->id, 'tab' => 'closing']) }}#section-payment"
+                    class="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                    {{ __('Open payment') }}
+                </a>
             </div>
         </flux:callout>
     @endif
@@ -306,7 +311,12 @@
                     <div class="ui-panel p-5">
                         <flux:heading size="sm" class="mb-2">{{ __('Payment due') }}</flux:heading>
                         <p class="text-lg font-bold text-zinc-900 dark:text-zinc-100">PHP {{ number_format((float) $sidebarRegisterEntry->fees, 2) }}</p>
-                        <flux:button class="mt-3 w-full" size="sm" variant="outline" type="button" wire:click="openPaymentSection">{{ __('View payment') }}</flux:button>
+                        <a
+                            href="{{ route('notary.requests.show', ['notaryRequest' => $notaryRequest->id, 'tab' => 'closing']) }}#section-payment"
+                            class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                            {{ __('View payment') }}
+                        </a>
                     </div>
                 @endif
             @endif
@@ -318,7 +328,8 @@
 
 <script>
     window.addEventListener('scroll-to-section', (event) => {
-        const targetId = event?.detail?.id;
+        const payload = Array.isArray(event?.detail) ? event.detail[0] : event?.detail;
+        const targetId = payload?.id;
         if (!targetId) {
             return;
         }
