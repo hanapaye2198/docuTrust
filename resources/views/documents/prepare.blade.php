@@ -35,6 +35,13 @@
             </div>
         @endif
 
+        @if ($errors->any())
+            <div class="shrink-0 border-b border-red-200/70 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-100">
+                <p class="font-medium">{{ __('Unable to save signature fields.') }}</p>
+                <p class="mt-1">{{ $errors->first() }}</p>
+            </div>
+        @endif
+
         @if (! $firstSignerId)
             <div class="shrink-0 border-b border-amber-200/70 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
                 {{ __('Add at least one signer on the document page before placing fields.') }}

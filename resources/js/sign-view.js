@@ -553,6 +553,28 @@ function createSignViewSession(cfgEl) {
         };
     }
 
+    function positionedGroupOptions(rect, extra = {}) {
+        if (Math.abs(Number(rect.angle) || 0) > 0.01) {
+            return {
+                left: rect.left + (rect.width / 2),
+                top: rect.top + (rect.height / 2),
+                originX: 'center',
+                originY: 'center',
+                angle: rect.angle || 0,
+                ...extra,
+            };
+        }
+
+        return {
+            left: rect.left,
+            top: rect.top,
+            originX: 'left',
+            originY: 'top',
+            angle: 0,
+            ...extra,
+        };
+    }
+
     function getFieldChrome(type) {
         switch (type) {
             case 'signature_left':
@@ -713,7 +735,7 @@ function createSignViewSession(cfgEl) {
             }
         }
 
-        return new fabric.Group(nodes, { left: rect.left, top: rect.top, angle: rect.angle || 0, subTargetCheck: true });
+        return new fabric.Group(nodes, positionedGroupOptions(rect, { subTargetCheck: true }));
     }
 
     function signerInitialsValue() {
@@ -1060,7 +1082,7 @@ function createSignViewSession(cfgEl) {
             }));
         }
 
-        return new fabric.Group(nodes, { left: rect.left, top: rect.top, angle: rect.angle || 0, subTargetCheck: true });
+        return new fabric.Group(nodes, positionedGroupOptions(rect, { subTargetCheck: true }));
     }
 
     async function renderFieldObject(field, cw, ch, nextFieldId) {
@@ -1097,12 +1119,36 @@ function createSignViewSession(cfgEl) {
                     hoverCursor: currentCanEditFields ? 'pointer' : 'default',
                 });
 
-                // Apply field rotation to all signed elements
+                // For rotated fields, wrap all elements in a group so rotation
+                // happens around the field center (matching the preview behavior)
                 if (rect.angle) {
-                    target.angle = rect.angle;
-                    target.setCoords && target.setCoords();
-                    badge.angle = rect.angle;
-                    hitbox.angle = rect.angle;
+                    // Reposition target relative to field bounds for grouping
+                    // and remove any existing angle to avoid double-rotation
+                    const targetLeft = target.left !== undefined ? target.left - rect.left : 0;
+                    const targetTop = target.top !== undefined ? target.top - rect.top : 0;
+                    target.set({ left: targetLeft, top: targetTop, angle: 0 });
+
+                    badge.set({ left: 4, top: -13 });
+                    hitbox.set({ left: 0, top: 0 });
+
+                    const group = new fabric.Group([hitbox, target, badge], positionedGroupOptions(rect, {
+                        selectable: false,
+                        evented: currentCanEditFields,
+                        hasControls: false,
+                        hoverCursor: currentCanEditFields ? 'pointer' : 'default',
+                        subTargetCheck: true,
+                    }));
+
+                    if (currentCanEditFields) {
+                        group.on('mousedown', (event) => {
+                            event.e.preventDefault();
+                            activateField(field);
+                        });
+                    }
+
+                    fabricCanvas.add(group);
+                    registerFieldObject(field.id, group);
+                    return;
                 }
 
                 if (currentCanEditFields) {
@@ -1462,7 +1508,7 @@ function createSignViewSession(cfgEl) {
         const rect = drawCanvasEl.getBoundingClientRect();
         const cssWidth = Math.max(320, Math.round(rect.width || 400));
         const cssHeight = Math.max(160, Math.round(cssWidth / 2));
-        const pixelRatio = 1;
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 
         drawCanvasEl.width = Math.round(cssWidth * pixelRatio);
         drawCanvasEl.height = Math.round(cssHeight * pixelRatio);
@@ -1474,7 +1520,7 @@ function createSignViewSession(cfgEl) {
         drawContext.scale(pixelRatio, pixelRatio);
         drawContext.lineCap = 'round';
         drawContext.lineJoin = 'round';
-        drawContext.lineWidth = 2;
+        drawContext.lineWidth = 2.5;
         drawContext.strokeStyle = '#0f172a';
 
         clearSignatureCanvas();
@@ -1498,15 +1544,26 @@ function createSignViewSession(cfgEl) {
 
         for (const point of pendingDrawPoints) {
             const distance = Math.hypot(point.x - drawLastPoint.x, point.y - drawLastPoint.y);
-            const movementThreshold = point.pointerType === 'mouse' ? 0.12 : 0.35;
+            const movementThreshold = point.pointerType === 'mouse' ? 1.5 : 0.35;
             if (distance < movementThreshold) {
                 continue;
             }
 
+            // Velocity-based width: faster strokes get thinner, slower get thicker
+            const velocity = Math.min(distance, 50);
+            const velocityFactor = 1 - Math.min(velocity / 50, 0.6);
             const pressure = point.pointerType === 'mouse' ? Math.max(point.pressure, 0.72) : point.pressure;
-            drawContext.lineWidth = 1.15 + (pressure * 1.45);
-            drawContext.lineTo(point.x, point.y);
+            const targetWidth = (1.4 + (pressure * 1.8)) * (0.6 + velocityFactor * 0.4);
+            drawContext.lineWidth = targetWidth;
+
+            // Use quadratic Bézier curve for smooth interpolation
+            const midX = (drawLastPoint.x + point.x) / 2;
+            const midY = (drawLastPoint.y + point.y) / 2;
+            drawContext.quadraticCurveTo(drawLastPoint.x, drawLastPoint.y, midX, midY);
             drawContext.stroke();
+            drawContext.beginPath();
+            drawContext.moveTo(midX, midY);
+
             drawLastPoint = point;
             drawStrokeSegmentCount += 1;
         }

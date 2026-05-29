@@ -9,6 +9,56 @@ function objectFrame(target) {
     };
 }
 
+/**
+ * Returns the axis-aligned bounding box of the object, accounting for rotation.
+ * Calculates the rotated corners manually to avoid Fabric.js viewport transform issues.
+ */
+function objectBoundingFrame(target) {
+    const left = Number(target?.left) || 0;
+    const top = Number(target?.top) || 0;
+    const width = Number(target?.getScaledWidth?.()) || 0;
+    const height = Number(target?.getScaledHeight?.()) || 0;
+    const angle = Number(target?.angle) || 0;
+
+    if (Math.abs(angle) < 0.01) {
+        return { left, top, width, height };
+    }
+
+    // Calculate the four corners of the rotated rectangle
+    const rad = (angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    // Corners relative to top-left origin (Fabric default origin)
+    const corners = [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: width, y: height },
+        { x: 0, y: height },
+    ];
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const corner of corners) {
+        const rx = corner.x * cos - corner.y * sin + left;
+        const ry = corner.x * sin + corner.y * cos + top;
+        minX = Math.min(minX, rx);
+        minY = Math.min(minY, ry);
+        maxX = Math.max(maxX, rx);
+        maxY = Math.max(maxY, ry);
+    }
+
+    return {
+        left: minX,
+        top: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+    };
+}
+
 export function resolveRenderScale(page, panelWidth) {
     const baseViewport = page.getViewport({ scale: 1 });
     const shellPadding = 24;
@@ -89,7 +139,7 @@ export function keepObjectInsideCanvas(target, fabricCanvas) {
         return;
     }
 
-    const bound = objectFrame(target);
+    const bound = objectBoundingFrame(target);
     const canvasWidth = fabricCanvas.getWidth();
     const canvasHeight = fabricCanvas.getHeight();
     let deltaX = 0;
@@ -139,7 +189,13 @@ export function drawSnapGuide({ fabric, fabricCanvas, currentSnapGuide, orientat
         },
     );
     fabricCanvas.add(nextGuide);
-    fabricCanvas.sendObjectToBack(nextGuide);
+    if (typeof nextGuide.sendToBack === 'function') {
+        nextGuide.sendToBack();
+    } else if (typeof fabricCanvas.sendToBack === 'function') {
+        fabricCanvas.sendToBack(nextGuide);
+    } else if (typeof fabricCanvas.moveTo === 'function') {
+        fabricCanvas.moveTo(nextGuide, 0);
+    }
 
     return nextGuide;
 }

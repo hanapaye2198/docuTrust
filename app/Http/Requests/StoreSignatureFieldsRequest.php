@@ -67,8 +67,8 @@ class StoreSignatureFieldsRequest extends FormRequest
             'fields.*.type' => ['required', new Enum(SignatureFieldType::class)],
             'fields.*.page_number' => ['required', 'integer', 'min:1'],
             'fields.*.position_data' => ['required', 'array'],
-            'fields.*.position_data.x' => ['required', 'numeric', 'between:0,1'],
-            'fields.*.position_data.y' => ['required', 'numeric', 'between:0,1'],
+            'fields.*.position_data.x' => ['required', 'numeric'],
+            'fields.*.position_data.y' => ['required', 'numeric'],
             'fields.*.position_data.width' => ['required', 'numeric', 'between:0,1'],
             'fields.*.position_data.height' => ['required', 'numeric', 'between:0,1'],
             'fields.*.position_data.angle' => ['sometimes', 'numeric', 'between:0,360'],
@@ -88,16 +88,27 @@ class StoreSignatureFieldsRequest extends FormRequest
                 $y = (float) ($position['y'] ?? 0);
                 $width = (float) ($position['width'] ?? 0);
                 $height = (float) ($position['height'] ?? 0);
+                $angle = (float) ($position['angle'] ?? 0);
 
                 if ($width <= 0.0001 || $height <= 0.0001) {
                     $validator->errors()->add("fields.$index.position_data", __('Field size must be greater than zero.'));
                 }
 
-                if (($x + $width) > 1.000001) {
+                [$minX, $minY, $maxX, $maxY] = $this->resolveFieldBounds($x, $y, $width, $height, $angle);
+
+                if ($minX < -0.000001) {
+                    $validator->errors()->add("fields.$index.position_data", __('Field extends past the left edge of the page.'));
+                }
+
+                if ($minY < -0.000001) {
+                    $validator->errors()->add("fields.$index.position_data", __('Field extends past the top edge of the page.'));
+                }
+
+                if ($maxX > 1.000001) {
                     $validator->errors()->add("fields.$index.position_data", __('Field extends past the right edge of the page.'));
                 }
 
-                if (($y + $height) > 1.000001) {
+                if ($maxY > 1.000001) {
                     $validator->errors()->add("fields.$index.position_data", __('Field extends past the bottom edge of the page.'));
                 }
 
@@ -171,5 +182,45 @@ class StoreSignatureFieldsRequest extends FormRequest
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    private function resolveFieldBounds(float $x, float $y, float $width, float $height, float $angle): array
+    {
+        if (abs($angle) < 0.01) {
+            return [$x, $y, $x + $width, $y + $height];
+        }
+
+        $centerX = $x + ($width / 2);
+        $centerY = $y + ($height / 2);
+        $radians = deg2rad($angle);
+        $cos = cos($radians);
+        $sin = sin($radians);
+        $halfWidth = $width / 2;
+        $halfHeight = $height / 2;
+        $corners = [
+            [-$halfWidth, -$halfHeight],
+            [$halfWidth, -$halfHeight],
+            [$halfWidth, $halfHeight],
+            [-$halfWidth, $halfHeight],
+        ];
+
+        $minX = INF;
+        $minY = INF;
+        $maxX = -INF;
+        $maxY = -INF;
+
+        foreach ($corners as [$cornerX, $cornerY]) {
+            $rotatedX = ($cornerX * $cos) - ($cornerY * $sin) + $centerX;
+            $rotatedY = ($cornerX * $sin) + ($cornerY * $cos) + $centerY;
+            $minX = min($minX, $rotatedX);
+            $minY = min($minY, $rotatedY);
+            $maxX = max($maxX, $rotatedX);
+            $maxY = max($maxY, $rotatedY);
+        }
+
+        return [$minX, $minY, $maxX, $maxY];
     }
 }

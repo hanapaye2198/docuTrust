@@ -414,10 +414,14 @@ function createPrepareSession(cfgEl) {
         const fieldType = updates?.type || active.fieldType;
         const signerId = updates?.signerId || active.signerId;
         const clientFieldId = active.clientFieldId;
+        const nextPosition = {
+            ...normalized,
+            angle: updates?.angle ?? normalized.angle ?? 0,
+        };
 
         fabricCanvas.remove(active);
 
-        const replacement = buildFieldGroup(fieldType, signerId, normalized, clientFieldId);
+        const replacement = buildFieldGroup(fieldType, signerId, nextPosition, clientFieldId);
         fabricCanvas.add(replacement);
         fabricCanvas.setActiveObject(replacement);
         selectedFieldClientId = replacement.clientFieldId;
@@ -1091,16 +1095,11 @@ function createPrepareSession(cfgEl) {
 
         // Rotation controls
         function applyRotationToActiveField(angle) {
-            const active = activeFieldObject();
-            if (!active || !fabricCanvas) {
+            if (!activeFieldObject() || !fabricCanvas) {
                 return;
             }
 
-            active.angle = angle;
-            active.setCoords();
-            fabricCanvas.requestRenderAll();
-            saveCurrentPageFields();
-            markDirty();
+            replaceActiveField({ angle });
 
             if (selectedFieldAngle) {
                 selectedFieldAngle.value = String(angle);

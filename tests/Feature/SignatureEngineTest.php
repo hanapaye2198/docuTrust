@@ -433,7 +433,7 @@ class SignatureEngineTest extends TestCase
                     ],
                 ],
             ],
-        ])->assertRedirect(route('documents.prepare', $document));
+        ])->assertRedirect(route('documents.prepare', ['document' => $document, 'page' => 1]));
 
         $this->assertDatabaseHas('signature_fields', [
             'document_id' => $document->id,
@@ -446,6 +446,47 @@ class SignatureEngineTest extends TestCase
             'document_id' => $document->id,
             'signer_id' => $signer->id,
             'action' => SignatureAuditEvent::ACTION_PLACED,
+        ]);
+    }
+
+    public function test_owner_can_save_signature_fields_from_json_form_payload(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/prepare-json-payload.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $payload = json_encode([
+            [
+                'signer_id' => $signer->id,
+                'type' => SignatureFieldType::Signature->value,
+                'page_number' => 1,
+                'position_data' => [
+                    'x' => 0.1,
+                    'y' => 0.2,
+                    'width' => 0.25,
+                    'height' => 0.08,
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->actingAs($user)
+            ->post(route('documents.signature-fields.store', $document), [
+                'fields' => $payload,
+            ])
+            ->assertRedirect(route('documents.prepare', ['document' => $document, 'page' => 1]));
+
+        $this->assertDatabaseHas('signature_fields', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature->value,
+            'page_number' => 1,
         ]);
     }
 
@@ -480,7 +521,7 @@ class SignatureEngineTest extends TestCase
                     ],
                 ],
             ],
-        ])->assertRedirect(route('documents.prepare', $document));
+        ])->assertRedirect(route('documents.prepare', ['document' => $document, 'page' => 1]));
 
         $this->assertDatabaseHas('signature_fields', [
             'document_id' => $document->id,
@@ -531,6 +572,86 @@ class SignatureEngineTest extends TestCase
             ->assertSessionHasErrors('fields.0.position_data');
 
         $this->assertDatabaseCount('signature_fields', 0);
+    }
+
+    public function test_prepare_allows_rotated_field_that_visually_fits_near_right_edge(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/prepare-rotated-right-edge.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $this->actingAs($user)
+            ->post(route('documents.signature-fields.store', $document), [
+                'fields' => [
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::Signature->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => 0.83,
+                            'y' => 0.55,
+                            'width' => 0.08,
+                            'height' => 0.25,
+                            'angle' => 90,
+                        ],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('documents.prepare', ['document' => $document, 'page' => 1]));
+
+        $this->assertDatabaseHas('signature_fields', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature->value,
+            'page_number' => 1,
+        ]);
+    }
+
+    public function test_prepare_allows_rotated_field_with_serialized_origin_outside_unit_interval(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/prepare-rotated-origin-outside-unit.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'file_path' => $path,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $this->actingAs($user)
+            ->post(route('documents.signature-fields.store', $document), [
+                'fields' => [
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::Signature->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => -0.06,
+                            'y' => 0.40,
+                            'width' => 0.25,
+                            'height' => 0.08,
+                            'angle' => 90,
+                        ],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('documents.prepare', ['document' => $document, 'page' => 1]));
+
+        $this->assertDatabaseHas('signature_fields', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature->value,
+            'page_number' => 1,
+        ]);
     }
 
     public function test_prepare_rejects_field_page_number_beyond_pdf_page_count(): void

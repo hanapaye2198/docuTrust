@@ -353,6 +353,29 @@ function objectFrame(target) {
     return { left, top, width, height };
 }
 
+function objectPlacementFrame(target) {
+    if (!target) {
+        return { left: 0, top: 0, width: 0, height: 0 };
+    }
+
+    const scaleX = Number(target.scaleX) || 1;
+    const scaleY = Number(target.scaleY) || 1;
+    const width = (Number(target.width) || 0) * scaleX;
+    const height = (Number(target.height) || 0) * scaleY;
+    const center = target.getCenterPoint?.();
+
+    if (!center || width <= 0 || height <= 0) {
+        return objectFrame(target);
+    }
+
+    return {
+        left: Number(center.x) - (width / 2),
+        top: Number(center.y) - (height / 2),
+        width,
+        height,
+    };
+}
+
 export function createFieldGroup({
     fabric,
     fabricCanvas,
@@ -369,6 +392,7 @@ export function createFieldGroup({
     const top = position.y * h;
     const width = position.width * w;
     const height = position.height * h;
+    const angle = Number(position.angle) || 0;
     const config = getFieldConfig(type);
     const visuals =
         config.kind === 'toggle'
@@ -406,9 +430,14 @@ export function createFieldGroup({
     group.lockRotation = true;
     group.setControlsVisibility({ mtr: false });
 
-    // Apply rotation if provided (set via inspector, not free-rotate handle)
-    if (position.angle) {
-        group.angle = Number(position.angle) || 0;
+    if (Math.abs(angle) > 0.01) {
+        group.set({
+            originX: 'center',
+            originY: 'center',
+            left: left + (width / 2),
+            top: top + (height / 2),
+            angle,
+        });
         group.setCoords();
     }
 
@@ -420,7 +449,7 @@ export function normalizedPositionFromObject(target, fabricCanvas) {
         return null;
     }
 
-    const bound = objectFrame(target);
+    const bound = objectPlacementFrame(target);
     const canvasWidth = fabricCanvas.getWidth();
     const canvasHeight = fabricCanvas.getHeight();
 
@@ -443,7 +472,7 @@ export function serializeCanvasFields(fabricCanvas) {
             return;
         }
 
-        const br = objectFrame(obj);
+        const br = objectPlacementFrame(obj);
         out.push({
             client_id: obj.clientFieldId,
             signer_id: obj.signerId,
