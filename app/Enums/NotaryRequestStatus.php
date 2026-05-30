@@ -20,4 +20,38 @@ enum NotaryRequestStatus: string
     case Rejected = 'rejected';
     case Failed = 'failed';
     case Cancelled = 'cancelled';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Draft => __('Draft'),
+            self::Submitted => __('Submitted'),
+            self::IdentityReviewRequired => __('Identity review'),
+            self::IdentityVerified => __('Identity verified'),
+            self::LocationReviewRequired => __('Location review'),
+            self::LocationVerified => __('Location verified'),
+            self::SessionScheduled => __('Session scheduled'),
+            self::SessionInProgress => __('Session in progress'),
+            self::SessionCompleted => __('Session completed'),
+            self::AttorneySigning => __('Attorney signing'),
+            self::AttorneyApproved => __('Attorney reviewed'),
+            self::Digitalized => __('Digitally notarized'),
+            self::Notarized => __('Notarized'),
+            self::Rejected => __('Rejected'),
+            self::Failed => __('Failed'),
+            self::Cancelled => __('Cancelled'),
+        };
+    }
+
+    public function fluxColor(): string
+    {
+        return match ($this) {
+            self::Notarized => 'emerald',
+            self::Rejected, self::Failed, self::Cancelled => 'red',
+            self::Submitted, self::SessionScheduled, self::SessionInProgress => 'sky',
+            self::IdentityVerified, self::LocationVerified, self::AttorneyApproved, self::Digitalized => 'teal',
+            self::IdentityReviewRequired, self::LocationReviewRequired, self::SessionCompleted, self::AttorneySigning => 'amber',
+            default => 'zinc',
+        };
+    }
 }

@@ -134,7 +134,7 @@ new #[Layout('components.layouts.app')] class extends Component
                 <span class="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span>
                 {{ __('Live') }}
             </span>
-            <flux:button variant="ghost" :href="route('notary.requests.show', $notaryRequest)" wire:navigate>{{ __('Back to request') }}</flux:button>
+            <flux:button variant="ghost" :href="route('notary.requests.show', $notaryRequest)" wire:navigate>{{ __('Back to notarization') }}</flux:button>
         </div>
     </div>
 

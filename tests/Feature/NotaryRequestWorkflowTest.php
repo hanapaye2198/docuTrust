@@ -335,8 +335,150 @@ class NotaryRequestWorkflowTest extends TestCase
 
         $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($request);
 
-        $this->assertSame('Digital notarization', $steps[7]['label']);
-        $this->assertSame('complete', $steps[7]['state']);
+        $this->assertCount(11, $steps);
+        $this->assertSame('Digital notarization', $steps[10]['label']);
+        $this->assertSame('complete', $steps[10]['state']);
+    }
+
+    public function test_workflow_closing_steps_align_with_settlement_order(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $workflowSteps = $workflow->workflowSteps($request);
+        $settlementSteps = $workflow->settlementSteps($request);
+
+        $closingWorkflowLabels = array_column(array_slice($workflowSteps, 4), 'label');
+        $settlementLabels = array_column($settlementSteps, 'label');
+
+        $this->assertSame($settlementLabels, $closingWorkflowLabels);
+    }
+
+    public function test_settlement_fee_step_is_current_after_attorney_signing_without_fee(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $feeStep = collect(app(NotaryRequestWorkflowService::class)->settlementSteps($request))
+            ->firstWhere('key', 'settlement_fee');
+
+        $this->assertSame('current', $feeStep['state']);
+        $this->assertNull($feeStep['waiting_on']);
+    }
+
+    public function test_settlement_payment_step_waits_on_client_after_fee_is_saved(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500,
+        ]);
+
+        $paymentStep = collect(app(NotaryRequestWorkflowService::class)->settlementSteps($request))
+            ->firstWhere('key', 'payment');
+
+        $this->assertSame('current', $paymentStep['state']);
+        $this->assertNull($paymentStep['waiting_on']);
+    }
+
+    public function test_settlement_registry_step_waits_on_client_before_payment(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500,
+        ]);
+
+        $registryStep = collect(app(NotaryRequestWorkflowService::class)->settlementSteps($request))
+            ->firstWhere('key', 'registry_draft');
+
+        $this->assertSame('blocked', $registryStep['state']);
+        $this->assertSame('client', $registryStep['waiting_on']);
+    }
+
+    public function test_current_settlement_section_id_points_to_current_step(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $workflow = app(NotaryRequestWorkflowService::class);
+
+        $this->assertSame('section-settlement-fee', $workflow->currentSettlementSectionId($request));
     }
 
     public function test_can_create_register_entry_requires_attorney_signing_seal_and_payment(): void
@@ -380,11 +522,12 @@ class NotaryRequestWorkflowTest extends TestCase
         AttorneyNotarialRegistry::factory()->create([
             'notary_request_id' => $request->id,
             'fees' => 0,
+            'registry_fields_completed_at' => now(),
         ]);
 
         $workflow = app(NotaryRequestWorkflowService::class);
 
-        $this->assertTrue($workflow->canCreateRegisterEntry($request->fresh(['documents.documentSigners'])));
+        $this->assertTrue($workflow->canCreateRegisterEntry($request->fresh(['documents.documentSigners', 'attorneyNotarialRegistry'])));
     }
 
     public function test_settlement_due_amount_uses_registry_draft_before_register_entry(): void
@@ -402,5 +545,28 @@ class NotaryRequestWorkflowTest extends TestCase
         $workflow = app(NotaryRequestWorkflowService::class);
 
         $this->assertSame(750.0, $workflow->settlementDueAmount($request->fresh()));
+    }
+
+    public function test_client_portal_timeline_marks_payment_current_when_fee_is_set(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $client = User::factory()->create();
+        $request = NotaryRequest::factory()->for($client)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500.00,
+        ]);
+
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $timeline = $workflow->clientPortalTimeline($request->fresh());
+
+        $paymentStep = collect($timeline)->firstWhere('key', 'payment');
+
+        $this->assertNotNull($paymentStep);
+        $this->assertSame('current', $paymentStep['state']);
     }
 }

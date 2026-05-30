@@ -16,6 +16,7 @@ use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\AttorneyNotarialRegistryService;
 use App\Services\CompletedDocumentArtifactService;
 use App\Services\CompletedDocumentSealingService;
 use App\Services\IdentityVerificationService;
@@ -86,21 +87,25 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public string $paymentGateway = '';
 
+    public string $settlementFee = '';
+
     /**
      * @var list<array{code: string, name: string}>
      */
     public array $enabledPaymentGateways = [];
 
     /**
-     * @var array<string, bool>
+     * @var array<int, array<string, bool>>
      */
-    public array $sessionChecklist = [];
+    public array $sessionChecklists = [];
 
     #[Url(as: 'tab')]
     public string $activeTab = 'documents';
 
     public bool $showAuditPanel = false;
-    public bool $scrollToPaymentOnLoad = false;
+    public bool $scrollToSettlementOnLoad = false;
+
+    public ?string $pendingScrollSectionId = null;
 
     public function mount(NotaryRequest $notaryRequest): void
     {
@@ -112,15 +117,15 @@ new #[Layout('components.layouts.app')] class extends Component {
         Gate::authorize('view', $notaryRequest);
 
         $this->notaryRequest = $notaryRequest;
+        $this->settlementFee = $notaryRequest->attorneyNotarialRegistry !== null
+            ? number_format((float) $notaryRequest->attorneyNotarialRegistry->fees, 2, '.', '')
+            : '';
         $this->loadPaymentGateways();
-
-        $keys = config('docutrust.notary.verification_checklist', []);
-        $this->sessionChecklist = array_fill_keys($keys, false);
 
         $requestedTab = request()->query('tab');
         if (is_string($requestedTab) && in_array($requestedTab, $this->availableTabs(), true)) {
             $this->activeTab = $requestedTab;
-            $this->scrollToPaymentOnLoad = $requestedTab === 'closing';
+            $this->scrollToSettlementOnLoad = $requestedTab === 'closing';
         }
 
         if ($user->role === \App\Enums\UserRole::Notary) {
@@ -139,36 +144,83 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->ensureActiveTabIsAvailable();
 
         if ($this->activeTab === 'closing') {
+            $this->scrollToSettlementOnLoad = true;
             $this->sendSettlementPaymentReminder();
         }
     }
 
     public function rendered(): void
     {
-        if (! $this->scrollToPaymentOnLoad || $this->activeTab !== 'closing') {
+        if ($this->pendingScrollSectionId !== null) {
+            $this->dispatch('scroll-to-section', id: $this->pendingScrollSectionId, reset: true);
+            $this->pendingScrollSectionId = null;
+
             return;
         }
 
-        $this->dispatch('scroll-to-section', id: 'section-payment');
-        $this->scrollToPaymentOnLoad = false;
+        if (! $this->scrollToSettlementOnLoad || $this->activeTab !== 'closing') {
+            return;
+        }
+
+        $this->dispatch('scroll-to-section', id: 'section-settlement-start', reset: true);
+        $this->scrollToSettlementOnLoad = false;
+    }
+
+    private function focusSettlementSection(?string $sectionId = null): void
+    {
+        $this->pendingScrollSectionId = $sectionId !== null && $sectionId !== ''
+            ? $sectionId
+            : 'section-settlement-start';
+    }
+
+    private function queueSettlementScroll(?string $sectionId = null): void
+    {
+        if ($sectionId === null || $sectionId === '') {
+            $sectionId = app(NotaryRequestWorkflowService::class)
+                ->currentSettlementSectionId($this->notaryRequest);
+        }
+
+        if ($sectionId === null || $sectionId === '') {
+            return;
+        }
+
+        $this->activeTab = 'closing';
+        $this->pendingScrollSectionId = $sectionId;
     }
 
     public function setActiveTab(string $tab): void
     {
         if (! in_array($tab, $this->availableTabs(), true)) {
             $this->ensureActiveTabIsAvailable();
+
+            return;
+        }
+
+        if ($tab === 'closing' && $this->activeTab === 'closing') {
+            $this->dispatch('reset-main-scroll');
+            $this->focusSettlementSection('section-settlement-start');
+
             return;
         }
 
         $this->activeTab = $tab;
+    }
 
-        if ($tab === 'session') {
+    public function updatedActiveTab(string $value): void
+    {
+        if ($value === 'session') {
             $this->syncVideoPartiesIfReady(notify: false);
         }
 
-        if ($tab === 'closing') {
+        if ($value === 'closing') {
             $this->sendSettlementPaymentReminder();
+            $this->dispatch('reset-main-scroll');
+            $this->focusSettlementSection('section-settlement-start');
+
+            return;
         }
+
+        $this->dispatch('reset-main-scroll');
     }
 
     public function openVideoSessionWorkspace(): void
@@ -184,7 +236,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
 
         $this->activeTab = 'closing';
-        $this->dispatch('scroll-to-section', id: 'section-payment');
+        $this->focusSettlementSection('section-payment');
         $this->sendSettlementPaymentReminder();
     }
 
@@ -297,6 +349,12 @@ new #[Layout('components.layouts.app')] class extends Component {
             'partiesForVideo' => (bool) config('docutrust.notary.require_video_session', true)
                 ? app(\App\Services\NotarySignerVideoInvitationService::class)->partiesForVideoVerification($this->notaryRequest)
                 : [],
+            'videoVerificationQueue' => (bool) config('docutrust.notary.require_video_session', true)
+                ? app(\App\Services\NotarySignerVideoInvitationService::class)->videoVerificationQueue($this->notaryRequest)
+                : ['total' => 0, 'verified_count' => 0, 'pending_count' => 0, 'complete' => false, 'next_party' => null, 'parties' => []],
+            'viewerVideoParty' => (bool) config('docutrust.notary.require_video_session', true)
+                ? app(\App\Services\NotarySignerVideoInvitationService::class)->viewerVideoParty($this->notaryRequest, $user)
+                : null,
             'journalEntries' => $this->notaryRequest->journals,
             'latestPayment' => Payment::query()
                 ->where('notary_request_id', $this->notaryRequest->id)
@@ -310,9 +368,16 @@ new #[Layout('components.layouts.app')] class extends Component {
                 ->get(),
             'latestEInvoice' => $this->notaryRequest->eInvoices->sortByDesc('created_at')->first(),
             'attorneyRegistryDraft' => $this->notaryRequest->attorneyNotarialRegistry,
+            'canAccessAttorneyRegistry' => $workflow->canAccessAttorneyRegistry($this->notaryRequest),
             'finalizationReadiness' => $readiness,
             'settlementSteps' => $workflow->settlementSteps($this->notaryRequest),
             'settlementDueAmount' => $workflow->settlementDueAmount($this->notaryRequest),
+            'settlementPendingCount' => $workflow->settlementPendingCount(
+                $this->notaryRequest,
+                $user->role->value === 'notary',
+            ),
+            'clientPortalTimeline' => $workflow->clientPortalTimeline($this->notaryRequest),
+            'hasSettlementFeeConfigured' => $workflow->hasSettlementFeeConfigured($this->notaryRequest),
             'caseShowRoute' => $user->role->value === 'notary' ? 'notary.requests.show' : 'notary-requests.show',
             'canCreatePayment' => $user->role->value === 'notary'
                 && (int) $this->notaryRequest->notary_user_id === (int) $user->id,
@@ -394,7 +459,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     public function submitRequest(): void
     {
         if ($this->notaryRequest->document_path !== null && $this->notaryRequest->signers()->doesntExist()) {
-            $this->addError('submitRequest', __('Add at least one signer before submitting this eNOTARY request.'));
+            $this->addError('submitRequest', __('Add at least one signer before submitting this notarization.'));
 
             return;
         }
@@ -402,7 +467,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         try {
             app(NotaryRequestWorkflowService::class)->submit($this->notaryRequest);
             $this->refreshRequest();
-            session()->flash('status', __('Notary request submitted.'));
+            session()->flash('status', __('Notarization submitted.'));
         } catch (\RuntimeException $exception) {
             $this->addError('submitRequest', $exception->getMessage());
         }
@@ -602,9 +667,9 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->authorize('cancel', $this->notaryRequest);
 
         try {
-            app(NotaryRequestWorkflowService::class)->cancel($this->notaryRequest->fresh(), __('Cancelled by user from the request workspace.'));
+            app(NotaryRequestWorkflowService::class)->cancel($this->notaryRequest->fresh(), __('Cancelled by user from the case workspace.'));
             $this->refreshRequest();
-            session()->flash('status', __('This notary request was cancelled.'));
+            session()->flash('status', __('This notarization was cancelled.'));
         } catch (\RuntimeException $exception) {
             $this->addError('cancelNotaryRequest', $exception->getMessage());
         }
@@ -661,22 +726,27 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         try {
             $session = $this->notaryRequest->sessions()->whereKey($sessionId)->firstOrFail();
+            $this->bootSessionChecklist($sessionId);
+            $checklist = $this->checklistForSession($sessionId);
 
             $required = config('docutrust.notary.verification_checklist', []);
             foreach ($required as $key) {
-                if (! ($this->sessionChecklist[$key] ?? false)) {
-                    $this->addError('sessionChecklist', __('Complete every item on the attorney checklist before finishing the session.'));
+                if (! ($checklist[$key] ?? false)) {
+                    $this->addError('sessionChecklists.'.(string) $sessionId, __('Complete every item on the attorney checklist before finishing the session.'));
 
                     return;
                 }
             }
 
-            app(NotarySchedulingService::class)->complete($session, $this->sessionChecklist);
+            app(NotarySchedulingService::class)->complete($session, $checklist);
+
+            unset($this->sessionChecklists[(string) $sessionId]);
 
             $this->refreshRequest();
 
             $workflow = app(NotaryRequestWorkflowService::class);
             $request = $this->notaryRequest->fresh();
+            $queue = app(\App\Services\NotarySignerVideoInvitationService::class)->videoVerificationQueue($request);
 
             if (
                 $workflow->hasCompletedSession($request)
@@ -684,12 +754,40 @@ new #[Layout('components.layouts.app')] class extends Component {
                 && ! $workflow->hasAttorneySignedAllDocuments($request)
             ) {
                 session()->flash('status', __('All video verifications are complete. Sign the contract as attorney on the Documents tab, then the final PDF and certificate will be generated.'));
+            } elseif (($queue['pending_count'] ?? 0) > 0 && is_array($queue['next_party'] ?? null)) {
+                session()->flash('status', __('Verification saved. :remaining verification call(s) remaining — next up: :name.', [
+                    'remaining' => $queue['pending_count'],
+                    'name' => $queue['next_party']['full_name'] ?? __('the next signer'),
+                ]));
+                $this->activeTab = 'session';
             } else {
                 session()->flash('status', __('Video session completed with verification evidence.'));
             }
         } catch (\RuntimeException $exception) {
             $this->addError('completeSession', $exception->getMessage());
         }
+    }
+
+    private function bootSessionChecklist(int $sessionId): void
+    {
+        $key = (string) $sessionId;
+
+        if (isset($this->sessionChecklists[$key])) {
+            return;
+        }
+
+        $keys = config('docutrust.notary.verification_checklist', []);
+        $this->sessionChecklists[$key] = array_fill_keys($keys, false);
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function checklistForSession(int $sessionId): array
+    {
+        $this->bootSessionChecklist($sessionId);
+
+        return $this->sessionChecklists[(string) $sessionId];
     }
 
     public function markIdentityVerified(): void
@@ -737,7 +835,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
             $this->refreshRequest();
             $this->rejectionReason = '';
-            session()->flash('status', __('Request rejected.'));
+            session()->flash('status', __('Notarization rejected.'));
         } catch (\RuntimeException $exception) {
             $this->addError('rejectRequest', $exception->getMessage());
         }
@@ -758,7 +856,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         try {
             app(NotaryRequestWorkflowService::class)->digitalize($this->notaryRequest);
             $this->refreshRequest();
-            session()->flash('status', __('Digital notarization completed: notary seal applied, QR code attached, certificate generated, and document timestamped. The request is now ready for Notary Admin finalization.'));
+            session()->flash('status', __('Digital notarization completed: notary seal applied, QR code attached, certificate generated, and document timestamped. This case is now ready for Notary Admin finalization.'));
         } catch (\RuntimeException $exception) {
             $this->addError('digitalizeRequest', $exception->getMessage());
         }
@@ -769,7 +867,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         try {
             app(NotaryRequestWorkflowService::class)->finalize($this->notaryRequest);
             $this->refreshRequest();
-            session()->flash('status', __('Notary request finalized.'));
+            session()->flash('status', __('Notarization finalized.'));
         } catch (\RuntimeException $exception) {
             $this->addError('finalizeRequest', $exception->getMessage());
         }
@@ -787,7 +885,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $this->attachDocumentId = '';
         $this->refreshRequest();
-        session()->flash('status', __('Document linked to notary request.'));
+        session()->flash('status', __('Document linked to this notarization.'));
     }
 
     /**
@@ -910,7 +1008,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             $this->newDocumentFile = null;
             $this->resetValidation(['newDocumentTitle', 'newDocumentFile']);
             $this->refreshRequest();
-            session()->flash('status', __('Document uploaded and linked to this notary request.'));
+            session()->flash('status', __('Document uploaded and linked to this notarization.'));
         } catch (\RuntimeException $exception) {
             $this->addError('newDocumentFile', $exception->getMessage());
         } catch (\Throwable $throwable) {
@@ -1129,7 +1227,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         // Only allow replacement while request is in Draft status
         if ($this->notaryRequest->status !== NotaryRequestStatus::Draft) {
-            $this->addError('replaceDocumentFile', __('Documents can only be replaced while the request is in draft status.'));
+            $this->addError('replaceDocumentFile', __('Documents can only be replaced while the notarization is in draft status.'));
             return;
         }
 
@@ -1220,6 +1318,31 @@ new #[Layout('components.layouts.app')] class extends Component {
         session()->flash('status', __('Blockchain proof refreshed.'));
     }
 
+    public function saveSettlementFee(): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+        abort_unless(
+            $user->role->value === 'notary'
+                && (int) $this->notaryRequest->notary_user_id === (int) $user->id,
+            403
+        );
+
+        $validated = $this->validate([
+            'settlementFee' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        app(AttorneyNotarialRegistryService::class)->saveSettlementFee(
+            $this->notaryRequest,
+            $user,
+            (float) $validated['settlementFee'],
+        );
+
+        $this->refreshRequest();
+        session()->flash('status', __('Notarial fee saved. Create a payment link below if a fee applies.'));
+        $this->queueSettlementScroll('section-payment');
+    }
+
     public function createGatewayPayment(): void
     {
         $user = Auth::user();
@@ -1253,6 +1376,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             session()->flash('status', $payment->wasRecentlyCreated
                 ? __('Payment link created. Share the checkout link or QR code with the client.')
                 : __('An active pending payment already exists. Payment email was sent again to the client.'));
+            $this->queueSettlementScroll('section-payment');
         } catch (\RuntimeException $exception) {
             $this->addError('createGatewayPayment', $exception->getMessage());
         }
@@ -1326,7 +1450,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->first();
 
         if (! $invoice instanceof EInvoice) {
-            $this->addError('queueLatestEInvoice', __('No e-invoice record exists for this request yet.'));
+            $this->addError('queueLatestEInvoice', __('No e-invoice record exists for this case yet.'));
 
             return;
         }
@@ -1349,7 +1473,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->first();
 
         if (! $invoice instanceof EInvoice) {
-            $this->addError('submitLatestEInvoice', __('No e-invoice record exists for this request yet.'));
+            $this->addError('submitLatestEInvoice', __('No e-invoice record exists for this case yet.'));
 
             return;
         }
@@ -1372,7 +1496,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->first();
 
         if (! $invoice instanceof EInvoice) {
-            $this->addError('refreshLatestEInvoiceStatus', __('No e-invoice record exists for this request yet.'));
+            $this->addError('refreshLatestEInvoiceStatus', __('No e-invoice record exists for this case yet.'));
 
             return;
         }
@@ -1390,6 +1514,12 @@ new #[Layout('components.layouts.app')] class extends Component {
     private function refreshRequest(): void
     {
         $this->notaryRequest->refresh()->load(['requester', 'notary', 'documents.documentSigners', 'documents.signatureFields', 'documents.documentHash', 'sessions.notarySigner', 'journals.notary', 'registerEntries', 'payments', 'eInvoices', 'attorneyNotarialRegistry', 'signers', 'identityVerifications.signer', 'identityVerifications.verifier', 'geoLogs.signer']);
+
+        foreach ($this->notaryRequest->sessions as $session) {
+            if ($session->status === 'in_progress') {
+                $this->bootSessionChecklist((int) $session->id);
+            }
+        }
     }
 
     private function resolveCompletedLinkedDocument(int $documentId): Document
@@ -1570,28 +1700,40 @@ new #[Layout('components.layouts.app')] class extends Component {
             ];
         }
 
-        $hasAttorneyRegistryDraft = $request->attorneyNotarialRegistry !== null;
+        $hasFeeConfigured = $workflow->hasSettlementFeeConfigured($request);
+        $hasPreparedRegistry = $workflow->hasPreparedRegistryDraft($request);
         $hasAttorneySealOnFile = $workflow->hasAttorneySealOnFile($request);
         $paymentRequired = $workflow->paymentRequired($request);
         $hasSettledPayment = $workflow->hasSettledPayment($request);
+        $canAccessRegistry = $workflow->canAccessAttorneyRegistry($request);
 
-        if ($workflow->hasAttorneySignedAllDocuments($request) && ! $hasAttorneyRegistryDraft) {
+        if ($workflow->hasAttorneySignedAllDocuments($request) && ! $hasFeeConfigured) {
             return [
-                'type' => 'link',
-                'label' => __('Prepare attorney registry'),
-                'description' => __('Capture entry no., parties, identity evidence, fees, and notarial act details before payment.'),
+                'type' => 'tab',
+                'label' => __('Set notarial fee'),
+                'description' => __('Enter the fee amount on Settlement before creating a payment link.'),
                 'variant' => 'primary',
-                'href' => route('notary.attorney-registry', $request),
                 'tab' => 'closing',
             ];
         }
 
-        if ($paymentRequired && ! $hasSettledPayment && $hasAttorneyRegistryDraft) {
+        if ($paymentRequired && ! $hasSettledPayment && $hasFeeConfigured) {
             return [
                 'type' => 'tab',
                 'label' => __('Collect payment'),
-                'description' => __('Generate or share the payment link based on the attorney registry fee amount.'),
+                'description' => __('Generate or share the payment link using the fee amount you set.'),
                 'variant' => 'primary',
+                'tab' => 'closing',
+            ];
+        }
+
+        if ($canAccessRegistry && ! $hasPreparedRegistry) {
+            return [
+                'type' => 'link',
+                'label' => __('Complete register entry'),
+                'description' => __('Fill the 9-field register row, O.R. number, and confirm signer signatures.'),
+                'variant' => 'primary',
+                'href' => route('notary.attorney-registry', $request),
                 'tab' => 'closing',
             ];
         }
@@ -1637,6 +1779,32 @@ new #[Layout('components.layouts.app')] class extends Component {
                     'tab' => 'documents',
                 ];
             }
+        }
+
+        $videoQueue = app(\App\Services\NotarySignerVideoInvitationService::class)->videoVerificationQueue($request);
+        $nextParty = is_array($videoQueue['next_party'] ?? null) ? $videoQueue['next_party'] : null;
+
+        if ($nextParty !== null && ($nextParty['session_id'] ?? null)) {
+            $partyName = (string) ($nextParty['full_name'] ?? '');
+            $pendingCount = (int) ($videoQueue['pending_count'] ?? 0);
+
+            return [
+                'type' => 'link',
+                'label' => $pendingCount > 1
+                    ? __('Join video with :name', ['name' => $partyName !== '' ? $partyName : __('signer')])
+                    : __('Join video call'),
+                'description' => $pendingCount > 1
+                    ? __(':remaining verification call(s) remaining. Start with :name.', [
+                        'remaining' => $pendingCount,
+                        'name' => $partyName !== '' ? $partyName : __('the next signer'),
+                    ])
+                    : ($partyName !== ''
+                        ? __('Enter the live verification room with :name.', ['name' => $partyName])
+                        : __('Enter the live verification room with the signer.')),
+                'variant' => 'primary',
+                'href' => route('notary.requests.session.live', [$request, (int) $nextParty['session_id']]),
+                'tab' => 'session',
+            ];
         }
 
         $joinableSession = $request->sessions
@@ -1763,6 +1931,163 @@ new #[Layout('components.layouts.app')] class extends Component {
                 'description' => __('Finalize your review after payment and register entry.'),
                 'variant' => 'primary',
                 'tab' => 'closing',
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{
+     *   type: 'link'|'wire'|'tab'|'status',
+     *   label: string,
+     *   description: string,
+     *   variant: string,
+     *   href?: string,
+     *   action?: string,
+     *   params?: list<int|string>,
+     *   tab?: string,
+     *   confirm?: string
+     * }|null
+     */
+    #[Computed]
+    public function portalCaseAction(): ?array
+    {
+        $user = Auth::user();
+        if ($user === null) {
+            return null;
+        }
+
+        if ($user->role->value === 'notary') {
+            return $this->primaryCaseAction;
+        }
+
+        return $this->resolveClientPortalAction();
+    }
+
+    /**
+     * @return array{
+     *   type: 'link'|'tab'|'status',
+     *   label: string,
+     *   description: string,
+     *   variant: string,
+     *   href?: string,
+     *   tab?: string
+     * }|null
+     */
+    private function resolveClientPortalAction(): ?array
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        $request = $this->notaryRequest;
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $documents = $request->documents->loadMissing(['documentSigners', 'signatureFields']);
+
+        if ($request->status === NotaryRequestStatus::Notarized) {
+            $document = $documents->first();
+            if ($document !== null) {
+                return [
+                    'type' => 'link',
+                    'label' => __('Download notarized PDF'),
+                    'description' => __('Your notarization is complete.'),
+                    'variant' => 'primary',
+                    'href' => route('documents.download', $document),
+                    'tab' => 'documents',
+                ];
+            }
+
+            return null;
+        }
+
+        if (in_array($request->status->value, ['cancelled', 'rejected', 'failed'], true)) {
+            return null;
+        }
+
+        $canPay = ($request->user_id === $user->id || ($user->isEnotaryPortalSigner() && $user->isNotarySignerOn($request)))
+            && $user->role->value !== 'notary';
+        $paymentRequired = $workflow->paymentRequired($request);
+        $hasSettledPayment = $workflow->hasSettledPayment($request);
+        $hasFeeConfigured = $workflow->hasSettlementFeeConfigured($request);
+
+        if ($canPay && $paymentRequired && ! $hasSettledPayment && $hasFeeConfigured) {
+            return [
+                'type' => 'tab',
+                'label' => __('Pay notarial fee'),
+                'description' => __('Complete payment so your attorney can finish the notarial register.'),
+                'variant' => 'primary',
+                'tab' => 'closing',
+            ];
+        }
+
+        $userEmail = strtolower(trim($user->email));
+
+        foreach ($documents as $document) {
+            if ($document->status !== DocumentStatus::Pending) {
+                continue;
+            }
+
+            $pendingSigner = $document->documentSigners->first(function (DocumentSigner $signer) use ($user, $userEmail): bool {
+                if (! $signer->requiresAction()) {
+                    return false;
+                }
+
+                return (int) $signer->user_id === (int) $user->id
+                    || strtolower(trim($signer->email)) === $userEmail;
+            });
+
+            if ($pendingSigner !== null && $document->signatureFields->where('signer_id', $pendingSigner->id)->isNotEmpty()) {
+                return [
+                    'type' => 'link',
+                    'label' => __('Sign document'),
+                    'description' => __('Review and sign :title.', ['title' => $document->title]),
+                    'variant' => 'primary',
+                    'href' => route('notary.sign.account.show', $pendingSigner->id),
+                    'tab' => 'documents',
+                ];
+            }
+        }
+
+        $notarySigner = $request->signers->first(fn (NotarySigner $signer): bool => (int) $signer->user_id === (int) $user->id
+            || strtolower(trim($signer->email)) === $userEmail);
+
+        if ($notarySigner !== null) {
+            $joinableSession = $request->sessions
+                ->filter(fn ($session): bool => (int) $session->notary_signer_id === (int) $notarySigner->id
+                    && in_array($session->status, ['scheduled', 'in_progress'], true))
+                ->sortBy(fn ($session): int => $session->status === 'in_progress' ? 0 : 1)
+                ->first();
+
+            if ($joinableSession !== null) {
+                return [
+                    'type' => 'link',
+                    'label' => __('Join video session'),
+                    'description' => __('Join the live verification call with your attorney.'),
+                    'variant' => 'primary',
+                    'href' => route('notary-requests.session.live', [$request, $joinableSession]),
+                    'tab' => 'session',
+                ];
+            }
+        }
+
+        if ($canPay && $paymentRequired && $hasSettledPayment) {
+            return [
+                'type' => 'status',
+                'label' => __('Waiting for attorney'),
+                'description' => __('Payment is complete. Your attorney will finish the notarial register and finalization.'),
+                'variant' => 'outline',
+                'tab' => 'closing',
+            ];
+        }
+
+        $currentStep = $this->currentWorkflowStep;
+        if ($currentStep !== null) {
+            return [
+                'type' => 'status',
+                'label' => $currentStep['label'],
+                'description' => $currentStep['description'],
+                'variant' => 'outline',
+                'tab' => 'documents',
             ];
         }
 

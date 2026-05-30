@@ -84,7 +84,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     {{ $greeting }}, {{ $displayName }}
                 </h1>
                 <p class="mt-2 max-w-xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-                    {{ __('Track assigned requests, upcoming sessions, and everything you need to stay practice-ready.') }}
+                    {{ __('Track assigned notarizations, upcoming sessions, and everything you need to stay practice-ready.') }}
                 </p>
                 <div class="mt-4 flex flex-wrap items-center gap-2">
                     <span class="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-200/80 dark:bg-zinc-800/80 dark:text-zinc-200 dark:ring-white/10">
@@ -108,10 +108,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                 <p class="text-center text-xs font-medium text-zinc-500 sm:text-end dark:text-zinc-400">{{ now()->format('l, F j, Y') }}</p>
                 <div class="flex flex-wrap gap-2">
                     <flux:button variant="ghost" :href="route('notary.requests.index')" wire:navigate icon="clipboard-document-list">
-                        {{ __('All requests') }}
+                        {{ __('All notarizations') }}
                     </flux:button>
                     <flux:button variant="primary" :href="route('notary.requests.create')" wire:navigate icon="plus">
-                        {{ __('New request') }}
+                        {{ __('New notarization') }}
                     </flux:button>
                 </div>
             </div>
@@ -142,7 +142,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <a href="{{ $dashboardService->requestsIndexUrl() }}" wire:navigate class="group relative overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
             <div class="flex items-start justify-between gap-3">
-                <p class="text-xs font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Open requests') }}</p>
+                <p class="text-xs font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Open notarizations') }}</p>
                 <div class="flex size-9 items-center justify-center rounded-xl bg-zinc-100 transition group-hover:bg-zinc-200/80 dark:bg-zinc-800 dark:group-hover:bg-zinc-700">
                     <flux:icon.clipboard-document-list variant="outline" class="size-4.5 text-zinc-600 dark:text-zinc-400" />
                 </div>
@@ -200,7 +200,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         </div>
                         <div>
                             <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-50">{{ __('Continue work') }}</h2>
-                            <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Assigned requests that need your attention next.') }}</p>
+                            <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Assigned notarizations that need your attention next.') }}</p>
                         </div>
                     </div>
                     <flux:button variant="ghost" size="sm" :href="route('notary.requests.index')" wire:navigate>{{ __('View all') }}</flux:button>
@@ -246,9 +246,9 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 <flux:icon.inbox variant="outline" class="size-7 text-zinc-400 dark:text-zinc-500" />
                             </div>
                             <p class="mt-4 text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ __('You are all caught up') }}</p>
-                            <p class="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">{{ __('No open requests assigned to you right now. Start a new request or check back later.') }}</p>
+                            <p class="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">{{ __('No open notarizations assigned to you right now. Start a new notarization or check back later.') }}</p>
                             <flux:button variant="primary" class="mt-5" :href="route('notary.requests.create')" wire:navigate icon="plus">
-                                {{ __('New request') }}
+                                {{ __('New notarization') }}
                             </flux:button>
                         </div>
                     @endforelse
@@ -303,7 +303,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 <div class="mt-4 grid grid-cols-2 gap-2">
                     <a href="{{ route('notary.requests.index') }}" wire:navigate class="flex flex-col gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-3 transition hover:border-teal-200 hover:bg-teal-50/50 dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-teal-500/30 dark:hover:bg-teal-500/5">
                         <flux:icon.clipboard-document-list variant="outline" class="size-5 text-teal-700 dark:text-teal-400" />
-                        <span class="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{{ __('Requests') }}</span>
+                        <span class="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{{ __('Notarizations') }}</span>
                     </a>
                     <a href="{{ route('settings.trust-profile') }}" wire:navigate class="flex flex-col gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-3 transition hover:border-teal-200 hover:bg-teal-50/50 dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-teal-500/30 dark:hover:bg-teal-500/5">
                         <flux:icon.shield-check variant="outline" class="size-5 text-teal-700 dark:text-teal-400" />

@@ -25,7 +25,7 @@ class NotaryPaymentReadyMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: __('Payment required for your notarization request: :title', ['title' => $this->notaryRequest->title]),
+            subject: __('Payment required for your notarization: :title', ['title' => $this->notaryRequest->title]),
         );
     }
 

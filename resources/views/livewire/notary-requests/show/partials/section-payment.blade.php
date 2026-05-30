@@ -16,13 +16,13 @@
     };
 @endphp
 
-<div id="section-payment" class="ui-panel scroll-mt-6 p-5 sm:p-6">
+<div id="section-payment" class="ui-panel scroll-mt-24 p-5 sm:p-6">
     <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
         {{ $canPayNotaryFee && ! $canCreatePayment ? __('Pay notarial fee') : __('Notarial fee payment') }}
     </h2>
     <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         @if ($canCreatePayment)
-            {{ __('Create a payment link after saving fee details in the registry draft. The client pays before you create the official register entry.') }}
+            {{ __('Create a payment link after you save the notarial fee above. The client pays before you complete the register entry.') }}
         @elseif ($canPayNotaryFee)
             {{ __('Scan the QR code or open checkout to pay the notarial fee. Payment must be completed before notarization can finish.') }}
         @else
@@ -38,12 +38,12 @@
                 @php $latestRegisterEntry = $notaryRequest->registerEntries->sortByDesc('created_at')->first(); @endphp
                 <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Based on register entry :entry', ['entry' => str_pad((string) $latestRegisterEntry->entry_number, 3, '0', STR_PAD_LEFT)]) }}</div>
             @elseif ($attorneyRegistryDraft)
-                <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Based on saved fee & party details') }}</div>
+                <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Based on saved notarial fee') }}</div>
             @endif
         </div>
     @elseif ($canCreatePayment)
         <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-            {{ __('Save fee & party details with a fee amount before creating a payment link.') }}
+            {{ __('Save the notarial fee on Settlement before creating a payment link.') }}
         </div>
     @endif
 

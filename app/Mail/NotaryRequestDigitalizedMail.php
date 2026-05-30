@@ -23,7 +23,7 @@ class NotaryRequestDigitalizedMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: __('Notary request ready for finalization: :title', ['title' => $this->notaryRequest->title]),
+            subject: __('Notarization ready for finalization: :title', ['title' => $this->notaryRequest->title]),
         );
     }
 

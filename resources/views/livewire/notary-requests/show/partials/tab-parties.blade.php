@@ -177,7 +177,7 @@
                 <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
                     @if (! $isNotary)
                     <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Philippines location check') }}</h3>
-                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Uses your browser coordinates together with server-side IP intelligence. Failed checks flag the request automatically.') }}</p>
+                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Uses your browser coordinates together with server-side IP intelligence. Failed checks flag the case automatically.') }}</p>
                     <div class="mt-3 grid gap-3 sm:grid-cols-2">
                         <flux:field>
                             <flux:label>{{ __('Latitude (optional)') }}</flux:label>
@@ -190,7 +190,7 @@
                         <flux:field class="sm:col-span-2">
                             <flux:label>{{ __('Signer (optional)') }}</flux:label>
                             <select wire:model="geoSignerId" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                                <option value="">{{ __('Entire request') }}</option>
+                                <option value="">{{ __('Entire case') }}</option>
                                 @foreach ($requestSigners as $signer)
                                     <option value="{{ $signer->id }}">{{ $signer->full_name }}</option>
                                 @endforeach

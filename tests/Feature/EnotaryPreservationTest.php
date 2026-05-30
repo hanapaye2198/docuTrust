@@ -14,6 +14,11 @@ use App\Models\NotaryRequest;
 use App\Models\Organization;
 use App\Models\SignatureField;
 use App\Models\User;
+use App\Services\CompletedDocumentArtifactService;
+use App\Services\DocumentPdfStampingService;
+use App\Services\NotarialCertificateService;
+use App\Services\NotaryDigitalizationService;
+use App\Services\NotarySealService;
 use App\Services\SendDocumentForSignatureService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -189,7 +194,7 @@ class EnotaryPreservationTest extends TestCase
         ]);
 
         // Mock the PDF stamping service to avoid filesystem operations
-        $this->mock(\App\Services\DocumentPdfStampingService::class, function ($mock) {
+        $this->mock(DocumentPdfStampingService::class, function ($mock) {
             $mock->shouldReceive('generatePreparedPdf')->andReturn('documents/prepared.pdf');
         });
 
@@ -230,7 +235,7 @@ class EnotaryPreservationTest extends TestCase
         ]);
 
         // Mock the PDF stamping service to avoid filesystem operations
-        $this->mock(\App\Services\DocumentPdfStampingService::class, function ($mock) {
+        $this->mock(DocumentPdfStampingService::class, function ($mock) {
             $mock->shouldReceive('generatePreparedPdf')->andReturn('documents/prepared.pdf');
         });
 
@@ -309,8 +314,8 @@ class EnotaryPreservationTest extends TestCase
         // Pre-create a DocumentHash with transaction_id so blockchain anchoring is satisfied
         DocumentHash::query()->create([
             'document_id' => $document->id,
-            'hash' => 'sha256-test-hash-' . $document->id,
-            'transaction_id' => 'tx-already-anchored-' . $document->id,
+            'hash' => 'sha256-test-hash-'.$document->id,
+            'transaction_id' => 'tx-already-anchored-'.$document->id,
             'created_at' => now(),
         ]);
 
@@ -322,19 +327,19 @@ class EnotaryPreservationTest extends TestCase
         ]);
 
         // Mock services that interact with filesystem
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) {
+        $this->mock(NotarySealService::class, function ($mock) {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
             $mock->shouldReceive('applyNotarySeal')->andReturnNull();
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+        $this->mock(NotarialCertificateService::class, function ($mock) {
             $mock->shouldReceive('generate')->andReturnNull();
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) {
             $mock->shouldReceive('ensureReady')->andReturnNull();
         });
 
         // Execute digitalization
-        app(\App\Services\NotaryDigitalizationService::class)->digitalize($notaryRequest);
+        app(NotaryDigitalizationService::class)->digitalize($notaryRequest);
 
         // Verify journal entry was created
         $journal = NotaryJournal::query()
@@ -389,8 +394,8 @@ class EnotaryPreservationTest extends TestCase
         // Pre-create a DocumentHash with transaction_id
         DocumentHash::query()->create([
             'document_id' => $document->id,
-            'hash' => 'sha256-test-hash-' . $document->id,
-            'transaction_id' => 'tx-already-anchored-' . $document->id,
+            'hash' => 'sha256-test-hash-'.$document->id,
+            'transaction_id' => 'tx-already-anchored-'.$document->id,
             'created_at' => now(),
         ]);
 
@@ -400,22 +405,24 @@ class EnotaryPreservationTest extends TestCase
             'document_id' => $document->id,
         ]);
 
-        // Mock services - verify seal is applied (called twice: once for seal, once for attorney signature)
+        // Mock services - verify seal is applied once during digital notarization
         $sealApplied = false;
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) use (&$sealApplied) {
+        $this->mock(NotarySealService::class, function ($mock) use (&$sealApplied) {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
-            $mock->shouldReceive('applyNotarySeal')->twice()->andReturnUsing(function () use (&$sealApplied) {
+            $mock->shouldReceive('applyNotarySeal')->once()->andReturnUsing(function () use (&$sealApplied) {
                 $sealApplied = true;
+
+                return 'documents/notarized/mock-final.pdf';
             });
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+        $this->mock(NotarialCertificateService::class, function ($mock) {
             $mock->shouldReceive('generate')->andReturnNull();
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) {
             $mock->shouldReceive('ensureReady')->andReturnNull();
         });
 
-        app(\App\Services\NotaryDigitalizationService::class)->digitalize($notaryRequest);
+        app(NotaryDigitalizationService::class)->digitalize($notaryRequest);
 
         $this->assertTrue($sealApplied, 'Notary seal should be applied to documents during digitalization');
     }
@@ -454,8 +461,8 @@ class EnotaryPreservationTest extends TestCase
 
         DocumentHash::query()->create([
             'document_id' => $document->id,
-            'hash' => 'sha256-test-hash-' . $document->id,
-            'transaction_id' => 'tx-already-anchored-' . $document->id,
+            'hash' => 'sha256-test-hash-'.$document->id,
+            'transaction_id' => 'tx-already-anchored-'.$document->id,
             'created_at' => now(),
         ]);
 
@@ -469,20 +476,20 @@ class EnotaryPreservationTest extends TestCase
 
         // Mock services - verify QR generation is called
         $qrGenerated = false;
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) use (&$qrGenerated) {
+        $this->mock(NotarySealService::class, function ($mock) use (&$qrGenerated) {
             $mock->shouldReceive('generateVerificationQrCode')->once()->andReturnUsing(function () use (&$qrGenerated) {
                 $qrGenerated = true;
             });
             $mock->shouldReceive('applyNotarySeal')->andReturnNull();
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+        $this->mock(NotarialCertificateService::class, function ($mock) {
             $mock->shouldReceive('generate')->andReturnNull();
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) {
             $mock->shouldReceive('ensureReady')->andReturnNull();
         });
 
-        app(\App\Services\NotaryDigitalizationService::class)->digitalize($notaryRequest);
+        app(NotaryDigitalizationService::class)->digitalize($notaryRequest);
 
         $this->assertTrue($qrGenerated, 'QR code should be generated for register entries during digitalization');
     }
@@ -521,8 +528,8 @@ class EnotaryPreservationTest extends TestCase
 
         DocumentHash::query()->create([
             'document_id' => $document->id,
-            'hash' => 'sha256-test-hash-' . $document->id,
-            'transaction_id' => 'tx-already-anchored-' . $document->id,
+            'hash' => 'sha256-test-hash-'.$document->id,
+            'transaction_id' => 'tx-already-anchored-'.$document->id,
             'created_at' => now(),
         ]);
 
@@ -534,20 +541,20 @@ class EnotaryPreservationTest extends TestCase
 
         // Mock services - verify certificate generation is called
         $certificateGenerated = false;
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) {
+        $this->mock(NotarySealService::class, function ($mock) {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
             $mock->shouldReceive('applyNotarySeal')->andReturnNull();
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) use (&$certificateGenerated) {
+        $this->mock(NotarialCertificateService::class, function ($mock) use (&$certificateGenerated) {
             $mock->shouldReceive('generate')->once()->andReturnUsing(function () use (&$certificateGenerated) {
                 $certificateGenerated = true;
             });
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) {
             $mock->shouldReceive('ensureReady')->andReturnNull();
         });
 
-        app(\App\Services\NotaryDigitalizationService::class)->digitalize($notaryRequest);
+        app(NotaryDigitalizationService::class)->digitalize($notaryRequest);
 
         $this->assertTrue($certificateGenerated, 'Certificates should be generated for register entries during digitalization');
     }
@@ -587,8 +594,8 @@ class EnotaryPreservationTest extends TestCase
         // Pre-create a DocumentHash WITH transaction_id (already anchored)
         DocumentHash::query()->create([
             'document_id' => $document->id,
-            'hash' => 'sha256-test-hash-' . $document->id,
-            'transaction_id' => 'tx-blockchain-proof-' . $document->id,
+            'hash' => 'sha256-test-hash-'.$document->id,
+            'transaction_id' => 'tx-blockchain-proof-'.$document->id,
             'created_at' => now(),
         ]);
 
@@ -598,19 +605,19 @@ class EnotaryPreservationTest extends TestCase
             'document_id' => $document->id,
         ]);
 
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) {
+        $this->mock(NotarySealService::class, function ($mock) {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
             $mock->shouldReceive('applyNotarySeal')->andReturnNull();
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+        $this->mock(NotarialCertificateService::class, function ($mock) {
             $mock->shouldReceive('generate')->andReturnNull();
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) {
             $mock->shouldReceive('ensureReady')->andReturnNull();
         });
 
         // Should not throw - blockchain anchoring is already done
-        $result = app(\App\Services\NotaryDigitalizationService::class)->digitalize($notaryRequest);
+        $result = app(NotaryDigitalizationService::class)->digitalize($notaryRequest);
 
         // Verify the document hash still has its transaction_id (blockchain proof preserved)
         $hash = DocumentHash::query()->where('document_id', $document->id)->first();
@@ -656,8 +663,8 @@ class EnotaryPreservationTest extends TestCase
 
             DocumentHash::query()->create([
                 'document_id' => $doc->id,
-                'hash' => 'sha256-test-hash-' . $doc->id,
-                'transaction_id' => 'tx-anchored-' . $doc->id,
+                'hash' => 'sha256-test-hash-'.$doc->id,
+                'transaction_id' => 'tx-anchored-'.$doc->id,
                 'created_at' => now(),
             ]);
 
@@ -670,18 +677,18 @@ class EnotaryPreservationTest extends TestCase
             $documents[] = $doc;
         }
 
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) {
+        $this->mock(NotarySealService::class, function ($mock) {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
             $mock->shouldReceive('applyNotarySeal')->andReturnNull();
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+        $this->mock(NotarialCertificateService::class, function ($mock) {
             $mock->shouldReceive('generate')->andReturnNull();
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) {
             $mock->shouldReceive('ensureReady')->andReturnNull();
         });
 
-        app(\App\Services\NotaryDigitalizationService::class)->digitalize($notaryRequest);
+        app(NotaryDigitalizationService::class)->digitalize($notaryRequest);
 
         // Verify journal entry counts reflect multiple documents/entries
         $journal = NotaryJournal::query()

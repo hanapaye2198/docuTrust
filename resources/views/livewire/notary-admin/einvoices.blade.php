@@ -78,7 +78,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">{{ __('E-Invoices') }}</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Monitor invoice submission state, EIS results, and requests that need billing or response follow-up.') }}</p>
+            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Monitor invoice submission state, EIS results, and notarizations that need billing or response follow-up.') }}</p>
         </div>
         <div class="text-sm font-medium text-zinc-400 dark:text-zinc-500">
             {{ now()->format('l, F j, Y') }}
@@ -108,7 +108,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
             <flux:field>
                 <flux:label>{{ __('Search') }}</flux:label>
-                <flux:input wire:model.live.debounce.300ms="search" type="text" placeholder="{{ __('Invoice number, request, client, submit ID, or EIS unique ID') }}" />
+                <flux:input wire:model.live.debounce.300ms="search" type="text" placeholder="{{ __('Invoice number, case, client, submit ID, or EIS unique ID') }}" />
             </flux:field>
             <flux:field>
                 <flux:label>{{ __('Status') }}</flux:label>
@@ -132,7 +132,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <thead class="bg-zinc-50 dark:bg-zinc-950/40">
                             <tr class="text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                                 <th class="px-4 py-3">{{ __('Invoice') }}</th>
-                                <th class="px-4 py-3">{{ __('Request') }}</th>
+                                <th class="px-4 py-3">{{ __('Case') }}</th>
                                 <th class="px-4 py-3">{{ __('Status') }}</th>
                                 <th class="px-4 py-3">{{ __('Identifiers') }}</th>
                                 <th class="px-4 py-3">{{ __('Amount') }}</th>
@@ -158,7 +158,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     <td class="px-4 py-4">
                                         <div class="font-medium text-zinc-800 dark:text-zinc-200">
                                             <a href="{{ route('notary-requests.show', $invoice->notaryRequest) }}" wire:navigate class="transition hover:text-teal-600 dark:hover:text-teal-400">
-                                                {{ $invoice->document_title ?? $invoice->notaryRequest?->title ?? __('Request #:id', ['id' => $invoice->notary_request_id]) }}
+                                                {{ $invoice->document_title ?? $invoice->notaryRequest?->title ?? __('Case #:id', ['id' => $invoice->notary_request_id]) }}
                                             </a>
                                         </div>
                                         <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">

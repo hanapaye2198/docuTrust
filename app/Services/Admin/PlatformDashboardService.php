@@ -190,7 +190,7 @@ class PlatformDashboardService
                 $items->push([
                     'priority' => 2,
                     'type' => 'stuck_notary_request',
-                    'title' => __('Notary request needs attention'),
+                    'title' => __('Notarization needs attention'),
                     'description' => $request->title.' · '.ucfirst(str_replace('_', ' ', $request->status->value)),
                     'url' => route('notary-requests.show', $request),
                     'occurred_at' => $request->updated_at?->toIso8601String(),

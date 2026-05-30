@@ -174,9 +174,9 @@
                         icon="clipboard-document-list"
                         :href="route('notary.requests.index')"
                         :current="request()->routeIs('notary.requests.*') && ! request()->routeIs('notary.attorney-registries.*')"
-                        :tooltip="__('Notary Requests')"
+                        :tooltip="__('Notarizations')"
                         wire:navigate
-                    >{{ __('Notary Requests') }}</flux:sidebar.item>
+                    >{{ __('Notarizations') }}</flux:sidebar.item>
 
                     <flux:sidebar.item
                         icon="book-open"
@@ -192,9 +192,9 @@
                         icon="clipboard-document-list"
                         :href="route('notary-requests.index')"
                         :current="request()->routeIs('notary-requests.*')"
-                        :tooltip="__('Notary Requests')"
+                        :tooltip="__('Notarizations')"
                         wire:navigate
-                    >{{ __('Notary Requests') }}</flux:sidebar.item>
+                    >{{ __('Notarizations') }}</flux:sidebar.item>
                 @endif
 
                 @if ($navUser->canAccessSigningWorkspace())

@@ -415,7 +415,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 session()->flash('status', __('Case opened. Upload your PDF and add parties from the case page when ready.'));
             }
         } else {
-            session()->flash('status', __('eNOTARY request created. The assigned attorney will upload documents and manage the signing process.'));
+            session()->flash('status', __('Notarization created. The assigned attorney will upload documents and manage the signing process.'));
         }
 
         $showRoute = $isNotary ? 'notary.requests.show' : 'notary-requests.show';
@@ -429,7 +429,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     <div class="flex flex-col gap-4 border-b border-zinc-200/90 pb-5 dark:border-zinc-800 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0">
             <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-3xl">
-                {{ $isNotaryView ? __('New notarization case') : __('Create eNOTARY request') }}
+                {{ __('New notarization') }}
             </h1>
             <p class="mt-1 max-w-3xl text-sm text-zinc-500 dark:text-zinc-400">
                 @if ($isNotaryView)
@@ -445,7 +445,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             wire:navigate
             icon="arrow-left"
         >
-            {{ __('Back to requests') }}
+            {{ __('Back to notarizations') }}
         </flux:button>
     </div>
 
@@ -514,7 +514,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                             <flux:field>
                                 <flux:label>{{ __('Case title') }} <span class="text-rose-500">*</span></flux:label>
                                 <flux:input wire:model.live="title" type="text" required placeholder="{{ __('e.g. Deed of Sale — Lot 5, Block 2, Greenfield Subd.') }}" />
-                                <flux:description>{{ __('Shown on your request list and case page.') }}</flux:description>
+                                <flux:description>{{ __('Shown on your notarization list and case page.') }}</flux:description>
                                 <flux:error name="title" />
                             </flux:field>
 
@@ -789,14 +789,14 @@ new #[Layout('components.layouts.app')] class extends Component {
             @else
                 {{-- Admin / non-attorney: single-step form --}}
                 <section class="ui-panel p-6 sm:p-8">
-                    <flux:heading size="lg">{{ __('Request details') }}</flux:heading>
+                    <flux:heading size="lg">{{ __('Notarization details') }}</flux:heading>
                     <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Required details to open the notarization matter.') }}</p>
 
                     <div class="mt-6 space-y-6">
                         <flux:field>
                             <flux:label>{{ __('Case title') }} <span class="text-rose-500">*</span></flux:label>
                             <flux:input wire:model.live="title" type="text" required placeholder="{{ __('e.g. Deed of Sale — Lot 5, Block 2, Greenfield Subd.') }}" />
-                            <flux:description>{{ __('A descriptive name shown on the request list and detail page.') }}</flux:description>
+                            <flux:description>{{ __('A descriptive name shown on the notarization list and detail page.') }}</flux:description>
                             <flux:error name="title" />
                         </flux:field>
 
@@ -912,7 +912,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                             wire:target="save"
                             icon="check"
                         >
-                            <span wire:loading.remove wire:target="save">{{ __('Create request') }}</span>
+                            <span wire:loading.remove wire:target="save">{{ __('Create notarization') }}</span>
                             <span wire:loading wire:target="save">{{ __('Creating…') }}</span>
                         </flux:button>
                         <flux:button
@@ -935,7 +935,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         {{ __('Cancel') }}
                     </flux:button>
                     <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="save" icon="check">
-                        <span wire:loading.remove wire:target="save">{{ __('Create request') }}</span>
+                        <span wire:loading.remove wire:target="save">{{ __('Create notarization') }}</span>
                         <span wire:loading wire:target="save">{{ __('Creating…') }}</span>
                     </flux:button>
                 </div>

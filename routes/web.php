@@ -12,6 +12,8 @@ use App\Http\Controllers\EnotarySignerVideoJoinController;
 use App\Http\Controllers\MarketingChatbotController;
 use App\Http\Controllers\MarketingFeatureController;
 use App\Http\Controllers\NotaryCredentialDocumentController;
+use App\Http\Controllers\NotaryDocumentSignerSignatureImageController;
+use App\Http\Controllers\NotaryIdentityVerificationImageController;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
@@ -125,6 +127,13 @@ Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function 
     Volt::route('notary/attorney-registries', 'notary.attorney-registries.index')->name('notary.attorney-registries.index');
     Volt::route('notary/requests/{notaryRequest}/attorney-registry', 'notary.attorney-registry')->name('notary.attorney-registry');
     Volt::route('notary/requests/{notaryRequest}/register-entry', 'notary.register-entry')->name('notary.register-entry');
+
+    Route::get('notary/requests/{notaryRequest}/identity-verifications/{verification}/image', NotaryIdentityVerificationImageController::class)
+        ->name('notary.identity-verifications.image');
+    Route::get('notary/requests/{notaryRequest}/documents/{document}/signers/{documentSigner}/signatures/{signature}/image', NotaryDocumentSignerSignatureImageController::class)
+        ->name('notary.document-signers.signature-image');
+    Route::get('notary/credentials/{credential}/document/{document}', NotaryCredentialDocumentController::class)
+        ->name('notary.credentials.document');
 
     // Attorney access to document preparation and field placement for eNOTARY documents
     Route::get('notary/documents/{document}/stream', DocumentStreamController::class)->name('notary.documents.stream');

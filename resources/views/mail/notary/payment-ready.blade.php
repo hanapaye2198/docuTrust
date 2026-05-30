@@ -1,9 +1,9 @@
 <x-mail::message>
 # Payment Required
 
-Your notarization request is ready for payment.
+Your notarization is ready for payment.
 
-**Request:** {{ $notaryRequest->title }}
+**Notarization:** {{ $notaryRequest->title }}
 **Assigned notary:** {{ $notaryName }}
 **Amount due:** PHP {{ $amount }}
 **Gateway:** {{ strtoupper((string) $payment->gateway) }}
@@ -11,10 +11,10 @@ Your notarization request is ready for payment.
 **Payment expires:** {{ $expiresAt }}
 @endif
 
-Complete the payment from your request page to continue the notarization workflow.
+Complete the payment from your case page to continue the notarization workflow.
 
 <x-mail::button :url="route('notary-requests.show', $notaryRequest)">
-View Request
+View Notarization
 </x-mail::button>
 
 Thanks,<br>

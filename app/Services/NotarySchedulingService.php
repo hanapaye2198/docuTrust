@@ -33,7 +33,7 @@ class NotarySchedulingService
         }
 
         if (! $this->notaryRequestWorkflowService->canScheduleSession($request)) {
-            throw new RuntimeException(__('This notary request cannot be scheduled right now.'));
+            throw new RuntimeException(__('This notarization cannot be scheduled right now.'));
         }
 
         $normalizedProvider = strtolower(trim($providerName));

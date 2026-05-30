@@ -1,9 +1,9 @@
 <x-mail::message>
 # Document Notarized
 
-Your notary request has been completed and the document is now officially notarized.
+Your notarization has been completed and the document is now officially notarized.
 
-**Request:** {{ $notaryRequest->title }}
+**Notarization:** {{ $notaryRequest->title }}
 **Completed at:** {{ $completedAt }}
 
 Your notarized document, notarial certificate, and blockchain proof are now available for download.

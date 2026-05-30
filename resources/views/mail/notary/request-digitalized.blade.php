@@ -1,16 +1,16 @@
 <x-mail::message>
-# Notary Request Ready For Finalization
+# Notarization Ready For Finalization
 
-Digital notarization has been completed for your request. The signed document, notary seal, QR verification, and notarization artifacts are now prepared for final administrative finalization.
+Digital notarization has been completed. The signed document, notary seal, QR verification, and notarization artifacts are now prepared for final administrative finalization.
 
-**Request:** {{ $notaryRequest->title }}
+**Notarization:** {{ $notaryRequest->title }}
 **Processed by:** {{ $notaryName }}
 **Attorney review completed:** {{ $approvedAt }}
 
-The request will be finalized by the Notary Admin as the last step before the notarization is fully closed.
+The notarization will be finalized by the Notary Admin as the last step before it is fully closed.
 
 <x-mail::button :url="route('notary-requests.show', $notaryRequest)">
-View Request
+View Notarization
 </x-mail::button>
 
 Thanks,<br>

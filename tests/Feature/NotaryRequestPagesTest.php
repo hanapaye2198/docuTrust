@@ -576,21 +576,23 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($notary)
             ->get(route('notary.requests.show', $request))
             ->assertOk()
-            ->assertSee('Workflow')
+            ->assertSee('Case workflow')
             ->assertSee('Documents')
             ->assertSee('Parties')
             ->assertSee('Settlement')
             ->assertSee('Signers sign')
             ->assertSee('Video conference')
             ->assertSee('Attorney signed')
-            ->assertSee('Payment')
-            ->assertSee('Seal (attorney personal seal)')
-            ->assertSee('Registry entry')
+            ->assertSee('Set notarial fee')
+            ->assertSee('Pay notarial fee')
+            ->assertSee('Attorney personal seal')
+            ->assertSee('Notarial register entry')
+            ->assertSee('Official register entry')
             ->assertSee('Attorney review')
             ->assertSee('Available after the video session, attorney signing, register entry, and client payment (if required) are complete.')
             ->assertDontSee('Complete attorney review')
             ->assertSee('Official notarial register')
-            ->assertSee('Available after you sign the document, save fee details, collect payment (if required), and upload your personal seal.')
+            ->assertSee('Available after you sign the document, complete the register entry (with O.R. if a fee applies), collect payment, and upload your personal seal.')
             ->assertDontSee('Create register entry');
     }
 
@@ -606,7 +608,7 @@ class NotaryRequestPagesTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_notary_can_save_attorney_registry_draft_after_attorney_signing(): void
+    public function test_notary_can_save_settlement_fee_before_payment(): void
     {
         $notary = User::factory()->notary()->create();
         $request = NotaryRequest::factory()->for($notary)->create([
@@ -630,10 +632,268 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($notary);
 
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('settlementFee', '500.00')
+            ->call('saveSettlementFee')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('attorney_notarial_registries', [
+            'notary_request_id' => $request->id,
+            'fees' => 500.00,
+        ]);
+
+        $draft = AttorneyNotarialRegistry::query()->where('notary_request_id', $request->id)->first();
+        $this->assertNotNull($draft);
+        $this->assertNull($draft->registry_fields_completed_at);
+        $this->assertNull($draft->official_receipt_no);
+    }
+
+    public function test_client_case_page_shows_next_step_and_friendly_status(): void
+    {
+        $client = User::factory()->create();
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($client)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionInProgress,
+        ]);
+
+        $this->actingAs($client);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->assertSee(__('Your next step'))
+            ->assertSee(__('Session in progress'))
+            ->assertSee(__('Your progress'))
+            ->assertSee(__('Video verification'))
+            ->assertDontSee(__('Workflow progress'));
+    }
+
+    public function test_notarized_client_sees_completion_panel(): void
+    {
+        $client = User::factory()->create();
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($client)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::Notarized,
+            'completed_at' => now(),
+        ]);
+
+        $document = Document::factory()->for($client)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $this->actingAs($client);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->assertSee(__('Notarization complete'))
+            ->assertSee(__('Download PDF'));
+    }
+
+    public function test_attorney_settlement_tab_shows_pending_badge_when_fee_is_due(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->assertSee(__('Settlement checklist'))
+            ->assertSee(__('Set notarial fee'));
+    }
+
+    public function test_saving_settlement_fee_scrolls_to_payment_section(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('activeTab', 'closing')
+            ->set('settlementFee', '500.00')
+            ->call('saveSettlementFee')
+            ->assertHasNoErrors()
+            ->assertDispatched('scroll-to-section', id: 'section-payment', reset: true);
+    }
+
+    public function test_opening_settlement_tab_focuses_current_settlement_section(): void
+    {
+        $notary = User::factory()->notaryWithoutCredential()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        NotaryCredential::factory()->for($notary)->create([
+            'seal_image_path' => 'seals/settlement-scroll-seal.png',
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('setActiveTab', 'closing')
+            ->assertDispatched('scroll-to-section', id: 'section-settlement-start', reset: true);
+    }
+
+    public function test_attorney_closing_tab_shows_settlement_sub_nav(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('activeTab', 'closing')
+            ->assertSee(__('Settlement sections'))
+            ->assertSee(__('Fee'))
+            ->assertSee(__('Pay'))
+            ->assertSee(__('Register'));
+    }
+
+    public function test_notary_cannot_open_registry_before_payment_when_fee_applies(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500,
+        ]);
+
+        $this->actingAs($notary);
+
         LivewireVolt::test('notary.attorney-registry', ['notaryRequest' => $request])
-            ->set('entryNo', 'DRAFT-001')
+            ->assertRedirect(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing']));
+    }
+
+    public function test_notary_can_save_attorney_registry_draft_after_attorney_signing_and_payment(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500,
+        ]);
+
+        Payment::query()->create([
+            'organization_id' => $notary->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $request->user_id,
+            'created_by_user_id' => $notary->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-paid-1',
+            'gateway' => 'gcash',
+            'reference' => 'REF-PAID-1',
+            'amount' => 500,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid,
+            'paid_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary.attorney-registry', ['notaryRequest' => $request])
             ->set('title', 'Affidavit of Loss Registry')
-            ->set('description', 'Registry details prior to payment.')
             ->set('parties', [
                 ['name' => 'Juan Dela Cruz', 'address' => 'Davao City'],
             ])
@@ -641,20 +901,15 @@ class NotaryRequestPagesTest extends TestCase
                 ['person_name' => 'Juan Dela Cruz', 'id_type' => 'Passport', 'id_number' => 'P12345'],
             ])
             ->set('notarialActType', 'affidavit')
-            ->set('fees', '500.00')
             ->set('officialReceiptNo', 'OR-123')
             ->call('save')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            ->assertRedirect(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing']));
 
-        $this->assertDatabaseHas('attorney_notarial_registries', [
-            'notary_request_id' => $request->id,
-            'entry_no' => 'DRAFT-001',
-            'title' => 'Affidavit of Loss Registry',
-            'notarial_act_type' => 'affidavit',
-            'official_receipt_no' => 'OR-123',
-        ]);
-
-        $this->assertNotNull(AttorneyNotarialRegistry::query()->where('notary_request_id', $request->id)->first());
+        $draft = AttorneyNotarialRegistry::query()->where('notary_request_id', $request->id)->first();
+        $this->assertNotNull($draft);
+        $this->assertSame('OR-123', $draft->official_receipt_no);
+        $this->assertNotNull($draft->registry_fields_completed_at);
     }
 
     public function test_notary_can_access_attorney_registries_index_and_sees_sidebar_link(): void
@@ -683,41 +938,8 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee(__('Notary registry'));
     }
 
-    public function test_register_entry_page_auto_creates_gatewayhub_payment_when_fees_are_provided(): void
+    public function test_notary_can_create_official_register_entry_from_saved_draft(): void
     {
-        Mail::fake();
-
-        Http::fake([
-            'https://gatewayhub.io/api/gateways/enabled' => Http::response([
-                'success' => true,
-                'data' => [
-                    'gateways' => [
-                        ['code' => 'gcash', 'name' => 'Gcash'],
-                    ],
-                    'count' => 1,
-                ],
-                'error' => null,
-            ], 200),
-            'https://gatewayhub.io/api/payments' => Http::response([
-                'success' => true,
-                'data' => [
-                    'payment_id' => 'payment-auto-1',
-                    'transaction_id' => 'payment-auto-1',
-                    'gateway' => 'gcash',
-                    'amount' => 500,
-                    'currency' => 'PHP',
-                    'status' => 'pending',
-                    'qr_data' => '000201...',
-                    'expires_at' => now()->addMinutes(30)->toIso8601String(),
-                    'redirect_url' => null,
-                    'checkout_url' => null,
-                ],
-                'error' => null,
-            ], 200),
-        ]);
-
-        config()->set('services.gatewayhub.api_key', 'test-key');
-
         $this->mock(NotarySealService::class, function ($mock): void {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
         });
@@ -730,7 +952,7 @@ class NotaryRequestPagesTest extends TestCase
             'organization_id' => $notary->organization_id,
             'notary_user_id' => $notary->id,
             'status' => NotaryRequestStatus::AttorneySigning,
-            'title' => 'Auto payment affidavit',
+            'title' => 'Affidavit of loss',
         ]);
 
         $document = Document::factory()->for($notary)->create([
@@ -753,45 +975,30 @@ class NotaryRequestPagesTest extends TestCase
 
         AttorneyNotarialRegistry::factory()->create([
             'notary_request_id' => $request->id,
+            'title' => 'Affidavit of loss',
+            'notarial_act_type' => 'affidavit',
             'fees' => 0,
+            'registry_fields_completed_at' => now(),
+            'parties' => [
+                ['name' => 'Client Name', 'address' => 'Davao City'],
+            ],
+            'competent_evidence' => [
+                ['person_name' => 'Client Name', 'id_type' => 'Passport', 'id_number' => 'P12345'],
+            ],
         ]);
 
         $this->actingAs($notary);
 
         LivewireVolt::test('notary.register-entry', ['notaryRequest' => $request])
-            ->set('documentTitle', 'Auto payment affidavit')
-            ->set('notarialActType', 'acknowledgment')
-            ->set('parties', [
-                ['name' => 'Client Name', 'address' => 'Davao City'],
-            ])
-            ->set('competentEvidence', [
-                ['person_name' => 'Client Name', 'id_type' => 'Passport', 'id_number' => 'P12345'],
-            ])
-            ->set('fees', '500.00')
+            ->assertSee('Confirm official register entry')
             ->call('save')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            ->assertRedirect(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing']));
 
         $entry = NotarialRegisterEntry::query()->where('notary_request_id', $request->id)->first();
         $this->assertNotNull($entry);
-
-        $this->assertDatabaseHas('payments', [
-            'notary_request_id' => $request->id,
-            'notarial_register_entry_id' => $entry->id,
-            'provider' => 'gatewayhub',
-            'provider_payment_id' => 'payment-auto-1',
-            'gateway' => 'gcash',
-            'status' => PaymentStatus::Pending->value,
-        ]);
-
-        $this->assertDatabaseHas('app_notifications', [
-            'user_id' => $notary->id,
-            'type' => 'notary.payment_ready',
-        ]);
-
-        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request): bool {
-            return $mail->notaryRequest->is($request)
-                && $mail->payment->provider_payment_id === 'payment-auto-1';
-        });
+        $this->assertSame('Affidavit of loss', $entry->document_title);
+        $this->assertSame('affidavit', $entry->notarial_act_type);
     }
 
     public function test_client_sees_payment_required_banner_after_register_entry_is_created(): void

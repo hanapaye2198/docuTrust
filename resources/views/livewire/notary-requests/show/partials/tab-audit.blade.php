@@ -7,7 +7,7 @@
                     </div>
                 @else
                     <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                        <div class="font-medium">{{ __('This request is not ready to finalize yet.') }}</div>
+                        <div class="font-medium">{{ __('This notarization is not ready to finalize yet.') }}</div>
                         <ul class="mt-2 list-disc pl-5">
                             @foreach ($finalizationReadiness['issues'] as $issue)
                                 <li>{{ $issue }}</li>

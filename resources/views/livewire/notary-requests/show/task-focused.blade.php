@@ -1,6 +1,10 @@
 @php
     $panels = $this->panelVisibility();
     $primaryAction = $this->primaryCaseAction;
+    $showRightAside = ($primaryAction && $activeTab !== ($primaryAction['tab'] ?? $activeTab))
+        || ($primaryAction && ($primaryAction['type'] ?? '') === 'wire' && $activeTab === 'session')
+        || ($paymentRequired && ! $hasSettledPayment && $settlementDueAmount > 0);
+    $mainColumnClass = $showRightAside ? 'xl:col-span-7' : 'xl:col-span-9';
 @endphp
 
 <x-admin.page class="h-full flex-1" gap="gap-6" wide>
@@ -21,20 +25,11 @@
                 wire:navigate
                 icon="arrow-left"
             >
-                {{ __('Requests') }}
+                {{ __('Notarizations') }}
             </flux:button>
             <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-3xl">{{ $notaryRequest->title }}</h1>
             <div class="flex flex-wrap items-center gap-2">
-                @php
-                    $statusFluxColor = match ($notaryRequest->status->value) {
-                        'notarized' => 'emerald',
-                        'rejected', 'failed' => 'red',
-                        'submitted', 'session_scheduled', 'session_in_progress' => 'sky',
-                        'identity_verified', 'location_verified', 'attorney_approved', 'digitalized' => 'teal',
-                        default => 'zinc',
-                    };
-                @endphp
-                <flux:badge size="sm" :color="$statusFluxColor" class="capitalize" data-notary-status-badge="{{ $notaryRequest->status->value }}">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</flux:badge>
+                @include('livewire.notary-requests.show.partials.status-badge')
                 <flux:badge size="sm" color="zinc">{{ str_replace('_', ' ', $notaryRequest->request_type) }}</flux:badge>
             </div>
             <p class="text-sm text-zinc-500 dark:text-zinc-400">
@@ -112,9 +107,9 @@
                     <flux:button variant="ghost" icon="ellipsis-horizontal" />
                     <flux:menu>
                         @if ($canManageLifecycle && $notaryRequest->status === \App\Enums\NotaryRequestStatus::Draft)
-                            <flux:menu.item wire:click="submitRequest">{{ __('Submit request') }}</flux:menu.item>
+                            <flux:menu.item wire:click="submitRequest">{{ __('Submit notarization') }}</flux:menu.item>
                         @endif
-                        <flux:menu.item wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notary request? This cannot be undone.') }}">
+                        <flux:menu.item wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notarization? This cannot be undone.') }}">
                             {{ __('Cancel case') }}
                         </flux:menu.item>
                     </flux:menu>
@@ -154,12 +149,16 @@
         </flux:callout>
     @endif
 
-    <div class="grid items-start gap-6 xl:grid-cols-12" wire:key="case-workspace-{{ $notaryRequest->id }}">
-        <div class="flex min-w-0 flex-col gap-4 xl:col-span-8 2xl:col-span-9">
+    <div class="grid items-start gap-6 xl:grid-cols-12 xl:gap-8" wire:key="case-workspace-{{ $notaryRequest->id }}">
+        <aside class="order-first xl:col-span-3 xl:sticky xl:top-4 xl:self-start">
+            @include('livewire.notary-requests.show.partials.case-workflow-sidebar')
+        </aside>
+
+        <div @class(['flex min-w-0 flex-col gap-4', $mainColumnClass])>
             <nav class="flex flex-wrap gap-2 border-b border-zinc-200/90 pb-1 dark:border-zinc-800" aria-label="{{ __('Case workspace tabs') }}">
-                <a
-                    href="{{ request()->fullUrlWithQuery(['tab' => 'documents']) }}"
-                    wire:navigate
+                <button
+                    type="button"
+                    wire:click="setActiveTab('documents')"
                     @class([
                         'rounded-lg px-4 py-2 text-sm font-semibold transition',
                         'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'documents',
@@ -167,10 +166,10 @@
                     ])
                 >
                     {{ __('Documents') }}
-                </a>
-                <a
-                    href="{{ request()->fullUrlWithQuery(['tab' => 'parties']) }}"
-                    wire:navigate
+                </button>
+                <button
+                    type="button"
+                    wire:click="setActiveTab('parties')"
                     @class([
                         'rounded-lg px-4 py-2 text-sm font-semibold transition',
                         'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'parties',
@@ -181,11 +180,11 @@
                     @if ($requestSigners->isNotEmpty())
                         <span class="ml-1 text-xs opacity-70">{{ $requestSigners->count() }}</span>
                     @endif
-                </a>
+                </button>
                 @if ($panels['session'])
-                    <a
-                        href="{{ request()->fullUrlWithQuery(['tab' => 'session']) }}"
-                        wire:navigate
+                    <button
+                        type="button"
+                        wire:click="setActiveTab('session')"
                         @class([
                             'rounded-lg px-4 py-2 text-sm font-semibold transition',
                             'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'session',
@@ -193,12 +192,12 @@
                         ])
                     >
                         {{ __('Video session') }}
-                    </a>
+                    </button>
                 @endif
                 @if ($panels['closing'])
-                    <a
-                        href="{{ request()->fullUrlWithQuery(['tab' => 'closing']) }}"
-                        wire:navigate
+                    <button
+                        type="button"
+                        wire:click="setActiveTab('closing')"
                         @class([
                             'rounded-lg px-4 py-2 text-sm font-semibold transition',
                             'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'closing',
@@ -206,12 +205,17 @@
                         ])
                     >
                         {{ __('Settlement') }}
-                    </a>
+                        @if ($settlementPendingCount > 0)
+                            <span class="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-sky-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                                {{ $settlementPendingCount }}
+                            </span>
+                        @endif
+                    </button>
                 @endif
                 @if ($panels['audit'])
-                    <a
-                        href="{{ request()->fullUrlWithQuery(['tab' => 'audit']) }}"
-                        wire:navigate
+                    <button
+                        type="button"
+                        wire:click="setActiveTab('audit')"
                         @class([
                             'rounded-lg px-4 py-2 text-sm font-semibold transition',
                             'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'audit',
@@ -219,43 +223,57 @@
                         ])
                     >
                         {{ __('Audit') }}
-                    </a>
+                    </button>
                 @endif
             </nav>
 
             <div>
-                <div @class(['hidden' => $activeTab !== 'documents'])>
+                @if ($activeTab === 'documents')
+                <div wire:key="case-tab-documents">
                     @if ($notaryRequest->status === \App\Enums\NotaryRequestStatus::Notarized)
                         @include('livewire.notary-requests.show.partials.section-completed')
                     @endif
                     @include('livewire.notary-requests.show.partials.tab-documents')
                 </div>
+                @endif
 
-                <div @class(['hidden' => $activeTab !== 'parties'])>
+                @if ($activeTab === 'parties')
+                <div wire:key="case-tab-parties">
                     @include('livewire.notary-requests.show.partials.tab-parties')
                 </div>
+                @endif
 
-                @if ($panels['session'])
-                    <div @class(['hidden' => $activeTab !== 'session'])>
+                @if ($panels['session'] && $activeTab === 'session')
+                    <div wire:key="case-tab-session">
                         @include('livewire.notary-requests.show.partials.tab-session')
                     </div>
                 @endif
 
-                @if ($panels['closing'])
-                    <div @class(['hidden' => $activeTab !== 'closing'])>
+                @if ($panels['closing'] && $activeTab === 'closing')
+                    <div
+                        wire:key="case-tab-closing"
+                        x-data
+                        x-init="$nextTick(() => {
+                            const scrollArea = document.querySelector('.main-scroll-area');
+                            if (scrollArea) {
+                                scrollArea.scrollTop = 0;
+                            }
+                        })"
+                    >
                         @include('livewire.notary-requests.show.partials.tab-closing')
                     </div>
                 @endif
 
-                @if ($panels['audit'])
-                    <div @class(['hidden' => $activeTab !== 'audit'])>
+                @if ($panels['audit'] && $activeTab === 'audit')
+                    <div wire:key="case-tab-audit">
                         @include('livewire.notary-requests.show.partials.tab-audit')
                     </div>
                 @endif
             </div>
         </div>
 
-        <aside class="flex flex-col gap-4 xl:col-span-4 2xl:col-span-3 2xl:sticky 2xl:top-4 2xl:max-h-[calc(100vh-6rem)] 2xl:overflow-y-auto">
+        @if ($showRightAside)
+        <aside class="flex flex-col gap-4 xl:col-span-2 xl:sticky xl:top-4 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
             @if ($primaryAction && $activeTab !== ($primaryAction['tab'] ?? $activeTab))
                 <div class="ui-panel border-sky-200/80 bg-sky-50/50 p-5 dark:border-sky-900/40 dark:bg-sky-950/20">
                     <div class="text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">{{ __('Do this now') }}</div>
@@ -282,33 +300,7 @@
                     <div class="text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">{{ __('Do this now') }}</div>
                     <p class="mt-1 text-xs leading-relaxed text-sky-800 dark:text-sky-200">{{ $primaryAction['description'] }}</p>
                 </div>
-            @elseif ($this->currentWorkflowStep)
-                <div class="ui-panel border-zinc-200/80 p-5 dark:border-zinc-700">
-                    <div class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{{ __('Status') }}</div>
-                    <p class="mt-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ $this->currentWorkflowStep['label'] }}</p>
-                    <p class="mt-1 text-xs text-zinc-500">{{ $this->currentWorkflowStep['description'] }}</p>
-                </div>
             @endif
-
-            <div class="ui-panel p-5">
-                <flux:heading size="lg" class="mb-3">{{ __('Workflow') }}</flux:heading>
-                <ol class="space-y-2">
-                    @foreach ($workflowSteps as $step)
-                        <li class="flex items-center gap-2 text-sm">
-                            <span @class([
-                                'size-2 shrink-0 rounded-full',
-                                'bg-emerald-500' => ($step['state'] ?? '') === 'complete',
-                                'bg-sky-500 ring-2 ring-sky-200 dark:ring-sky-900' => ($step['state'] ?? '') === 'current',
-                                'bg-zinc-300 dark:bg-zinc-600' => ($step['state'] ?? '') === 'upcoming',
-                            ])></span>
-                            <span @class([
-                                'font-medium text-zinc-900 dark:text-zinc-100' => ($step['state'] ?? '') === 'current',
-                                'text-zinc-500 dark:text-zinc-400' => ($step['state'] ?? '') !== 'current',
-                            ])>{{ $step['label'] }}</span>
-                        </li>
-                    @endforeach
-                </ol>
-            </div>
 
             @if ($paymentRequired && ! $hasSettledPayment && $settlementDueAmount > 0)
                 <div class="ui-panel p-5">
@@ -324,53 +316,9 @@
                 </div>
             @endif
         </aside>
+        @endif
     </div>
 
     @include('livewire.notary-requests.show.partials.notary-status-poll-config')
+    @include('livewire.notary-requests.show.partials.settlement-scroll')
 </x-admin.page>
-
-<script>
-    const scrollToSectionWithRetry = (targetId) => {
-        let attempts = 0;
-        const maxAttempts = 24;
-        const timer = window.setInterval(() => {
-            attempts += 1;
-
-            const element = document.getElementById(targetId);
-            const isVisible = element && element.offsetParent !== null;
-
-            if (element && isVisible) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                window.clearInterval(timer);
-
-                return;
-            }
-
-            if (attempts >= maxAttempts) {
-                window.clearInterval(timer);
-            }
-        }, 100);
-    };
-
-    const scrollToPaymentHashTarget = () => {
-        if (window.location.hash !== '#section-payment') {
-            return;
-        }
-
-        scrollToSectionWithRetry('section-payment');
-    };
-
-    window.addEventListener('hashchange', scrollToPaymentHashTarget);
-    window.addEventListener('DOMContentLoaded', scrollToPaymentHashTarget);
-    window.addEventListener('livewire:navigated', scrollToPaymentHashTarget);
-
-    window.addEventListener('scroll-to-section', (event) => {
-        const payload = Array.isArray(event?.detail) ? event.detail[0] : event?.detail;
-        const targetId = payload?.id;
-        if (!targetId) {
-            return;
-        }
-
-        scrollToSectionWithRetry(targetId);
-    });
-</script>

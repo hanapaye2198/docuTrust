@@ -309,10 +309,10 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
             ->call('openVideoSessionWorkspace')
             ->assertHasNoErrors()
-            ->assertSee('Parties — individual video links')
+            ->assertSee('Parties')
             ->assertSee('Jane Signer')
             ->assertSee('Join video call')
-            ->assertSee('Personal video link for Jane Signer')
+            ->assertSee('Show personal video link')
             ->assertSee('enotary/video/');
 
         $this->assertNotNull($request->fresh()->sessions->first()?->invitation_sent_at);
@@ -394,5 +394,165 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
             ->assertSee('Join video call')
             ->assertSee(route('notary.requests.session.live', [$request, $session]), false);
+    }
+
+    public function test_video_tab_shows_verification_queue_progress(): void
+    {
+        Mail::fake();
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $partyA = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'alice@example.test',
+            'full_name' => 'Alice Signer',
+        ]);
+        $partyB = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'bob@example.test',
+            'full_name' => 'Bob Signer',
+        ]);
+
+        foreach ([$partyA, $partyB] as $party) {
+            DocumentSigner::factory()->for($document)->create([
+                'email' => $party->email,
+                'name' => $party->full_name,
+                'status' => DocumentSignerStatus::Signed,
+                'signed_at' => now(),
+            ]);
+        }
+
+        app(NotarySignerVideoInvitationService::class)
+            ->inviteAllSignersWhenReady($request->fresh(['signers', 'sessions', 'notary', 'documents.documentSigners']));
+
+        $request->fresh(['sessions'])->sessions->first()?->update([
+            'status' => 'completed',
+            'ended_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh(['signers', 'sessions', 'documents.documentSigners'])])
+            ->set('activeTab', 'session')
+            ->assertSee(__('Verification queue'))
+            ->assertSee(__('1 of 2 parties verified'))
+            ->assertSee('Bob Signer');
+    }
+
+    public function test_session_checklists_are_scoped_per_session(): void
+    {
+        Mail::fake();
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionInProgress,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $partyA = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Checklist Alice',
+        ]);
+        $partyB = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Checklist Bob',
+        ]);
+
+        foreach ([$partyA, $partyB] as $party) {
+            DocumentSigner::factory()->for($document)->create([
+                'email' => $party->email,
+                'name' => $party->full_name,
+                'status' => DocumentSignerStatus::Signed,
+                'signed_at' => now(),
+            ]);
+        }
+
+        $sessionA = $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $partyA->id,
+            'provider_name' => 'jitsi',
+            'status' => 'in_progress',
+            'room_name' => 'room-a',
+            'meeting_url' => 'https://meet.jit.si/room-a',
+            'scheduled_for' => now(),
+            'started_at' => now(),
+        ]);
+        $sessionB = $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $partyB->id,
+            'provider_name' => 'jitsi',
+            'status' => 'in_progress',
+            'room_name' => 'room-b',
+            'meeting_url' => 'https://meet.jit.si/room-b',
+            'scheduled_for' => now(),
+            'started_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh(['signers', 'sessions', 'documents.documentSigners'])])
+            ->set('activeTab', 'session')
+            ->assertSee('wire:model.live="sessionChecklists.'.$sessionA->id.'.face_matches_id"', false)
+            ->assertSee('wire:model.live="sessionChecklists.'.$sessionB->id.'.face_matches_id"', false);
+    }
+
+    public function test_signer_legacy_page_shows_personal_video_panel(): void
+    {
+        Mail::fake();
+
+        $notary = User::factory()->notary()->create();
+        $signerUser = User::factory()->create(['email' => 'alice@example.test']);
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $partyA = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'alice@example.test',
+            'full_name' => 'Alice Signer',
+        ]);
+        $partyB = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'bob@example.test',
+            'full_name' => 'Bob Signer',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $partyA->email,
+            'name' => $partyA->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $partyB->email,
+            'name' => $partyB->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        app(NotarySignerVideoInvitationService::class)
+            ->inviteAllSignersWhenReady($request->fresh(['signers', 'sessions', 'notary', 'documents.documentSigners']));
+
+        $this->actingAs($signerUser);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh(['signers', 'sessions', 'documents.documentSigners'])])
+            ->assertSee(__('Your video verification'))
+            ->assertSee('Alice Signer')
+            ->assertSee(__('Join your video call'))
+            ->assertDontSee(__('Sessions'));
     }
 }

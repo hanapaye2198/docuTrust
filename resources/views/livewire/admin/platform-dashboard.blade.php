@@ -62,7 +62,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             </p>
         </div>
         <div class="rounded-xl bg-white p-5 shadow-sm dark:bg-zinc-900">
-            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">{{ __('Notary requests') }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">{{ __('Notarizations') }}</p>
             <p class="mt-2 text-3xl font-bold tabular-nums text-zinc-900 dark:text-white">{{ $kpis['notary_requests_total'] ?? 0 }}</p>
             <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
                 {{ $kpis['notary_requests_awaiting_finalization'] ?? 0 }} {{ __('awaiting finalization') }}
@@ -212,7 +212,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     <div class="grid gap-5 lg:grid-cols-2">
         <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
             <h2 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Top organizations') }}</h2>
-            <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{{ __('By notary request volume') }}</p>
+            <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{{ __('By notarization volume') }}</p>
             <div class="mt-4 space-y-2">
                 @forelse ($topOrganizations as $organization)
                     <div class="flex items-center justify-between rounded-lg border border-zinc-100 px-4 py-3 dark:border-zinc-800">
@@ -221,7 +221,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                             <p class="text-xs text-zinc-400">{{ ucfirst($organization['plan'] ?? '') }} · {{ ucfirst($organization['subscription_status'] ?? '') }}</p>
                         </div>
                         <div class="ml-3 text-right text-xs tabular-nums text-zinc-500">
-                            <p>{{ $organization['notary_requests_count'] }} {{ __('requests') }}</p>
+                            <p>{{ $organization['notary_requests_count'] }} {{ __('notarizations') }}</p>
                             <p>{{ $organization['users_count'] }} {{ __('users') }}</p>
                         </div>
                     </div>
@@ -270,7 +270,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         @if ($awaitingFinalization->isEmpty())
             <div class="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-                {{ __('No requests awaiting finalization.') }}
+                {{ __('No notarizations awaiting finalization.') }}
             </div>
         @else
             <div class="space-y-2">
@@ -292,7 +292,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     {{-- Recent platform activity --}}
     <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
         <h2 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Recent platform activity') }}</h2>
-        <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Latest documents and notary requests across all organizations') }}</p>
+        <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Latest documents and notarizations across all organizations') }}</p>
         <div class="mt-4 space-y-2">
             @forelse ($recentActivity as $item)
                 <a href="{{ $item['url'] }}" wire:navigate class="flex items-center justify-between rounded-lg px-3 py-2.5 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
@@ -301,7 +301,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <p class="text-xs text-zinc-400">
                             {{ $item['subtitle'] ?? '—' }}
                             <span class="mx-1 text-zinc-300">·</span>
-                            {{ $item['kind'] === 'document' ? __('Document') : __('Notary request') }}
+                            {{ $item['kind'] === 'document' ? __('Document') : __('Notarization') }}
                         </p>
                     </div>
                     <span class="ml-3 shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">

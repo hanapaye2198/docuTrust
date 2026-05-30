@@ -9,6 +9,7 @@ use App\Models\DocumentSigner;
 use App\Models\NotaryRequest;
 use App\Models\NotarySession;
 use App\Models\NotarySigner;
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -354,5 +355,85 @@ class NotarySignerVideoInvitationService
 
                 return (int) $signer->user_id !== (int) $request->notary_user_id;
             });
+    }
+
+    /**
+     * @return array{
+     *     total: int,
+     *     verified_count: int,
+     *     pending_count: int,
+     *     complete: bool,
+     *     next_party: ?array<string, mixed>,
+     *     parties: list<array<string, mixed>>
+     * }
+     */
+    public function videoVerificationQueue(NotaryRequest $request): array
+    {
+        $parties = collect($this->partiesForVideoVerification($request))
+            ->filter(fn (array $party): bool => (bool) ($party['has_signed'] ?? false))
+            ->values();
+
+        $verifiedCount = $parties
+            ->filter(fn (array $party): bool => ($party['session_status'] ?? '') === 'completed')
+            ->count();
+
+        $total = $parties->count();
+
+        $nextParty = $parties
+            ->filter(fn (array $party): bool => ($party['session_status'] ?? '') !== 'completed')
+            ->sortBy(fn (array $party): int => match ($party['session_status'] ?? '') {
+                'in_progress' => 0,
+                'scheduled' => 1,
+                default => 2,
+            })
+            ->first();
+
+        return [
+            'total' => $total,
+            'verified_count' => $verifiedCount,
+            'pending_count' => max(0, $total - $verifiedCount),
+            'complete' => $total > 0 && $verifiedCount === $total,
+            'next_party' => is_array($nextParty) ? $nextParty : null,
+            'parties' => $parties->all(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function viewerVideoParty(NotaryRequest $request, User $user): ?array
+    {
+        $request->loadMissing('signers');
+        $userEmail = strtolower(trim($user->email));
+
+        foreach ($this->partiesForVideoVerification($request) as $party) {
+            if (strtolower(trim((string) ($party['email'] ?? ''))) === $userEmail) {
+                return $party;
+            }
+
+            $signerId = $party['notary_signer_id'] ?? null;
+
+            if ($signerId !== null && $request->signers->contains(
+                fn (NotarySigner $signer): bool => (int) $signer->id === (int) $signerId
+                    && (int) $signer->user_id === (int) $user->id
+            )) {
+                return $party;
+            }
+        }
+
+        return null;
+    }
+
+    public function sessionStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'completed' => __('Verified'),
+            'in_progress' => __('In progress'),
+            'scheduled' => __('Link sent'),
+            'cancelled' => __('Cancelled'),
+            default => $status !== null && $status !== ''
+                ? str($status)->replace('_', ' ')->title()->toString()
+                : __('Pending'),
+        };
     }
 }

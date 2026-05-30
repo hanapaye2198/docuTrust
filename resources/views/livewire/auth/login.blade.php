@@ -338,7 +338,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
                     >
                         <p class="text-xs font-semibold text-[#5c4520] dark:text-[#c6a666]">{{ __('Who should use e-Notary?') }}</p>
                         <ul class="mt-1.5 list-inside list-disc space-y-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-                            <li>{{ __('eNotary signers — follow your notarization request with the assigned attorney') }}</li>
+                            <li>{{ __('eNotary signers — follow your notarization with the assigned attorney') }}</li>
                             <li>{{ __('Licensed attorneys — manage credentials, sessions, and the notarial register') }}</li>
                         </ul>
                     </div>

@@ -48,12 +48,12 @@ new #[Layout('components.layouts.app')] class extends Component {
     <header>
         <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">{{ __('Notary registry') }}</h1>
         <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            {{ __('Draft and saved attorney registry records across your notary requests. Open a request to complete payment, seal, and final register entry.') }}
+            {{ __('Notarial register entry drafts across your cases. Set the fee and collect payment on Settlement, then complete the 9-field table and official book entry.') }}
         </p>
     </header>
 
     <div class="ui-panel p-4 sm:p-5">
-        <flux:input wire:model.live.debounce.300ms="search" type="search" placeholder="{{ __('Search title, entry no., or request…') }}" icon="magnifying-glass" />
+        <flux:input wire:model.live.debounce.300ms="search" type="search" placeholder="{{ __('Search title, entry no., or case…') }}" icon="magnifying-glass" />
     </div>
 
     <div class="ui-panel overflow-hidden">
@@ -61,7 +61,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             <table class="min-w-full text-left text-sm">
                 <thead class="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
                     <tr>
-                        <th class="px-4 py-3">{{ __('Request') }}</th>
+                        <th class="px-4 py-3">{{ __('Case') }}</th>
                         <th class="px-4 py-3">{{ __('Entry no.') }}</th>
                         <th class="px-4 py-3">{{ __('Title') }}</th>
                         <th class="px-4 py-3">{{ __('Act') }}</th>
@@ -86,14 +86,14 @@ new #[Layout('components.layouts.app')] class extends Component {
                             <td class="px-4 py-3 text-right">
                                 <div class="flex flex-wrap justify-end gap-2">
                                     <flux:button size="sm" variant="outline" :href="route('notary.attorney-registry', $entry->notaryRequest)" wire:navigate>{{ __('Edit draft') }}</flux:button>
-                                    <flux:button size="sm" variant="ghost" :href="route('notary.requests.show', $entry->notaryRequest)" wire:navigate>{{ __('Open request') }}</flux:button>
+                                    <flux:button size="sm" variant="ghost" :href="route('notary.requests.show', $entry->notaryRequest)" wire:navigate>{{ __('Open case') }}</flux:button>
                                 </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
                             <td colspan="7" class="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
-                                {{ __('No registry records yet. Save a draft from any notary request’s Settlement tab.') }}
+                                {{ __('No registry records yet. Save a draft from any notarization’s Settlement tab.') }}
                             </td>
                         </tr>
                     @endforelse

@@ -63,12 +63,12 @@ final class Breadcrumbs
             ],
             'notary-requests.index', 'notary.requests.index' => [
                 ['label' => __('Dashboard'), 'href' => route('dashboard')],
-                ['label' => __('Notary requests')],
+                ['label' => __('Notarizations')],
             ],
             'notary-requests.create' => [
                 ['label' => __('Dashboard'), 'href' => route('dashboard')],
-                ['label' => __('Notary requests'), 'href' => route('notary-requests.index')],
-                ['label' => __('New request')],
+                ['label' => __('Notarizations'), 'href' => route('notary-requests.index')],
+                ['label' => __('New notarization')],
             ],
             'notary-requests.show', 'notary.requests.show' => self::notaryRequestShow($route->parameter('notaryRequest')),
             'documents.index' => [
@@ -158,7 +158,7 @@ final class Breadcrumbs
 
         return [
             ['label' => __('Dashboard'), 'href' => route('dashboard')],
-            ['label' => __('Notary requests'), 'href' => $indexRoute],
+            ['label' => __('Notarizations'), 'href' => $indexRoute],
             ['label' => Str::limit($notaryRequest->title, 48)],
         ];
     }

@@ -1656,7 +1656,7 @@ footer{
         <div class="doc-card">
           <div class="doc-header">
             <div>
-              <div style="font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">New Request</div>
+              <div style="font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">New Notarization</div>
               <div class="doc-title">Vendor Agreement.pdf</div>
             </div>
             <span class="doc-status">Ready to Sign</span>

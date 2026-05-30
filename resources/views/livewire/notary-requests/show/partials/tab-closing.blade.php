@@ -1,41 +1,51 @@
-<div class="space-y-4">
-    @include('livewire.notary-requests.show.partials.settlement-checklist')
-
+<div id="section-settlement-start" class="space-y-4">
     @if ($isNotary)
-        <div id="section-attorney-registry" class="ui-panel scroll-mt-6 p-5 sm:p-6">
-            <flux:heading size="lg" class="!mb-2">{{ __('Fee & party details') }}</flux:heading>
+        @include('livewire.notary-requests.show.partials.settlement-checklist')
+
+        @include('livewire.notary-requests.show.partials.settlement-sub-nav')
+
+        @include('livewire.notary-requests.show.partials.section-settlement-fee')
+
+        @if ($canManageLifecycle || $isEnotaryPortalSigner || $isRequester)
+            @include('livewire.notary-requests.show.partials.section-payment')
+        @endif
+
+        <div id="section-attorney-registry" class="ui-panel scroll-mt-24 p-5 sm:p-6">
+            <flux:heading size="lg" class="!mb-2">{{ __('Notarial register entry') }}</flux:heading>
             <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                {{ __('Save draft registry details — parties, identity evidence, act type, and fees — before collecting payment.') }}
-            </p>
-            <div class="mt-4 flex flex-wrap items-center gap-2">
-                <flux:button variant="primary" :href="route('notary.attorney-registry', $notaryRequest)" wire:navigate>{{ __('Open fee & party form') }}</flux:button>
-                @if ($attorneyRegistryDraft)
-                    <flux:badge color="emerald">{{ __('Saved') }}</flux:badge>
+                @if ($canAccessAttorneyRegistry)
+                    {{ __('Complete the 9-field register row after payment. Enter the O.R. number and confirm signer signatures.') }}
+                @elseif ($paymentRequired && ! $hasSettledPayment)
+                    {{ __('Available after the client completes payment. Set the notarial fee above and collect payment first.') }}
                 @else
-                    <flux:badge color="amber">{{ __('Not yet saved') }}</flux:badge>
+                    {{ __('Available after you sign the document.') }}
                 @endif
-            </div>
-            @if ($attorneyRegistryDraft)
-                <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                    <div class="font-medium">{{ $attorneyRegistryDraft->title }}</div>
-                    <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        {{ __('Entry no.: :entry | Act: :act | Fee: PHP :fee', [
-                            'entry' => $attorneyRegistryDraft->entry_no ?: __('(auto)'),
-                            'act' => ucfirst(str_replace('_', ' ', $attorneyRegistryDraft->notarial_act_type)),
-                            'fee' => number_format((float) $attorneyRegistryDraft->fees, 2),
-                        ]) }}
-                    </div>
+            </p>
+            @if ($canAccessAttorneyRegistry)
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <flux:button variant="primary" :href="route('notary.attorney-registry', $notaryRequest)" wire:navigate>{{ __('Open notarial register entry') }}</flux:button>
+                    @if ($attorneyRegistryDraft?->registry_fields_completed_at)
+                        <flux:badge color="emerald">{{ __('Completed') }}</flux:badge>
+                    @elseif ($attorneyRegistryDraft)
+                        <flux:badge color="amber">{{ __('In progress') }}</flux:badge>
+                    @endif
                 </div>
+                @if ($attorneyRegistryDraft)
+                    <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                        <div class="font-medium">{{ $attorneyRegistryDraft->title }}</div>
+                        <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                            {{ __('Act: :act | Fee: PHP :fee | O.R.: :or', [
+                                'act' => ucfirst(str_replace('_', ' ', $attorneyRegistryDraft->notarial_act_type)),
+                                'fee' => number_format((float) $attorneyRegistryDraft->fees, 2),
+                                'or' => $attorneyRegistryDraft->official_receipt_no ?: __('(pending)'),
+                            ]) }}
+                        </div>
+                    </div>
+                @endif
             @endif
         </div>
-    @endif
 
-    @if ($isNotary || $canManageLifecycle || $isEnotaryPortalSigner || $isRequester)
-        @include('livewire.notary-requests.show.partials.section-payment')
-    @endif
-
-    @if ($isNotary)
-        <div id="section-attorney-seal" class="ui-panel scroll-mt-6 p-5 sm:p-6">
+        <div id="section-attorney-seal" class="ui-panel scroll-mt-24 p-5 sm:p-6">
             <flux:heading size="lg" class="!mb-2">{{ __('Attorney personal seal') }}</flux:heading>
             @if ($hasAttorneySealOnFile)
                 <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
@@ -51,7 +61,7 @@
             @endif
         </div>
 
-        <div id="section-register" class="ui-panel scroll-mt-6 p-5 sm:p-6">
+        <div id="section-register" class="ui-panel scroll-mt-24 p-5 sm:p-6">
             <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Official notarial register') }}</h2>
             <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Create the official register entry from your saved draft after payment and seal are complete.') }}</p>
 
@@ -66,7 +76,7 @@
                 </div>
             @else
                 <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                    {{ __('Available after you sign the document, save fee details, collect payment (if required), and upload your personal seal.') }}
+                    {{ __('Available after you sign the document, complete the register entry (with O.R. if a fee applies), collect payment, and upload your personal seal.') }}
                 </div>
             @endif
 
@@ -163,7 +173,7 @@
             @endif
         </div>
 
-        <div id="section-review" class="ui-panel scroll-mt-6 p-5 sm:p-6">
+        <div id="section-review" class="ui-panel scroll-mt-24 p-5 sm:p-6">
             <flux:heading size="lg" class="!mb-4">{{ __('Attorney review') }}</flux:heading>
             @if ($canReviewNotary)
                 <div class="mt-4 space-y-4">
@@ -177,11 +187,11 @@
                     <div class="border-t border-zinc-200 pt-4 dark:border-zinc-700">
                         <flux:field>
                             <flux:label>{{ __('Rejection reason') }}</flux:label>
-                            <flux:textarea wire:model="rejectionReason" rows="4" placeholder="{{ __('Explain why this request cannot proceed.') }}" />
+                            <flux:textarea wire:model="rejectionReason" rows="4" placeholder="{{ __('Explain why this notarization cannot proceed.') }}" />
                             <flux:error name="rejectionReason" />
                         </flux:field>
                         <div class="mt-3">
-                            <flux:button variant="outline" type="button" wire:click="rejectRequest">{{ __('Reject request') }}</flux:button>
+                            <flux:button variant="outline" type="button" wire:click="rejectRequest">{{ __('Reject notarization') }}</flux:button>
                             <flux:error name="rejectRequest" />
                         </div>
                     </div>
@@ -193,7 +203,7 @@
             @endif
         </div>
 
-        <div id="section-digital-notarization" class="ui-panel scroll-mt-6 p-5 sm:p-6">
+        <div id="section-digital-notarization" class="ui-panel scroll-mt-24 p-5 sm:p-6">
             <flux:heading size="lg" class="!mb-2">{{ __('Digital notarization') }}</flux:heading>
             <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                 {{ __('Apply the notary seal, attach QR verification, generate the certificate, and timestamp the document.') }}
@@ -216,5 +226,8 @@
                 </div>
             @endif
         </div>
+
+    @else
+        @include('livewire.notary-requests.show.partials.settlement-client-portal')
     @endif
 </div>

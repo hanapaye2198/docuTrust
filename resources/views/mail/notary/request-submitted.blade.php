@@ -1,17 +1,17 @@
 <x-mail::message>
-# New Notary Request
+# New Notarization
 
-A new notary request has been submitted and assigned to you.
+A new notarization has been submitted and assigned to you.
 
-**Request:** {{ $notaryRequest->title }}
+**Notarization:** {{ $notaryRequest->title }}
 **Type:** {{ ucfirst($requestType) }}
 **Requester:** {{ $requesterName }}
 **Submitted:** {{ $notaryRequest->submitted_at?->timezone('Asia/Manila')->format('M j, Y g:i A') }} (PHT)
 
-Please review the request and proceed with identity verification.
+Please review the notarization and proceed with identity verification.
 
 <x-mail::button :url="route('notary.requests.show', $notaryRequest)">
-View Request
+View Notarization
 </x-mail::button>
 
 Thanks,<br>

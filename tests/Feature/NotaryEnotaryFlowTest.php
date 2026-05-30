@@ -2,23 +2,36 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DocumentSignerStatus;
+use App\Enums\DocumentStatus;
+use App\Enums\NotaryIdentityVerificationStatus;
 use App\Enums\NotaryRequestStatus;
+use App\Enums\PaymentStatus;
+use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
+use App\Models\AttorneyNotarialRegistry;
 use App\Models\Document;
 use App\Models\DocumentHash;
 use App\Models\DocumentSigner;
-use App\Models\NotaryIdentityVerification;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
+use App\Models\NotaryIdentityVerification;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
+use App\Models\Payment;
 use App\Models\User;
+use App\Services\CompletedDocumentArtifactService;
+use App\Services\DocumentArchiveService;
+use App\Services\DocumentHashService;
 use App\Services\GeolocationService;
 use App\Services\IdentityVerificationService;
 use App\Services\LocationVerificationService;
+use App\Services\NotarialCertificateService;
 use App\Services\NotarialRegisterService;
+use App\Services\NotaryDigitalizationService;
 use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
+use App\Services\NotarySealService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -27,13 +40,58 @@ class NotaryEnotaryFlowTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function seedRegisterEntryPrerequisites(
+        NotaryRequest $request,
+        User $notary,
+        NotaryCredential $credential,
+        float $fees = 0,
+    ): void {
+        if ($fees > 0) {
+            AttorneyNotarialRegistry::factory()->create([
+                'notary_request_id' => $request->id,
+                'fees' => $fees,
+                'registry_fields_completed_at' => now(),
+            ]);
+
+            Payment::query()->create([
+                'organization_id' => $request->organization_id,
+                'notary_request_id' => $request->id,
+                'payer_user_id' => $request->user_id,
+                'provider' => 'gatewayhub',
+                'provider_payment_id' => 'payment-register-'.$request->id,
+                'provider_transaction_id' => 'payment-register-'.$request->id,
+                'gateway' => 'gcash',
+                'reference' => 'REGISTER-REQ-'.$request->id,
+                'amount' => $fees,
+                'currency' => 'PHP',
+                'status' => PaymentStatus::Paid->value,
+                'paid_at' => now(),
+            ]);
+        } else {
+            AttorneyNotarialRegistry::factory()->create([
+                'notary_request_id' => $request->id,
+                'fees' => 0,
+                'registry_fields_completed_at' => now(),
+            ]);
+        }
+
+        if ($credential->seal_image_path === null || $credential->seal_image_path === '') {
+            $credential->forceFill(['seal_image_path' => 'seals/test-seal.png'])->save();
+        }
+
+        NotaryCredential::query()
+            ->where('user_id', $notary->id)
+            ->where('status', 'active')
+            ->update(['seal_image_path' => $credential->fresh()->seal_image_path]);
+    }
+
     public function test_full_enotary_8_step_flow(): void
     {
+        config(['docutrust.notary.auto_invite_signers_to_video' => false]);
+
         // Step 1: Create Notary Request
         $requester = User::factory()->create();
-        $notary = User::factory()->for($requester->organization)->create([
-            'role' => UserRole::Notary,
-        ]);
+        $notary = User::factory()->notaryWithoutCredential()->for($requester->organization)->create();
 
         $request = NotaryRequest::factory()->for($requester)->create([
             'notary_user_id' => $notary->id,
@@ -45,16 +103,17 @@ class NotaryEnotaryFlowTest extends TestCase
 
         $document = Document::factory()->for($requester)->create([
             'notary_request_id' => $request->id,
-            'status' => \App\Enums\DocumentStatus::Completed,
+            'status' => DocumentStatus::Completed,
         ]);
         DocumentSigner::factory()->for($document)->create([
-            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'status' => DocumentSignerStatus::Signed,
             'signing_order' => 1,
         ]);
         DocumentSigner::factory()->for($document)->create([
             'user_id' => $notary->id,
             'email' => $notary->email,
-            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
             'signing_order' => 999,
         ]);
 
@@ -132,11 +191,18 @@ class NotaryEnotaryFlowTest extends TestCase
         $this->assertNotNull($session->verification_checklist);
         $this->assertTrue($session->verification_checklist['face_matches_id']);
 
+        $workflowService->beginAttorneySigning($request->fresh());
+        $request->refresh();
+        $this->assertSame(NotaryRequestStatus::AttorneySigning, $request->status);
+
         // Step 6: Notarial Register Entry
-        $credential = NotaryCredential::factory()->for($notary)->create();
+        $credential = NotaryCredential::factory()->for($notary)->create([
+            'seal_image_path' => 'seals/enotary-flow-seal.png',
+        ]);
+        $this->seedRegisterEntryPrerequisites($request, $notary, $credential, 500.00);
         $registerService = app(NotarialRegisterService::class);
 
-        $entry = $registerService->createEntry($request, $credential, [
+        $entry = $registerService->createEntry($request->fresh(), $credential, [
             'document_title' => 'Affidavit of Self-Adjudication',
             'document_description' => 'Transfer of property rights',
             'parties' => [
@@ -168,14 +234,14 @@ class NotaryEnotaryFlowTest extends TestCase
         $request->refresh();
         $this->assertSame(NotaryRequestStatus::AttorneyApproved, $request->status);
 
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) {
+        $this->mock(NotarySealService::class, function ($mock) {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
             $mock->shouldReceive('applyNotarySeal')->andReturn('documents/notarized/mock-final.pdf');
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+        $this->mock(NotarialCertificateService::class, function ($mock) {
             $mock->shouldReceive('generate')->andReturnNull();
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) use ($document) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) use ($document) {
             $mock->shouldReceive('ensureReady')->andReturn($document);
         });
 
@@ -248,7 +314,7 @@ class NotaryEnotaryFlowTest extends TestCase
             'id_number' => 'P-LOC-1',
             'id_image_path' => 'identity/pending-passport.pdf',
             'selfie_image_path' => 'identity/pending-selfie.jpg',
-            'verification_status' => \App\Enums\NotaryIdentityVerificationStatus::Pending,
+            'verification_status' => NotaryIdentityVerificationStatus::Pending,
         ]);
 
         app(IdentityVerificationService::class)->approvePendingRecord($reviewer, $record);
@@ -258,7 +324,7 @@ class NotaryEnotaryFlowTest extends TestCase
 
         $this->assertSame(NotaryRequestStatus::LocationVerified, $request->status);
         $this->assertNotNull($request->identity_verified_at);
-        $this->assertEquals(\App\Enums\NotaryIdentityVerificationStatus::Verified, $record->verification_status);
+        $this->assertEquals(NotaryIdentityVerificationStatus::Verified, $record->verification_status);
     }
 
     public function test_location_verification_rejects_non_philippines_location(): void
@@ -398,7 +464,7 @@ class NotaryEnotaryFlowTest extends TestCase
             'id_type' => 'passport',
             'id_number' => 'REJECT-1',
             'id_image_path' => 'identity/reject.pdf',
-            'verification_status' => \App\Enums\NotaryIdentityVerificationStatus::Pending,
+            'verification_status' => NotaryIdentityVerificationStatus::Pending,
         ]);
 
         app(IdentityVerificationService::class)->rejectPendingRecord($reviewer, $record, 'ID image is unreadable');
@@ -407,7 +473,7 @@ class NotaryEnotaryFlowTest extends TestCase
         $record->refresh();
 
         $this->assertSame(NotaryRequestStatus::IdentityReviewRequired, $request->status);
-        $this->assertEquals(\App\Enums\NotaryIdentityVerificationStatus::Rejected, $record->verification_status);
+        $this->assertEquals(NotaryIdentityVerificationStatus::Rejected, $record->verification_status);
         $this->assertSame('ID image is unreadable', $request->metadata['identity_review_reason'] ?? null);
     }
 
@@ -458,24 +524,55 @@ class NotaryEnotaryFlowTest extends TestCase
 
     public function test_notarial_register_entry_auto_increments_per_credential_per_year(): void
     {
-        $notary = User::factory()->create(['role' => UserRole::Notary]);
-        $credential = NotaryCredential::factory()->for($notary)->create();
-        $requester = User::factory()->create();
-        $request = NotaryRequest::factory()->for($requester)->create([
-            'notary_user_id' => $notary->id,
-            'status' => NotaryRequestStatus::AttorneyApproved,
+        $notary = User::factory()->notaryWithoutCredential()->create(['role' => UserRole::Notary]);
+        $credential = NotaryCredential::factory()->for($notary)->create([
+            'seal_image_path' => 'seals/register-increment-seal.png',
         ]);
-
+        $requester = User::factory()->create();
         $registerService = app(NotarialRegisterService::class);
 
-        $entry1 = $registerService->createEntry($request, $credential, [
+        $requestOne = NotaryRequest::factory()->for($requester)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+        $documentOne = Document::factory()->for($requester)->create([
+            'notary_request_id' => $requestOne->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+        DocumentSigner::factory()->for($documentOne)->create([
+            'user_id' => $notary->id,
+            'email' => $notary->email,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signing_order' => 999,
+        ]);
+        $this->seedRegisterEntryPrerequisites($requestOne, $notary, $credential);
+
+        $entry1 = $registerService->createEntry($requestOne->fresh(), $credential, [
             'document_title' => 'First Document',
             'parties' => [['name' => 'Party A', 'address' => 'Address A']],
             'competent_evidence' => [['person_name' => 'Party A', 'id_type' => 'Passport', 'id_number' => 'P1']],
             'notarial_act_type' => 'acknowledgment',
         ]);
 
-        $entry2 = $registerService->createEntry($request, $credential, [
+        $requestTwo = NotaryRequest::factory()->for($requester)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+        $documentTwo = Document::factory()->for($requester)->create([
+            'notary_request_id' => $requestTwo->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+        DocumentSigner::factory()->for($documentTwo)->create([
+            'user_id' => $notary->id,
+            'email' => $notary->email,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signing_order' => 999,
+        ]);
+        $this->seedRegisterEntryPrerequisites($requestTwo, $notary, $credential);
+
+        $entry2 = $registerService->createEntry($requestTwo->fresh(), $credential, [
             'document_title' => 'Second Document',
             'parties' => [['name' => 'Party B', 'address' => 'Address B']],
             'competent_evidence' => [['person_name' => 'Party B', 'id_type' => 'PhilID', 'id_number' => 'PH2']],
@@ -545,6 +642,8 @@ class NotaryEnotaryFlowTest extends TestCase
 
     public function test_session_confirmation_records_signer_acceptance(): void
     {
+        config(['docutrust.notary.auto_invite_signers_to_video' => false]);
+
         $requester = User::factory()->create();
         $notary = User::factory()->for($requester->organization)->create(['role' => UserRole::Notary]);
         $request = NotaryRequest::factory()->for($requester)->create([
@@ -554,10 +653,10 @@ class NotaryEnotaryFlowTest extends TestCase
 
         $document = Document::factory()->for($requester)->create([
             'notary_request_id' => $request->id,
-            'status' => \App\Enums\DocumentStatus::Completed,
+            'status' => DocumentStatus::Completed,
         ]);
         DocumentSigner::factory()->for($document)->create([
-            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'status' => DocumentSignerStatus::Signed,
             'signing_order' => 1,
         ]);
 
@@ -585,16 +684,16 @@ class NotaryEnotaryFlowTest extends TestCase
 
         $document = Document::factory()->for($requester)->create([
             'notary_request_id' => $request->id,
-            'status' => \App\Enums\DocumentStatus::Pending,
+            'status' => DocumentStatus::Pending,
         ]);
         DocumentSigner::factory()->for($document)->create([
-            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'status' => DocumentSignerStatus::Signed,
             'signing_order' => 1,
         ]);
         DocumentSigner::factory()->for($document)->create([
             'user_id' => $notary->id,
             'email' => $notary->email,
-            'status' => \App\Enums\DocumentSignerStatus::Signed,
+            'status' => DocumentSignerStatus::Signed,
             'signing_order' => 999,
         ]);
 
@@ -610,7 +709,7 @@ class NotaryEnotaryFlowTest extends TestCase
         try {
             app(NotaryRequestWorkflowService::class)->digitalize($request);
         } finally {
-            $this->assertSame(\App\Enums\DocumentStatus::Pending, $document->fresh()->status);
+            $this->assertSame(DocumentStatus::Pending, $document->fresh()->status);
         }
     }
 
@@ -654,7 +753,7 @@ class NotaryEnotaryFlowTest extends TestCase
 
         $document = Document::factory()->for($requester)->create([
             'notary_request_id' => $request->id,
-            'status' => \App\Enums\DocumentStatus::Completed,
+            'status' => DocumentStatus::Completed,
             'file_path' => 'documents/source.pdf',
             'prepared_pdf_path' => 'documents/prepared.pdf',
             'final_pdf_path' => null,
@@ -678,7 +777,7 @@ class NotaryEnotaryFlowTest extends TestCase
 
         $sealSourcePath = null;
 
-        $this->mock(\App\Services\NotarySealService::class, function ($mock) use (&$sealSourcePath) {
+        $this->mock(NotarySealService::class, function ($mock) use (&$sealSourcePath) {
             $mock->shouldReceive('generateVerificationQrCode')->andReturnNull();
             $mock->shouldReceive('applyNotarySeal')->once()->andReturnUsing(function (string $sourcePath) use (&$sealSourcePath) {
                 $sealSourcePath = $sourcePath;
@@ -686,10 +785,10 @@ class NotaryEnotaryFlowTest extends TestCase
                 return 'documents/notarized/final-after-seal.pdf';
             });
         });
-        $this->mock(\App\Services\NotarialCertificateService::class, function ($mock) {
+        $this->mock(NotarialCertificateService::class, function ($mock) {
             $mock->shouldReceive('generate')->andReturnNull();
         });
-        $this->mock(\App\Services\CompletedDocumentArtifactService::class, function ($mock) {
+        $this->mock(CompletedDocumentArtifactService::class, function ($mock) {
             $mock->shouldReceive('ensureReady')->andReturnUsing(function (Document $document) {
                 $document->forceFill([
                     'final_pdf_path' => 'documents/generated/final-before-seal.pdf',
@@ -702,7 +801,7 @@ class NotaryEnotaryFlowTest extends TestCase
                 return $document->fresh();
             });
         });
-        $this->mock(\App\Services\DocumentHashService::class, function ($mock) use ($document) {
+        $this->mock(DocumentHashService::class, function ($mock) use ($document) {
             $mock->shouldReceive('generateDocumentHash')
                 ->once()
                 ->with('documents/notarized/final-after-seal.pdf')
@@ -717,7 +816,7 @@ class NotaryEnotaryFlowTest extends TestCase
                 });
         });
 
-        app(\App\Services\NotaryDigitalizationService::class)->digitalize($request);
+        app(NotaryDigitalizationService::class)->digitalize($request);
 
         $document->refresh();
 
@@ -739,7 +838,7 @@ class NotaryEnotaryFlowTest extends TestCase
 
         $requester = User::factory()->create();
         $document = Document::factory()->for($requester)->create([
-            'status' => \App\Enums\DocumentStatus::Completed,
+            'status' => DocumentStatus::Completed,
             'final_pdf_path' => 'documents/generated/current-final.pdf',
             'archive_storage_disk' => 'local',
             'archive_document_path' => 'documents/notarized/stale-final.pdf',
@@ -749,7 +848,7 @@ class NotaryEnotaryFlowTest extends TestCase
         Storage::disk('local')->put('documents/generated/current-final.pdf', '%PDF-1.4 current final');
         Storage::disk('local')->put('documents/notarized/stale-final.pdf', '%PDF-1.4 stale final');
 
-        $archived = app(\App\Services\DocumentArchiveService::class)->archiveCompletedDocument($document);
+        $archived = app(DocumentArchiveService::class)->archiveCompletedDocument($document);
 
         $this->assertNotNull($archived);
         $this->assertSame('documents/generated/current-final.pdf', $archived->archive_document_path);

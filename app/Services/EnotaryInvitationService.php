@@ -80,7 +80,7 @@ class EnotaryInvitationService
     {
         $request = $signer->notaryRequest;
         if ($request === null) {
-            throw new RuntimeException(__('Notary request not found for this signer.'));
+            throw new RuntimeException(__('Notarization not found for this signer.'));
         }
 
         EnotaryInvitation::query()

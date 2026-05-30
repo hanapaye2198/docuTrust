@@ -109,16 +109,48 @@ class NotaryRequestWorkflowService
         $hasCompletedSession = $this->hasCompletedSession($request);
         $attorneyHasSigned = $this->hasAttorneySignedAllDocuments($request);
         $hasRegisterEntry = $request->registerEntries->isNotEmpty();
-        $hasAttorneyRegistry = $request->attorneyNotarialRegistry !== null;
+        $hasFeeConfigured = $this->hasSettlementFeeConfigured($request);
+        $hasPreparedDraft = $this->hasPreparedRegistryDraft($request);
+        $canAccessRegistry = $this->canAccessAttorneyRegistry($request);
         $hasAttorneySeal = $this->hasAttorneySealOnFile($request);
         $paymentRequired = $this->paymentRequired($request);
         $hasSettledPayment = $this->hasSettledPayment($request);
-        $paymentReady = ! $paymentRequired || $hasSettledPayment;
         $isNotarized = $request->status === NotaryRequestStatus::Notarized;
         $isAttorneyApproved = $request->status === NotaryRequestStatus::AttorneyApproved;
         $isDigitalized = $request->status === NotaryRequestStatus::Digitalized;
         $canBeginAttorneySigning = $this->canBeginAttorneySigning($request);
         $canDigitalize = $this->canDigitalize($request);
+        $canReview = $this->canApprove($request);
+        $isReviewComplete = $request->status === NotaryRequestStatus::AttorneyApproved
+            || in_array($request->status, [NotaryRequestStatus::Digitalized, NotaryRequestStatus::Notarized], true);
+        $canCreateRegister = $this->canCreateRegisterEntry($request);
+
+        $resolveState = function (bool $complete, bool $current, bool $blocked = false): string {
+            if ($complete) {
+                return 'complete';
+            }
+
+            if ($blocked) {
+                return 'blocked';
+            }
+
+            return $current ? 'current' : 'upcoming';
+        };
+
+        $feeComplete = $hasFeeConfigured;
+        $feeCurrent = $attorneyHasSigned && ! $hasFeeConfigured;
+        $paymentComplete = ! $paymentRequired || $hasSettledPayment;
+        $paymentCurrent = $paymentRequired && $hasFeeConfigured && ! $hasSettledPayment && $attorneyHasSigned;
+        $registryDraftComplete = $hasPreparedDraft;
+        $registryDraftCurrent = $canAccessRegistry && ! $hasPreparedDraft;
+        $sealComplete = $hasAttorneySeal;
+        $sealCurrent = $attorneyHasSigned && ! $hasAttorneySeal && ($hasSettledPayment || ! $paymentRequired) && $hasPreparedDraft;
+        $registerComplete = $hasRegisterEntry;
+        $registerCurrent = $canCreateRegister && ! $hasRegisterEntry;
+        $reviewComplete = $isReviewComplete;
+        $reviewCurrent = $canReview && ! $isReviewComplete;
+        $digitalComplete = $isDigitalized || $isNotarized;
+        $digitalCurrent = $canDigitalize && ! $isDigitalized && ! $isNotarized;
 
         return [
             [
@@ -169,49 +201,145 @@ class NotaryRequestWorkflowService
                 },
             ],
             [
-                'label' => __('Payment'),
-                'description' => __('Client completes payment after attorney signing using attorney registry fee details.'),
-                'state' => match (true) {
-                    ! $attorneyHasSigned && ! $isDigitalized && ! $isNotarized => 'upcoming',
-                    ! $paymentRequired && $attorneyHasSigned => 'complete',
-                    $hasSettledPayment || $isDigitalized || $isNotarized => 'complete',
-                    $attorneyHasSigned && $hasAttorneyRegistry => 'current',
-                    default => 'upcoming',
-                },
+                'label' => __('Set notarial fee'),
+                'description' => __('Enter the fee amount on Settlement before creating a payment link.'),
+                'state' => $resolveState($feeComplete, $feeCurrent, ! $attorneyHasSigned),
             ],
             [
-                'label' => __('Seal (attorney personal seal)'),
-                'description' => __('Attorney uploads and confirms a personal seal before final register entry.'),
-                'state' => match (true) {
-                    ! $attorneyHasSigned && ! $isAttorneyApproved && ! $isDigitalized && ! $isNotarized => 'upcoming',
-                    $hasAttorneySeal || $isAttorneyApproved || $isDigitalized || $isNotarized => 'complete',
-                    $hasSettledPayment => 'current',
-                    $attorneyHasSigned && ! $paymentRequired => 'current',
-                    default => 'upcoming',
-                },
+                'label' => __('Pay notarial fee'),
+                'description' => __('Client completes payment using the fee amount you set.'),
+                'state' => $resolveState($paymentComplete, $paymentCurrent, ! $hasFeeConfigured || ! $paymentRequired),
             ],
             [
-                'label' => __('Registry entry'),
-                'description' => __('Create the final register entry after payment and attorney seal are complete.'),
-                'state' => match (true) {
-                    ! $attorneyHasSigned && ! $isAttorneyApproved && ! $isDigitalized && ! $isNotarized => 'upcoming',
-                    $hasRegisterEntry || $isNotarized => 'complete',
-                    $hasSettledPayment && $hasAttorneySeal => 'current',
-                    $attorneyHasSigned && ! $paymentRequired && $hasAttorneySeal => 'current',
-                    default => 'upcoming',
-                },
+                'label' => __('Notarial register entry'),
+                'description' => __('Complete the 9-field register row after payment, including the O.R. number.'),
+                'state' => $resolveState($registryDraftComplete, $registryDraftCurrent, ! $canAccessRegistry),
+            ],
+            [
+                'label' => __('Attorney personal seal'),
+                'description' => __('Upload your seal in credentials before creating the official register entry.'),
+                'state' => $resolveState($sealComplete, $sealCurrent, ! $attorneyHasSigned),
+            ],
+            [
+                'label' => __('Official register entry'),
+                'description' => __('Create the final notarial book entry from your saved draft.'),
+                'state' => $resolveState($registerComplete, $registerCurrent, ! $attorneyHasSigned),
+            ],
+            [
+                'label' => __('Attorney review'),
+                'description' => __('Confirm identity, consent, and jurisdiction after payment and register entry.'),
+                'state' => $resolveState($reviewComplete, $reviewCurrent, ! $hasRegisterEntry),
             ],
             [
                 'label' => __('Digital notarization'),
-                'description' => __('Applies notary seal, attaches QR code, generates certificates, and timestamps document.'),
-                'state' => match (true) {
-                    $isNotarized => 'complete',
-                    $isDigitalized => 'complete',
-                    $canDigitalize || ($paymentReady && $hasRegisterEntry && ($attorneyHasSigned || $isAttorneyApproved)) => 'current',
-                    default => 'upcoming',
-                },
+                'description' => __('Apply seal, QR verification, certificate, and document timestamp.'),
+                'state' => $resolveState($digitalComplete, $digitalCurrent, ! $hasRegisterEntry),
             ],
         ];
+    }
+
+    public function settlementPendingCount(NotaryRequest $request, bool $forAttorney): int
+    {
+        return collect($this->settlementSteps($request))
+            ->filter(function (array $step) use ($forAttorney): bool {
+                if (($step['state'] ?? '') !== 'current') {
+                    return false;
+                }
+
+                $actor = $step['actor'] ?? '';
+
+                return $forAttorney
+                    ? $actor === 'attorney'
+                    : $actor === 'client';
+            })
+            ->count();
+    }
+
+    public function currentSettlementSectionId(NotaryRequest $request): ?string
+    {
+        $step = collect($this->settlementSteps($request))
+            ->first(fn (array $settlementStep): bool => ($settlementStep['state'] ?? '') === 'current');
+
+        $sectionId = $step['section_id'] ?? null;
+
+        return is_string($sectionId) && $sectionId !== '' ? $sectionId : null;
+    }
+
+    /**
+     * @return list<array{
+     *     key: string,
+     *     label: string,
+     *     description: string,
+     *     state: 'complete'|'current'|'upcoming'|'blocked'
+     * }>
+     */
+    public function clientPortalTimeline(NotaryRequest $request): array
+    {
+        $request->loadMissing(['sessions', 'payments', 'attorneyNotarialRegistry']);
+
+        $isNotarized = $request->status === NotaryRequestStatus::Notarized;
+        $hasCompletedSession = $this->hasCompletedSession($request);
+        $paymentRequired = $this->paymentRequired($request);
+        $hasSettledPayment = $this->hasSettledPayment($request);
+        $hasFeeConfigured = $this->hasSettlementFeeConfigured($request);
+
+        $steps = [];
+
+        if ((bool) config('docutrust.notary.require_video_session', true)) {
+            $sessionState = match (true) {
+                $isNotarized, $hasCompletedSession => 'complete',
+                in_array($request->status, [
+                    NotaryRequestStatus::SessionScheduled,
+                    NotaryRequestStatus::SessionInProgress,
+                ], true) => 'current',
+                default => 'upcoming',
+            };
+
+            $steps[] = [
+                'key' => 'session',
+                'label' => __('Video verification'),
+                'description' => __('Join the scheduled notary session and complete identity verification.'),
+                'state' => $sessionState,
+            ];
+        }
+
+        if ($paymentRequired) {
+            $paymentState = match (true) {
+                $isNotarized, $hasSettledPayment => 'complete',
+                $hasFeeConfigured => 'current',
+                default => 'upcoming',
+            };
+
+            $steps[] = [
+                'key' => 'payment',
+                'label' => __('Pay notarial fee'),
+                'description' => __('Complete checkout when your attorney sets the fee amount.'),
+                'state' => $paymentState,
+            ];
+        }
+
+        if ($isNotarized) {
+            $steps[] = [
+                'key' => 'complete',
+                'label' => __('Download your documents'),
+                'description' => __('Your notarized PDF and certificate are ready.'),
+                'state' => 'complete',
+            ];
+        } else {
+            $attorneyClosingState = match (true) {
+                ($hasSettledPayment || ! $paymentRequired) && $hasCompletedSession => 'current',
+                default => 'upcoming',
+            };
+
+            $steps[] = [
+                'key' => 'attorney_closing',
+                'label' => __('Attorney finalizes'),
+                'description' => __('Your attorney completes the register entry and digital notarization.'),
+                'state' => $attorneyClosingState,
+            ];
+        }
+
+        return $steps;
     }
 
     public function hasCompletedSession(NotaryRequest $request): bool
@@ -313,6 +441,63 @@ class NotaryRequestWorkflowService
             return false;
         }
 
+        $request->loadMissing('registerEntries');
+
+        if ($request->registerEntries->isNotEmpty()) {
+            return false;
+        }
+
+        if (! $this->hasPreparedRegistryDraft($request)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function settlementClosingPrerequisitesMet(NotaryRequest $request): bool
+    {
+        if (! $this->hasAttorneySignedAllDocuments($request)) {
+            return false;
+        }
+
+        if (! $this->hasAttorneySealOnFile($request)) {
+            return false;
+        }
+
+        if ($this->paymentRequired($request) && ! $this->hasSettledPayment($request)) {
+            return false;
+        }
+
+        $request->loadMissing(['registerEntries', 'attorneyNotarialRegistry']);
+
+        return $request->registerEntries->isNotEmpty()
+            || $this->hasPreparedRegistryDraft($request);
+    }
+
+    public function hasSettlementFeeConfigured(NotaryRequest $request): bool
+    {
+        $request->loadMissing('attorneyNotarialRegistry');
+
+        return $request->attorneyNotarialRegistry !== null;
+    }
+
+    public function hasPreparedRegistryDraft(NotaryRequest $request): bool
+    {
+        $request->loadMissing('attorneyNotarialRegistry');
+
+        return $request->attorneyNotarialRegistry?->registry_fields_completed_at !== null;
+    }
+
+    public function canAccessAttorneyRegistry(NotaryRequest $request): bool
+    {
+        if (! $this->hasAttorneySignedAllDocuments($request)) {
+            return false;
+        }
+
+        if ($this->paymentRequired($request) && ! $this->hasSettledPayment($request)) {
+            return false;
+        }
+
         return true;
     }
 
@@ -336,7 +521,8 @@ class NotaryRequestWorkflowService
      *   state: 'complete'|'current'|'upcoming'|'blocked',
      *   actor: 'attorney'|'client'|'system',
      *   section_id: ?string,
-     *   href: ?string
+     *   href: ?string,
+     *   waiting_on: ?('attorney'|'client')
      * }>
      */
     public function settlementSteps(NotaryRequest $request): array
@@ -344,7 +530,9 @@ class NotaryRequestWorkflowService
         $request->loadMissing(['attorneyNotarialRegistry', 'registerEntries', 'payments', 'notary']);
 
         $attorneyHasSigned = $this->hasAttorneySignedAllDocuments($request);
-        $hasDraft = $request->attorneyNotarialRegistry !== null;
+        $hasFeeConfigured = $this->hasSettlementFeeConfigured($request);
+        $hasPreparedDraft = $this->hasPreparedRegistryDraft($request);
+        $canAccessRegistry = $this->canAccessAttorneyRegistry($request);
         $hasSeal = $this->hasAttorneySealOnFile($request);
         $paymentRequired = $this->paymentRequired($request);
         $hasSettledPayment = $this->hasSettledPayment($request);
@@ -367,12 +555,14 @@ class NotaryRequestWorkflowService
             return $current ? 'current' : 'upcoming';
         };
 
-        $draftComplete = $hasDraft;
-        $draftCurrent = $attorneyHasSigned && ! $hasDraft;
+        $feeComplete = $hasFeeConfigured;
+        $feeCurrent = $attorneyHasSigned && ! $hasFeeConfigured;
         $paymentComplete = ! $paymentRequired || $hasSettledPayment;
-        $paymentCurrent = $paymentRequired && $hasDraft && ! $hasSettledPayment && $attorneyHasSigned;
+        $paymentCurrent = $paymentRequired && $hasFeeConfigured && ! $hasSettledPayment && $attorneyHasSigned;
+        $registryDraftComplete = $hasPreparedDraft;
+        $registryDraftCurrent = $canAccessRegistry && ! $hasPreparedDraft;
         $sealComplete = $hasSeal;
-        $sealCurrent = $attorneyHasSigned && ! $hasSeal && ($hasSettledPayment || ! $paymentRequired) && $hasDraft;
+        $sealCurrent = $attorneyHasSigned && ! $hasSeal && ($hasSettledPayment || ! $paymentRequired) && $hasPreparedDraft;
         $registerComplete = $hasRegisterEntry;
         $registerCurrent = $this->canCreateRegisterEntry($request) && ! $hasRegisterEntry;
         $reviewComplete = $isReviewComplete;
@@ -380,62 +570,108 @@ class NotaryRequestWorkflowService
         $digitalComplete = $isDigitalized;
         $digitalCurrent = $canDigitalize && ! $isDigitalized;
 
+        $feeState = $resolveState($feeComplete, $feeCurrent, ! $attorneyHasSigned);
+        $paymentState = $resolveState($paymentComplete, $paymentCurrent, ! $hasFeeConfigured || ! $paymentRequired);
+        $registryDraftState = $resolveState($registryDraftComplete, $registryDraftCurrent, ! $canAccessRegistry);
+        $sealState = $resolveState($sealComplete, $sealCurrent, ! $attorneyHasSigned);
+        $registerState = $resolveState($registerComplete, $registerCurrent, ! $attorneyHasSigned);
+        $reviewState = $resolveState($reviewComplete, $reviewCurrent, ! $hasRegisterEntry);
+        $digitalState = $resolveState($digitalComplete, $digitalCurrent, ! $hasRegisterEntry);
+
         return [
             [
-                'key' => 'registry_draft',
-                'label' => __('Fee & party details'),
-                'description' => __('Save draft registry with fees, parties, and identity evidence.'),
-                'state' => $resolveState($draftComplete, $draftCurrent, ! $attorneyHasSigned),
+                'key' => 'settlement_fee',
+                'label' => __('Set notarial fee'),
+                'description' => __('Enter the fee amount on Settlement before creating a payment link.'),
+                'state' => $feeState,
                 'actor' => 'attorney',
-                'section_id' => 'section-attorney-registry',
-                'href' => route('notary.attorney-registry', $request),
+                'section_id' => 'section-settlement-fee',
+                'href' => null,
+                'waiting_on' => $this->settlementStepWaitingOn($feeState, ! $attorneyHasSigned ? 'attorney' : null),
             ],
             [
                 'key' => 'payment',
                 'label' => __('Pay notarial fee'),
-                'description' => __('Client completes payment using the fee amount from the registry draft.'),
-                'state' => $resolveState($paymentComplete, $paymentCurrent, ! $hasDraft || ! $paymentRequired),
+                'description' => __('Client completes payment using the fee amount you set.'),
+                'state' => $paymentState,
                 'actor' => 'client',
                 'section_id' => 'section-payment',
                 'href' => null,
+                'waiting_on' => $this->settlementStepWaitingOn(
+                    $paymentState,
+                    ! $paymentRequired ? null : (! $hasFeeConfigured || ! $attorneyHasSigned ? 'attorney' : null),
+                ),
+            ],
+            [
+                'key' => 'registry_draft',
+                'label' => __('Notarial register entry'),
+                'description' => __('Complete the 9-field register row after payment, including the O.R. number.'),
+                'state' => $registryDraftState,
+                'actor' => 'attorney',
+                'section_id' => 'section-attorney-registry',
+                'href' => $canAccessRegistry ? route('notary.attorney-registry', $request) : null,
+                'waiting_on' => $this->settlementStepWaitingOn(
+                    $registryDraftState,
+                    ! $attorneyHasSigned ? 'attorney' : ($paymentRequired && ! $hasSettledPayment ? 'client' : null),
+                ),
             ],
             [
                 'key' => 'seal',
                 'label' => __('Attorney personal seal'),
                 'description' => __('Upload your seal in credentials before creating the official register entry.'),
-                'state' => $resolveState($sealComplete, $sealCurrent, ! $attorneyHasSigned),
+                'state' => $sealState,
                 'actor' => 'attorney',
                 'section_id' => 'section-attorney-seal',
                 'href' => route('notary.credentials'),
+                'waiting_on' => $this->settlementStepWaitingOn(
+                    $sealState,
+                    ! $attorneyHasSigned ? 'attorney' : (! $hasPreparedDraft ? 'attorney' : ($paymentRequired && ! $hasSettledPayment ? 'client' : null)),
+                ),
             ],
             [
                 'key' => 'register_entry',
                 'label' => __('Official register entry'),
                 'description' => __('Create the final notarial book entry from your saved draft.'),
-                'state' => $resolveState($registerComplete, $registerCurrent, ! $attorneyHasSigned),
+                'state' => $registerState,
                 'actor' => 'attorney',
                 'section_id' => 'section-register',
                 'href' => route('notary.register-entry', $request),
+                'waiting_on' => $this->settlementStepWaitingOn($registerState, ! $attorneyHasSigned ? 'attorney' : null),
             ],
             [
                 'key' => 'attorney_review',
                 'label' => __('Attorney review'),
                 'description' => __('Confirm identity, consent, and jurisdiction after payment and register entry.'),
-                'state' => $resolveState($reviewComplete, $reviewCurrent, ! $hasRegisterEntry),
+                'state' => $reviewState,
                 'actor' => 'attorney',
                 'section_id' => 'section-review',
                 'href' => null,
+                'waiting_on' => $this->settlementStepWaitingOn($reviewState, ! $hasRegisterEntry ? 'attorney' : null),
             ],
             [
                 'key' => 'digital_notarization',
                 'label' => __('Digital notarization'),
                 'description' => __('Apply seal, QR verification, certificate, and document timestamp.'),
-                'state' => $resolveState($digitalComplete, $digitalCurrent, ! $hasRegisterEntry),
+                'state' => $digitalState,
                 'actor' => 'attorney',
                 'section_id' => 'section-digital-notarization',
                 'href' => null,
+                'waiting_on' => $this->settlementStepWaitingOn($digitalState, ! $hasRegisterEntry ? 'attorney' : null),
             ],
         ];
+    }
+
+    /**
+     * @param  'complete'|'current'|'upcoming'|'blocked'  $state
+     * @param  'attorney'|'client'|null  $blockedBy
+     */
+    private function settlementStepWaitingOn(string $state, ?string $blockedBy): ?string
+    {
+        if (in_array($state, ['complete', 'current'], true)) {
+            return null;
+        }
+
+        return $blockedBy;
     }
 
     public function canApprove(NotaryRequest $request): bool
@@ -471,11 +707,7 @@ class NotaryRequestWorkflowService
             return false;
         }
 
-        if (! $this->canCreateRegisterEntry($request)) {
-            return false;
-        }
-
-        if ($this->paymentRequired($request) && ! $this->hasSettledPayment($request)) {
+        if (! $this->settlementClosingPrerequisitesMet($request)) {
             return false;
         }
 
@@ -667,7 +899,7 @@ class NotaryRequestWorkflowService
     public function submit(NotaryRequest $request): NotaryRequest
     {
         if ($request->status !== NotaryRequestStatus::Draft) {
-            throw new RuntimeException(__('Only draft notary requests can be submitted.'));
+            throw new RuntimeException(__('Only draft notarizations can be submitted.'));
         }
 
         $request->markSubmitted();
@@ -680,7 +912,7 @@ class NotaryRequestWorkflowService
     public function approve(NotaryRequest $request, array $legalAssertions = [], ?string $summary = null): NotaryRequest
     {
         if (! $this->canApprove($request)) {
-            throw new RuntimeException(__('This notary request is not ready for attorney review completion. Client payment must be completed after the register entry is created.'));
+            throw new RuntimeException(__('This notarization is not ready for attorney review completion. Client payment must be completed after the register entry is created.'));
         }
 
         $request->markApproved();
@@ -689,7 +921,7 @@ class NotaryRequestWorkflowService
             'notary_request_id' => $request->id,
             'notary_user_id' => $request->notary_user_id,
             'entry_type' => 'approval',
-            'summary' => $summary ?: __('Attorney completed the final review for this notary request.'),
+            'summary' => $summary ?: __('Attorney completed the final review for this notarization.'),
             'legal_assertions' => $legalAssertions,
             'recorded_at' => now(),
         ]);
@@ -710,7 +942,7 @@ class NotaryRequestWorkflowService
             NotaryRequestStatus::Rejected,
             NotaryRequestStatus::Failed,
         ], true)) {
-            throw new RuntimeException(__('This notary request cannot be rejected in its current state.'));
+            throw new RuntimeException(__('This notarization cannot be rejected in its current state.'));
         }
 
         $request->markRejected($reason);
@@ -735,7 +967,7 @@ class NotaryRequestWorkflowService
 
         $readiness = $this->finalizationReadiness($request);
         if (! $readiness['ready']) {
-            throw new RuntimeException($readiness['issues'][0] ?? __('This notary request is not ready for finalization.'));
+            throw new RuntimeException($readiness['issues'][0] ?? __('This notarization is not ready for finalization.'));
         }
 
         $request->markNotarized();
@@ -748,7 +980,7 @@ class NotaryRequestWorkflowService
     public function digitalize(NotaryRequest $request): NotaryRequest
     {
         if (! $this->canDigitalize($request)) {
-            throw new RuntimeException(__('This notary request is not ready for digital notarization. Client payment must be completed first.'));
+            throw new RuntimeException(__('This notarization is not ready for digital notarization. Client payment must be completed first.'));
         }
 
         if ($request->status !== NotaryRequestStatus::AttorneyApproved) {
@@ -757,7 +989,7 @@ class NotaryRequestWorkflowService
                 'voluntary_consent' => true,
                 'jurisdiction_valid' => true,
                 'digital_notarization_ready' => true,
-            ], __('Attorney completed signing and review, and marked this request ready for digital notarization.'));
+            ], __('Attorney completed signing and review, and marked this notarization ready for digital notarization.'));
         }
 
         app(NotaryDigitalizationService::class)->digitalize($request->fresh());
@@ -778,11 +1010,11 @@ class NotaryRequestWorkflowService
         }
 
         if ($document->notary_request_id !== null && $document->notary_request_id !== $request->id) {
-            throw new RuntimeException(__('The selected document is already linked to another notary request.'));
+            throw new RuntimeException(__('The selected document is already linked to another notarization.'));
         }
 
         if ($request->status === NotaryRequestStatus::Notarized) {
-            throw new RuntimeException(__('You cannot attach documents to a finalized notary request.'));
+            throw new RuntimeException(__('You cannot attach documents to a finalized notarization.'));
         }
 
         $document->update([
@@ -795,7 +1027,7 @@ class NotaryRequestWorkflowService
             'notary_request_id' => $request->id,
             'notary_user_id' => $request->notary_user_id,
             'entry_type' => 'document_attached',
-            'summary' => __('Linked document ":title" to this notary request.', ['title' => $document->title]),
+            'summary' => __('Linked document ":title" to this notarization.', ['title' => $document->title]),
             'legal_assertions' => [
                 'document_id' => $document->id,
             ],
@@ -808,11 +1040,11 @@ class NotaryRequestWorkflowService
     public function detachDocument(NotaryRequest $request, Document $document): NotaryRequest
     {
         if ($document->notary_request_id !== $request->id) {
-            throw new RuntimeException(__('The selected document is not linked to this notary request.'));
+            throw new RuntimeException(__('The selected document is not linked to this notarization.'));
         }
 
         if ($request->status === NotaryRequestStatus::Notarized) {
-            throw new RuntimeException(__('You cannot detach documents from a finalized notary request.'));
+            throw new RuntimeException(__('You cannot detach documents from a finalized notarization.'));
         }
 
         $document->update([
@@ -823,7 +1055,7 @@ class NotaryRequestWorkflowService
             'notary_request_id' => $request->id,
             'notary_user_id' => $request->notary_user_id,
             'entry_type' => 'document_detached',
-            'summary' => __('Removed document ":title" from this notary request.', ['title' => $document->title]),
+            'summary' => __('Removed document ":title" from this notarization.', ['title' => $document->title]),
             'legal_assertions' => [
                 'document_id' => $document->id,
             ],
@@ -842,7 +1074,7 @@ class NotaryRequestWorkflowService
             NotaryRequestStatus::Failed,
             NotaryRequestStatus::Cancelled,
         ], true)) {
-            throw new RuntimeException(__('This notary request cannot be cancelled in its current state.'));
+            throw new RuntimeException(__('This notarization cannot be cancelled in its current state.'));
         }
 
         $request->markCancelled();
@@ -851,7 +1083,7 @@ class NotaryRequestWorkflowService
             'notary_request_id' => $request->id,
             'notary_user_id' => $request->notary_user_id,
             'entry_type' => 'request_cancelled',
-            'summary' => $reason !== '' ? $reason : __('Notary request was cancelled.'),
+            'summary' => $reason !== '' ? $reason : __('Notarization was cancelled.'),
             'legal_assertions' => [],
             'recorded_at' => now(),
         ]);

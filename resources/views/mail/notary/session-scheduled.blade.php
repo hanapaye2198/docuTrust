@@ -1,9 +1,9 @@
 <x-mail::message>
 # Video Session Scheduled
 
-A live video verification session has been scheduled for your notary request.
+A live video verification session has been scheduled for your notarization.
 
-**Request:** {{ $notaryRequest->title }}
+**Notarization:** {{ $notaryRequest->title }}
 **Scheduled for:** {{ $scheduledFor }}
 
 @if ($meetingUrl)
@@ -19,7 +19,7 @@ Please ensure you have:
 - You are physically located in the Philippines
 
 <x-mail::button :url="route('notary-requests.show', $notaryRequest)">
-View Request Details
+View Notarization
 </x-mail::button>
 
 Thanks,<br>

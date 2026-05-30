@@ -55,8 +55,8 @@ class UserDeletionImpactService
         }
 
         $warning = match ($user->role) {
-            UserRole::Client => __('Deleting this client permanently removes all documents, notary requests, templates, contacts, and trust data.'),
-            UserRole::Notary => __('Deleting this notary removes their credentials and unlinks them from assigned requests.'),
+            UserRole::Client => __('Deleting this client permanently removes all documents, notarizations, templates, contacts, and trust data.'),
+            UserRole::Notary => __('Deleting this notary removes their credentials and unlinks them from assigned notarizations.'),
             UserRole::NotaryAdmin => __('Deleting this administrator removes their access and cascades owned workspace data.'),
             UserRole::SuperAdmin => __('Super administrator accounts cannot be deleted.'),
         };

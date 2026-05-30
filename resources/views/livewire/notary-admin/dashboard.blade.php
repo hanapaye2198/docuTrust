@@ -63,7 +63,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">{{ __('Notary Admin Dashboard') }}</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Manage finalization of notarized requests and blockchain storage.') }}</p>
+            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Manage finalization of notarizations and blockchain storage.') }}</p>
         </div>
         <div class="text-sm font-medium text-zinc-400 dark:text-zinc-500">
             {{ now()->format('l, F j, Y') }}
@@ -73,7 +73,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     {{-- Stat Cards --}}
     <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
-            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Total Requests') }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Total notarizations') }}</p>
             <p class="mt-2 text-3xl font-bold tabular-nums text-zinc-900 dark:text-white">{{ $totalRequests }}</p>
         </div>
         <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
@@ -93,11 +93,11 @@ new #[Layout('components.layouts.app')] class extends Component {
     {{-- Awaiting Finalization --}}
     <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
         <h2 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Awaiting Finalization') }}</h2>
-        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('These requests have been digitally notarized by the attorney and are ready for finalization and blockchain storage.') }}</p>
+        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('These notarizations have been digitally completed by the attorney and are ready for finalization and blockchain storage.') }}</p>
 
         @if ($awaitingFinalization->isEmpty())
             <div class="mt-4 rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-                {{ __('No requests awaiting finalization.') }}
+                {{ __('No notarizations awaiting finalization.') }}
             </div>
         @else
             <div class="mt-4 space-y-3">
@@ -133,7 +133,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         @if ($recentlyNotarized->isEmpty())
             <div class="mt-4 rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-                {{ __('No notarized requests yet.') }}
+                {{ __('No completed notarizations yet.') }}
             </div>
         @else
             <div class="mt-4 space-y-2">

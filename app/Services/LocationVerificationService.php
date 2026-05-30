@@ -42,7 +42,7 @@ class LocationVerificationService
             NotaryRequestStatus::SessionCompleted,
             NotaryRequestStatus::AttorneySigning,
         ], true)) {
-            throw new RuntimeException(__('Location verification requires the request to be submitted or identity verified first.'));
+            throw new RuntimeException(__('Location verification requires the notarization to be submitted or identity verified first.'));
         }
 
         $countryCode = strtoupper(trim((string) ($evidence['country_code'] ?? '')));

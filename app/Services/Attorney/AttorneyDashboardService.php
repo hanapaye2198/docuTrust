@@ -295,27 +295,13 @@ class AttorneyDashboardService
             NotaryRequestStatus::SessionInProgress => __('Join session'),
             NotaryRequestStatus::SessionScheduled => __('View session'),
             NotaryRequestStatus::AttorneySigning, NotaryRequestStatus::AttorneyApproved => __('Continue signing'),
-            default => __('Open request'),
+            default => __('Open case'),
         };
     }
 
     public function statusLabel(NotaryRequest $request): string
     {
-        return match ($request->status) {
-            NotaryRequestStatus::SessionInProgress => __('Session in progress'),
-            NotaryRequestStatus::SessionScheduled => __('Session scheduled'),
-            NotaryRequestStatus::AttorneySigning => __('Attorney signing'),
-            NotaryRequestStatus::AttorneyApproved => __('Attorney reviewed'),
-            NotaryRequestStatus::Submitted => __('Submitted'),
-            NotaryRequestStatus::IdentityReviewRequired => __('Identity review'),
-            NotaryRequestStatus::IdentityVerified => __('Identity verified'),
-            NotaryRequestStatus::LocationReviewRequired => __('Location review'),
-            NotaryRequestStatus::LocationVerified => __('Location verified'),
-            NotaryRequestStatus::SessionCompleted => __('Session completed'),
-            NotaryRequestStatus::Digitalized => __('Digitalized'),
-            NotaryRequestStatus::Notarized => __('Notarized'),
-            default => str($request->status->value)->replace('_', ' ')->title()->toString(),
-        };
+        return $request->status->label();
     }
 
     /**

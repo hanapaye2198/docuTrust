@@ -28,6 +28,7 @@ class AttorneyNotarialRegistry extends Model
         'fees',
         'official_receipt_no',
         'notary_signature_path',
+        'registry_fields_completed_at',
     ];
 
     /**
@@ -41,6 +42,7 @@ class AttorneyNotarialRegistry extends Model
             'competent_evidence' => 'array',
             'notarization_timestamps' => 'array',
             'fees' => 'decimal:2',
+            'registry_fields_completed_at' => 'datetime',
         ];
     }
 

@@ -382,11 +382,11 @@ new #[Layout('components.layouts.app')] class extends Component {
     {{-- Header --}}
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-            <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">{{ __('Notary requests') }}</h1>
+            <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">{{ __('Notarizations') }}</h1>
             <p class="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
                 {{ $isNotaryView
-                    ? __('Review requests assigned to you, schedule sessions, and record attorney decisions.')
-                    : __('Track remote notarization cases through identity verification, signing, and final completion.') }}
+                    ? __('Review notarizations assigned to you, schedule sessions, and record attorney decisions.')
+                    : __('Track remote notarizations through identity verification, signing, and final completion.') }}
             </p>
         </div>
         <flux:button
@@ -395,7 +395,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             wire:navigate
             icon="plus"
         >
-            {{ __('New request') }}
+            {{ __('New notarization') }}
         </flux:button>
     </div>
 
@@ -516,7 +516,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             <table class="min-w-full divide-y divide-zinc-200/80 dark:divide-zinc-800">
                 <thead class="bg-zinc-50/80 dark:bg-zinc-800/50">
                     <tr>
-                        <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Request') }}</th>
+                        <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Notarization') }}</th>
                         <th class="hidden px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 md:table-cell">{{ __('Status') }}</th>
                         <th class="hidden px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 lg:table-cell">{{ __('Participants') }}</th>
                         <th class="hidden px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 xl:table-cell">{{ __('Documents') }}</th>
@@ -614,8 +614,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     <div class="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800">
                                         <svg class="h-6 w-6 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12H9.75m3 0H9.75m0 0H9m.75 0H9m12-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                                     </div>
-                                    <p class="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ __('No notary requests found') }}</p>
-                                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Try adjusting your filters or create a new request.') }}</p>
+                                    <p class="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ __('No notarizations found') }}</p>
+                                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Try adjusting your filters or start a new notarization.') }}</p>
                                 </div>
                             </td>
                         </tr>

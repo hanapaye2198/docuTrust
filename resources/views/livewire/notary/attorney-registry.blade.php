@@ -1,9 +1,9 @@
 <?php
 
 use App\Enums\UserRole;
-use App\Models\AttorneyNotarialRegistry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
+use App\Services\AttorneyNotarialRegistryService;
 use App\Services\NotaryRequestWorkflowService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -12,21 +12,39 @@ use Livewire\Volt\Component;
 new #[Layout('components.layouts.app')] class extends Component {
     public NotaryRequest $notaryRequest;
 
-    public string $entryNo = '';
     public string $title = '';
-    public string $description = '';
+
     public string $notarialActType = 'acknowledgment';
+
     public string $fees = '';
+
     public string $officialReceiptNo = '';
 
-    /** @var array<int, array{name: string, address: string}> */
-    public array $parties = [['name' => '', 'address' => '']];
+    /** @var list<array{name: string, address: string}> */
+    public array $parties = [];
 
-    /** @var array<int, array{name: string, address: string}> */
+    /** @var list<array{name: string, address: string}> */
     public array $witnesses = [];
 
-    /** @var array<int, array{person_name: string, id_type: string, id_number: string}> */
-    public array $competentEvidence = [['person_name' => '', 'id_type' => '', 'id_number' => '']];
+    /** @var list<array{person_name: string, id_type: string, id_number: string, verification_id: int|null, id_image_path: string|null}> */
+    public array $competentEvidence = [];
+
+    public ?int $previewEntryNumber = null;
+
+    public ?string $signatureImagePath = null;
+
+    public ?int $credentialId = null;
+
+    public int $prefilledSignerCount = 0;
+
+    public int $verifiedIdentityCount = 0;
+
+    /** @var list<array{document_signer_id: int, document_id: int, signature_id: int, name: string, signature_path: string|null}> */
+    public array $signerSignatures = [];
+
+    public bool $orEditable = false;
+
+    public bool $feesEditable = true;
 
     public function mount(NotaryRequest $notaryRequest): void
     {
@@ -34,80 +52,47 @@ new #[Layout('components.layouts.app')] class extends Component {
         abort_unless($user !== null && $user->role === UserRole::Notary, 403);
         abort_unless((int) $notaryRequest->notary_user_id === (int) $user->id, 403);
 
+        $workflow = app(NotaryRequestWorkflowService::class);
+
         abort_unless(
-            app(NotaryRequestWorkflowService::class)->hasAttorneySignedAllDocuments($notaryRequest),
+            $workflow->hasAttorneySignedAllDocuments($notaryRequest),
             403,
-            __('Attorney registry becomes available after the attorney signs the document.')
+            __('Notarial register entry becomes available after the attorney signs the document.')
         );
 
-        $this->notaryRequest = $notaryRequest->loadMissing(['attorneyNotarialRegistry', 'signers', 'identityVerifications']);
+        if (! $workflow->canAccessAttorneyRegistry($notaryRequest)) {
+            session()->flash('status', __('Complete client payment on the Settlement tab before opening the notarial register entry.'));
+            $this->redirect(route('notary.requests.show', ['notaryRequest' => $notaryRequest, 'tab' => 'closing']), navigate: true);
 
-        $existing = $this->notaryRequest->attorneyNotarialRegistry;
-        if ($existing instanceof AttorneyNotarialRegistry) {
-            $this->entryNo = (string) ($existing->entry_no ?? '');
-            $this->title = (string) $existing->title;
-            $this->description = (string) ($existing->description ?? '');
-            $this->parties = is_array($existing->parties) && $existing->parties !== [] ? $existing->parties : $this->parties;
-            $this->witnesses = is_array($existing->witnesses) ? $existing->witnesses : [];
-            $this->competentEvidence = is_array($existing->competent_evidence) && $existing->competent_evidence !== [] ? $existing->competent_evidence : $this->competentEvidence;
-            $this->notarialActType = (string) $existing->notarial_act_type;
-            $this->fees = number_format((float) $existing->fees, 2, '.', '');
-            $this->officialReceiptNo = (string) ($existing->official_receipt_no ?? '');
-        } else {
-            $this->title = $notaryRequest->title;
-            $this->notarialActType = $notaryRequest->request_type ?? 'acknowledgment';
-
-            if ($notaryRequest->signers->isNotEmpty()) {
-                $this->parties = $notaryRequest->signers
-                    ->map(fn ($signer): array => [
-                        'name' => (string) $signer->full_name,
-                        'address' => (string) ($signer->address ?? ''),
-                    ])
-                    ->values()
-                    ->all();
-            }
-
-            $approvedVerifications = $notaryRequest->identityVerifications
-                ->where('verification_status', \App\Enums\NotaryIdentityVerificationStatus::Verified);
-
-            if ($approvedVerifications->isNotEmpty()) {
-                $this->competentEvidence = $approvedVerifications
-                    ->map(function ($verification): array {
-                        $signer = $verification->signer;
-
-                        return [
-                            'person_name' => $signer?->full_name ?? (string) ($verification->id_type ?? __('Signer')),
-                            'id_type' => (string) ($verification->id_type ?? ''),
-                            'id_number' => (string) ($verification->id_number ?? ''),
-                        ];
-                    })
-                    ->filter(fn (array $row): bool => trim($row['person_name']) !== '')
-                    ->values()
-                    ->all();
-            } elseif ($notaryRequest->signers->isNotEmpty()) {
-                $this->competentEvidence = $notaryRequest->signers
-                    ->map(fn ($signer): array => [
-                        'person_name' => (string) $signer->full_name,
-                        'id_type' => '',
-                        'id_number' => '',
-                    ])
-                    ->values()
-                    ->all();
-            }
+            return;
         }
-    }
 
-    public function addParty(): void
-    {
-        $this->parties[] = ['name' => '', 'address' => ''];
-    }
+        $this->notaryRequest = $notaryRequest;
 
-    public function removeParty(int $index): void
-    {
-        if (count($this->parties) > 1) {
-            unset($this->parties[$index]);
-            $this->parties = array_values($this->parties);
-        }
+        $state = app(AttorneyNotarialRegistryService::class)->draftStateForRequest($notaryRequest, $user);
+
+        $this->title = $state['title'];
+        $this->notarialActType = $state['notarial_act_type'];
+        $this->fees = $state['fees'];
+        $this->officialReceiptNo = $state['official_receipt_no'];
+        $this->parties = $state['parties'];
+        $this->witnesses = $state['witnesses'];
+        $this->competentEvidence = $state['competent_evidence'];
+        $this->previewEntryNumber = $state['preview_entry_number'];
+        $this->signatureImagePath = $state['signature_image_path'];
+        $this->prefilledSignerCount = $state['prefilled_signer_count'];
+        $this->verifiedIdentityCount = $state['verified_identity_count'];
+        $this->signerSignatures = $state['signer_signatures'];
+        $this->orEditable = $state['or_editable'];
+        $this->feesEditable = $state['fees_editable'];
+
+        $credential = NotaryCredential::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->latest()
+            ->first();
+
+        $this->credentialId = $credential?->id;
     }
 
     public function addWitness(): void
@@ -121,28 +106,21 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->witnesses = array_values($this->witnesses);
     }
 
-    public function addEvidence(): void
-    {
-        $this->competentEvidence[] = ['person_name' => '', 'id_type' => '', 'id_number' => ''];
-    }
-
-    public function removeEvidence(int $index): void
-    {
-        if (count($this->competentEvidence) > 1) {
-            unset($this->competentEvidence[$index]);
-            $this->competentEvidence = array_values($this->competentEvidence);
-        }
-    }
-
     public function save(): void
     {
         $user = Auth::user();
         abort_unless($user !== null && $user->role === UserRole::Notary, 403);
 
+        $registryService = app(AttorneyNotarialRegistryService::class);
+        $requiresOr = $registryService->paymentRequired($this->notaryRequest)
+            && $registryService->hasSettledPayment($this->notaryRequest)
+            && (float) ($this->notaryRequest->attorneyNotarialRegistry?->fees ?? $this->fees) > 0;
+
         $validated = $this->validate([
-            'entryNo' => ['nullable', 'string', 'max:64'],
             'title' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string', 'max:1000'],
+            'notarialActType' => ['required', 'in:acknowledgment,jurat,affidavit,oath,other'],
+            'fees' => ['nullable', 'numeric', 'min:0'],
+            'officialReceiptNo' => [$requiresOr ? 'required' : 'nullable', 'string', 'max:100'],
             'parties' => ['required', 'array', 'min:1'],
             'parties.*.name' => ['required', 'string', 'max:255'],
             'parties.*.address' => ['required', 'string', 'max:500'],
@@ -153,139 +131,107 @@ new #[Layout('components.layouts.app')] class extends Component {
             'competentEvidence.*.person_name' => ['required', 'string', 'max:255'],
             'competentEvidence.*.id_type' => ['required', 'string', 'max:100'],
             'competentEvidence.*.id_number' => ['required', 'string', 'max:100'],
-            'notarialActType' => ['required', 'in:acknowledgment,jurat,affidavit,oath,other'],
-            'fees' => ['nullable', 'numeric', 'min:0'],
-            'officialReceiptNo' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $credential = NotaryCredential::query()
-            ->where('user_id', $user->id)
-            ->where('status', 'active')
-            ->latest()
-            ->first();
+        $fees = $this->feesEditable
+            ? (float) ($validated['fees'] ?? 0)
+            : (float) ($this->notaryRequest->attorneyNotarialRegistry?->fees ?? 0);
 
-        AttorneyNotarialRegistry::query()->updateOrCreate(
-            ['notary_request_id' => $this->notaryRequest->id],
-            [
-                'entry_no' => trim((string) $validated['entryNo']) !== '' ? trim((string) $validated['entryNo']) : null,
-                'title' => trim($validated['title']),
-                'description' => trim((string) ($validated['description'] ?? '')) !== '' ? trim((string) $validated['description']) : null,
-                'parties' => $validated['parties'],
-                'witnesses' => collect($validated['witnesses'] ?? [])
-                    ->filter(fn (array $w): bool => trim((string) ($w['name'] ?? '')) !== '' || trim((string) ($w['address'] ?? '')) !== '')
-                    ->values()
-                    ->all(),
-                'competent_evidence' => $validated['competentEvidence'],
-                'notarial_act_type' => $validated['notarialActType'],
-                'fees' => (float) ($validated['fees'] ?? 0),
-                'official_receipt_no' => trim((string) ($validated['officialReceiptNo'] ?? '')) !== '' ? trim((string) $validated['officialReceiptNo']) : null,
-                'notary_signature_path' => $credential?->signature_image_path,
-            ],
-        );
+        $registryService->saveDraft($this->notaryRequest, $user, [
+            'title' => $validated['title'],
+            'notarial_act_type' => $validated['notarialActType'],
+            'fees' => $fees,
+            'official_receipt_no' => $this->orEditable ? ($validated['officialReceiptNo'] ?? null) : null,
+            'parties' => $validated['parties'],
+            'witnesses' => $validated['witnesses'] ?? [],
+            'competent_evidence' => $validated['competentEvidence'],
+        ]);
 
-        session()->flash('status', __('Fee and party details saved. Continue to payment if a fee applies.'));
-        $this->redirect(route('notary.requests.show', $this->notaryRequest), navigate: true);
+        session()->flash('status', __('Register entry saved. Upload your seal and create the official book entry when ready.'));
+        $this->redirect(route('notary.requests.show', ['notaryRequest' => $this->notaryRequest, 'tab' => 'closing']), navigate: true);
+    }
+
+    public function with(): array
+    {
+        $registryService = app(AttorneyNotarialRegistryService::class);
+
+        return [
+            'notarialActTypes' => $registryService->notarialActTypes(),
+            'registryService' => $registryService,
+        ];
     }
 }; ?>
 
-<div class="mx-auto flex w-full max-w-5xl flex-col gap-6">
-    <header>
-        <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">{{ __('Attorney notarial registry') }}</h1>
-        <p class="mt-2 text-zinc-600 dark:text-zinc-400">
-            {{ __('Prepare registry details before payment and final register entry.') }}
-        </p>
+<div class="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div class="min-w-0">
+            <flux:button
+                variant="ghost"
+                size="sm"
+                :href="route('notary.requests.show', ['notaryRequest' => $notaryRequest, 'tab' => 'closing'])"
+                wire:navigate
+                icon="arrow-left"
+                class="mb-3"
+            >
+                {{ __('Back to case') }}
+            </flux:button>
+            <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
+                {{ __('Notarial Register Entry (9 Required Fields)') }}
+            </h1>
+            <p class="mt-2 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
+                {{ __('Case: :title — complete the register row after payment. Enter the O.R. number and confirm captured signer signatures.', ['title' => $notaryRequest->title]) }}
+            </p>
+            @if ($prefilledSignerCount > 0 || $verifiedIdentityCount > 0)
+                <p class="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
+                    {{ __('Prefilled from :signers signer(s) and :verified verified ID record(s).', [
+                        'signers' => $prefilledSignerCount,
+                        'verified' => $verifiedIdentityCount,
+                    ]) }}
+                </p>
+            @endif
+        </div>
     </header>
 
-    <div class="ui-panel p-6 sm:p-8">
-        <form wire:submit="save" class="space-y-8">
-            <div class="grid gap-4 sm:grid-cols-2">
-                <flux:field>
-                    <flux:label>{{ __('Entry no.') }}</flux:label>
-                    <flux:input wire:model="entryNo" type="text" placeholder="{{ __('Optional draft reference') }}" />
-                </flux:field>
-                <flux:field>
-                    <flux:label>{{ __('Type of notarial act') }}</flux:label>
-                    <select wire:model="notarialActType" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-                        @foreach (['acknowledgment', 'jurat', 'affidavit', 'oath', 'other'] as $type)
-                            <option value="{{ $type }}">{{ ucfirst($type) }}</option>
-                        @endforeach
-                    </select>
-                </flux:field>
-            </div>
+    @if (session('status'))
+        <flux:callout variant="success" icon="check-circle">
+            <flux:callout.text>{{ session('status') }}</flux:callout.text>
+        </flux:callout>
+    @endif
 
-            <div class="grid gap-4 sm:grid-cols-2">
-                <flux:field>
-                    <flux:label>{{ __('Title') }}</flux:label>
-                    <flux:input wire:model="title" type="text" required />
-                    <flux:error name="title" />
-                </flux:field>
-                <flux:field>
-                    <flux:label>{{ __('Description') }}</flux:label>
-                    <flux:input wire:model="description" type="text" />
-                </flux:field>
-            </div>
+    <form wire:submit="save" class="flex flex-col gap-0">
+        @include('livewire.notary.partials.notarial-register-entry-table', [
+            'readOnly' => false,
+            'notaryRequest' => $notaryRequest,
+            'title' => $title,
+            'notarialActType' => $notarialActType,
+            'fees' => $fees,
+            'officialReceiptNo' => $officialReceiptNo,
+            'parties' => $parties,
+            'witnesses' => $witnesses,
+            'competentEvidence' => $competentEvidence,
+            'previewEntryNumber' => $previewEntryNumber,
+            'signatureImagePath' => $signatureImagePath,
+            'credentialId' => $credentialId,
+            'registryService' => $registryService,
+            'notarialActTypes' => $notarialActTypes,
+            'signerSignatures' => $signerSignatures,
+            'orEditable' => $orEditable,
+            'feesEditable' => $feesEditable,
+        ])
 
-            <div class="space-y-3">
-                <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Name and address of parties') }}</h3>
-                @foreach ($parties as $index => $party)
-                    <div class="flex gap-3">
-                        <flux:input class="flex-1" wire:model="parties.{{ $index }}.name" type="text" placeholder="{{ __('Full name') }}" required />
-                        <flux:input class="flex-1" wire:model="parties.{{ $index }}.address" type="text" placeholder="{{ __('Complete address') }}" required />
-                        @if (count($parties) > 1)
-                            <flux:button variant="ghost" type="button" wire:click="removeParty({{ $index }})">✕</flux:button>
-                        @endif
-                    </div>
-                @endforeach
-                <flux:button variant="outline" size="sm" type="button" wire:click="addParty">{{ __('+ Add party') }}</flux:button>
+        <div class="ui-panel flex flex-col gap-4 border-t border-zinc-200 bg-zinc-50 px-4 py-4 dark:border-zinc-700 dark:bg-zinc-900/50 sm:flex-row sm:items-center sm:justify-between">
+            <div class="text-sm text-zinc-600 dark:text-zinc-400">
+                {{ __('Total entries for this case: :count', ['count' => 1]) }}
             </div>
-
-            <div class="space-y-3">
-                <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Name and address of witness (if any)') }}</h3>
-                @foreach ($witnesses as $index => $witness)
-                    <div class="flex gap-3">
-                        <flux:input class="flex-1" wire:model="witnesses.{{ $index }}.name" type="text" placeholder="{{ __('Full name') }}" />
-                        <flux:input class="flex-1" wire:model="witnesses.{{ $index }}.address" type="text" placeholder="{{ __('Complete address') }}" />
-                        <flux:button variant="ghost" type="button" wire:click="removeWitness({{ $index }})">✕</flux:button>
-                    </div>
-                @endforeach
-                <flux:button variant="outline" size="sm" type="button" wire:click="addWitness">{{ __('+ Add witness') }}</flux:button>
+            <div class="flex flex-wrap items-center gap-3">
+                <flux:button variant="ghost" :href="route('notary.requests.show', ['notaryRequest' => $notaryRequest, 'tab' => 'closing'])" wire:navigate type="button">
+                    {{ __('Cancel') }}
+                </flux:button>
+                <flux:button variant="primary" type="submit" wire:loading.attr="disabled" wire:target="save">
+                    <span wire:loading.remove wire:target="save">{{ __('Save entry') }}</span>
+                    <span wire:loading wire:target="save">{{ __('Saving…') }}</span>
+                </flux:button>
             </div>
-
-            <div class="space-y-3">
-                <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Competent evidence of identity') }}</h3>
-                @foreach ($competentEvidence as $index => $evidence)
-                    <div class="flex gap-3">
-                        <flux:input class="flex-1" wire:model="competentEvidence.{{ $index }}.person_name" type="text" placeholder="{{ __('Person name') }}" required />
-                        <flux:input class="w-44" wire:model="competentEvidence.{{ $index }}.id_type" type="text" placeholder="{{ __('ID type') }}" required />
-                        <flux:input class="flex-1" wire:model="competentEvidence.{{ $index }}.id_number" type="text" placeholder="{{ __('ID number') }}" required />
-                        @if (count($competentEvidence) > 1)
-                            <flux:button variant="ghost" type="button" wire:click="removeEvidence({{ $index }})">✕</flux:button>
-                        @endif
-                    </div>
-                @endforeach
-                <flux:button variant="outline" size="sm" type="button" wire:click="addEvidence">{{ __('+ Add evidence') }}</flux:button>
-            </div>
-
-            <div class="grid gap-4 sm:grid-cols-2">
-                <flux:field>
-                    <flux:label>{{ __('Fees (PHP)') }}</flux:label>
-                    <flux:input wire:model="fees" type="number" step="0.01" min="0" placeholder="500.00" />
-                    <flux:error name="fees" />
-                </flux:field>
-                <flux:field>
-                    <flux:label>{{ __('O.R. no.') }}</flux:label>
-                    <flux:input wire:model="officialReceiptNo" type="text" />
-                </flux:field>
-            </div>
-
-            <div class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100">
-                {{ __('Date and time of notarization are recorded automatically when you create the official register entry.') }}
-            </div>
-
-            <div class="flex items-center gap-3">
-                <flux:button variant="primary" type="submit">{{ __('Save attorney registry') }}</flux:button>
-                <flux:button variant="ghost" :href="route('notary.requests.show', $notaryRequest)" wire:navigate type="button">{{ __('Back') }}</flux:button>
-            </div>
-        </form>
-    </div>
+        </div>
+    </form>
 </div>

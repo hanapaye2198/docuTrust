@@ -151,7 +151,7 @@ class IdentityVerificationService
         $request = $record->notaryRequest()->firstOrFail();
 
         if (! $this->identityWorkflowIsMutable($request)) {
-            throw new RuntimeException(__('This request can no longer accept identity review updates.'));
+            throw new RuntimeException(__('This notarization can no longer accept identity review updates.'));
         }
 
         $record->forceFill([

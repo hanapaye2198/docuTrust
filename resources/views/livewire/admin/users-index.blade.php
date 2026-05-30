@@ -327,7 +327,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 <p class="text-sm text-zinc-600 dark:text-zinc-300">{{ $deleteImpact['warning_message'] }}</p>
                 <ul class="list-inside list-disc text-sm text-zinc-600 dark:text-zinc-300">
                     <li>{{ __(':count documents (:completed completed)', ['count' => $deleteImpact['documents_total'], 'completed' => $deleteImpact['documents_completed']]) }}</li>
-                    <li>{{ __(':count notary requests', ['count' => $deleteImpact['notary_requests_as_requester']]) }}</li>
+                    <li>{{ __(':count notarizations', ['count' => $deleteImpact['notary_requests_as_requester']]) }}</li>
                     <li>{{ __(':count templates, :contacts contacts', ['count' => $deleteImpact['templates_count'], 'contacts' => $deleteImpact['contacts_count']]) }}</li>
                 </ul>
                 @if (! $deleteImpact['can_hard_delete'])

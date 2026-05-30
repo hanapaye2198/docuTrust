@@ -24,21 +24,12 @@
                     wire:navigate
                     icon="arrow-left"
                 >
-                    {{ __('Requests') }}
+                    {{ __('Notarizations') }}
                 </flux:button>
             </div>
             <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-3xl">{{ $notaryRequest->title }}</h1>
             <div class="flex flex-wrap items-center gap-2">
-                @php
-                    $statusFluxColor = match ($notaryRequest->status->value) {
-                        'notarized' => 'emerald',
-                        'rejected', 'failed' => 'red',
-                        'submitted', 'session_scheduled', 'session_in_progress' => 'sky',
-                        'identity_verified', 'location_verified', 'attorney_approved', 'digitalized' => 'teal',
-                        default => 'zinc',
-                    };
-                @endphp
-                <flux:badge size="sm" :color="$statusFluxColor" class="capitalize" data-notary-status-badge="{{ $notaryRequest->status->value }}">{{ str_replace('_', ' ', $notaryRequest->status->value) }}</flux:badge>
+                @include('livewire.notary-requests.show.partials.status-badge')
                 <flux:badge size="sm" color="zinc">{{ str_replace('_', ' ', $notaryRequest->request_type) }}</flux:badge>
             </div>
             <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -57,7 +48,7 @@
         </div>
         <div class="flex w-full shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:max-w-xl lg:justify-end">
             @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::Draft)
-                <flux:button variant="primary" wire:click="submitRequest">{{ __('Submit request') }}</flux:button>
+                <flux:button variant="primary" wire:click="submitRequest">{{ __('Submit notarization') }}</flux:button>
             @endif
             @if ($canManageLifecycle && $notaryRequest->status === NotaryRequestStatus::Digitalized)
                 @if (Auth::user()?->role->value === 'notary_admin')
@@ -93,7 +84,7 @@
                 @endif
             @endif
             @if ($canManageLifecycle && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
-                <flux:button variant="outline" wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notary request? This cannot be undone.') }}">{{ __('Cancel request') }}</flux:button>
+                <flux:button variant="outline" wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notarization? This cannot be undone.') }}">{{ __('Cancel notarization') }}</flux:button>
             @endif
             {{-- Client/Admin actions when notarized --}}
             @if ($notaryRequest->status === NotaryRequestStatus::Notarized && !$isNotary)
@@ -121,6 +112,10 @@
         @endif
     </div>
 
+    @if (! $isNotary)
+        @include('livewire.notary-requests.show.partials.next-step-card', ['portalAction' => $this->portalCaseAction])
+    @endif
+
     <div class="grid items-start gap-6 lg:grid-cols-12">
         <div class="flex min-w-0 flex-col gap-6 lg:col-span-9 xl:col-span-10">
             @if ($paymentRequired && ! $hasSettledPayment)
@@ -139,176 +134,58 @@
                 </div>
             @endif
 
-            <section id="section-workflow" class="ui-panel order-1 scroll-mt-6 p-6 sm:p-8">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <flux:heading size="lg" class="!mb-0">{{ __('Workflow progress') }}</flux:heading>
-                    <flux:badge size="sm" color="zinc">{{ trans_choice(':count stage|:count stages', count($workflowSteps), ['count' => count($workflowSteps)]) }}</flux:badge>
-                </div>
-                <div class="mt-5 flex gap-2 overflow-x-auto pb-2">
-                    @foreach ($workflowSteps as $index => $step)
-                        @php
-                            $stepStyles = match ($step['state']) {
-                                'complete' => 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30',
-                                'current' => 'border-sky-200 bg-sky-50 dark:border-sky-900/40 dark:bg-sky-950/30',
-                                default => 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900',
-                            };
-                            $badgeStyles = match ($step['state']) {
-                                'complete' => 'bg-emerald-600 text-white dark:bg-emerald-500',
-                                'current' => 'bg-sky-600 text-white dark:bg-sky-500',
-                                default => 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-100',
-                            };
-                            $stateLabel = match ($step['state']) {
-                                'complete' => __('Complete'),
-                                'current' => __('Current'),
-                                default => __('Upcoming'),
-                            };
-                        @endphp
-                        <div class="flex min-w-[8.5rem] flex-1 flex-col rounded-xl border p-3.5 {{ $stepStyles }}" title="{{ $step['description'] }}">
-                            <div class="flex items-center justify-between gap-1.5">
-                                <span class="inline-flex size-6 items-center justify-center rounded-full text-[10px] font-bold {{ $badgeStyles }}">{{ $index + 1 }}</span>
-                                <span class="text-[9px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ $stateLabel }}</span>
-                            </div>
-                            <div class="mt-2 text-xs font-semibold leading-snug text-zinc-900 dark:text-zinc-100">{{ $step['label'] }}</div>
-                            <p class="mt-1 line-clamp-2 text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{{ $step['description'] }}</p>
-                        </div>
-                    @endforeach
-                </div>
-
-                @if ($this->currentWorkflowStep && $notaryRequest->status !== NotaryRequestStatus::Notarized)
-                    <flux:callout variant="info" class="mt-5" icon="information-circle">
-                        <flux:callout.heading>{{ __('Focus on this step') }}</flux:callout.heading>
-                        <flux:callout.text>{{ $this->currentWorkflowStep['description'] }}</flux:callout.text>
-                    </flux:callout>
-                @endif
-            </section>
-
-            {{-- Notarized Document & Certificate (shown after finalization) --}}
             @if ($notaryRequest->status === NotaryRequestStatus::Notarized)
-                <section id="section-completed" class="order-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-6 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                    <div class="flex items-center gap-3">
-                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
-                            <svg class="h-5 w-5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
-                        </div>
-                        <div>
-                            <h2 class="text-base font-bold text-emerald-900 dark:text-emerald-100">{{ __('Notarized Document & Certificate') }}</h2>
-                            <p class="text-sm text-emerald-700 dark:text-emerald-300">{{ __('Notarization completed on :date', ['date' => $notaryRequest->completed_at?->timezone('Asia/Manila')->format('F j, Y g:i A') ?? '-']) }}</p>
-                        </div>
+                @include('livewire.notary-requests.show.partials.case-completion-panel', ['variant' => $isNotary ? 'full' : 'compact'])
+            @elseif (! $isNotary)
+                <section id="section-workflow" class="ui-panel order-1 scroll-mt-6 p-6 sm:p-8">
+                    <flux:heading size="lg" class="!mb-2">{{ __('Your progress') }}</flux:heading>
+                    <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                        {{ __('Track video verification, payment, and closing steps for this notarization.') }}
+                    </p>
+                    @include('livewire.notary-requests.show.partials.client-portal-timeline')
+                </section>
+            @else
+                <section id="section-workflow" class="ui-panel order-1 scroll-mt-6 p-6 sm:p-8">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <flux:heading size="lg" class="!mb-0">{{ __('Workflow progress') }}</flux:heading>
+                        <flux:badge size="sm" color="zinc">{{ trans_choice(':count stage|:count stages', count($workflowSteps), ['count' => count($workflowSteps)]) }}</flux:badge>
                     </div>
-
-                    {{-- Generated Artifacts --}}
-                    <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {{-- Notarized PDF --}}
-                        @foreach ($requestDocuments as $document)
-                            <div class="rounded-xl border border-emerald-200 bg-white p-4 dark:border-emerald-900/30 dark:bg-zinc-900">
-                                <div class="flex items-center gap-2">
-                                    <svg class="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
-                                    <span class="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{{ __('Notarized PDF') }}</span>
-                                </div>
-                                <div class="mt-2 truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $document->title }}</div>
-                                <div class="mt-3 flex gap-2">
-                                    <a href="{{ route('documents.download', $document) }}" class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-800 dark:bg-zinc-800 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
-                                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                                        {{ __('Download') }}
-                                    </a>
-                                </div>
-                            </div>
-                        @endforeach
-
-                        {{-- Notarial Certificate --}}
-                        @foreach ($notaryRequest->registerEntries as $entry)
-                            <div class="rounded-xl border border-emerald-200 bg-white p-4 dark:border-emerald-900/30 dark:bg-zinc-900">
-                                <div class="flex items-center gap-2">
-                                    <svg class="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" /></svg>
-                                    <span class="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{{ __('Notarial Certificate') }}</span>
-                                </div>
-                                <div class="mt-2 truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $entry->document_title }}</div>
-                                <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Entry') }} #{{ str_pad($entry->entry_number, 3, '0', STR_PAD_LEFT) }} · {{ ucfirst(str_replace('_', ' ', $entry->notarial_act_type)) }}</div>
-                                @if ($entry->certificate_path)
-                                    <div class="mt-3">
-                                        <a href="{{ route('documents.certificate.download', $entry->document_id ?? $requestDocuments->first()?->id) }}" class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-800 dark:bg-zinc-800 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
-                                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                                            {{ __('Download') }}
-                                        </a>
-                                    </div>
-                                @endif
-                            </div>
-
-                            {{-- QR Verification --}}
-                            @if ($entry->qr_code_path || $entry->qr_verification_token)
-                                <div class="rounded-xl border border-emerald-200 bg-white p-4 dark:border-emerald-900/30 dark:bg-zinc-900">
-                                    <div class="flex items-center gap-2">
-                                        <svg class="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" /></svg>
-                                        <span class="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{{ __('QR Verification') }}</span>
-                                    </div>
-                                    <div class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Scan to verify authenticity') }}</div>
-                                    @if ($entry->qr_verification_token)
-                                        <div class="mt-2">
-                                            <a href="{{ route('notary.verify', ['token' => $entry->qr_verification_token]) }}" target="_blank" class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-800 dark:bg-zinc-800 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
-                                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
-                                                {{ __('Verify') }}
-                                            </a>
-                                        </div>
-                                    @endif
-                                </div>
-                            @endif
-                        @endforeach
-                    </div>
-
-                    {{-- Audit & Blockchain --}}
-                    <div class="mt-5 grid gap-3 sm:grid-cols-2">
-                        {{-- Audit Logs --}}
-                        <div class="rounded-xl border border-emerald-200 bg-white p-4 dark:border-emerald-900/30 dark:bg-zinc-900">
-                            <div class="flex items-center gap-2">
-                                <svg class="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" /></svg>
-                                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{{ __('Audit Logs') }}</span>
-                            </div>
-                            <div class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ trans_choice(':count journal entry|:count journal entries', $journalEntries->count(), ['count' => $journalEntries->count()]) }}</div>
-                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-500">{{ __('Complete notarization trail recorded') }}</div>
-                        </div>
-
-                        {{-- Blockchain Reference --}}
-                        <div class="rounded-xl border border-emerald-200 bg-white p-4 dark:border-emerald-900/30 dark:bg-zinc-900">
-                            <div class="flex items-center gap-2">
-                                <svg class="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
-                                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{{ __('Blockchain Reference') }}</span>
-                            </div>
+                    <div class="mt-5 flex gap-2 overflow-x-auto pb-2">
+                        @foreach ($workflowSteps as $index => $step)
                             @php
-                                $anchoredDocs = $requestDocuments->filter(fn ($doc) => $doc->documentHash?->transaction_id);
-                                $totalDocs = $requestDocuments->count();
+                                $stepStyles = match ($step['state']) {
+                                    'complete' => 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30',
+                                    'current' => 'border-sky-200 bg-sky-50 dark:border-sky-900/40 dark:bg-sky-950/30',
+                                    default => 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900',
+                                };
+                                $badgeStyles = match ($step['state']) {
+                                    'complete' => 'bg-emerald-600 text-white dark:bg-emerald-500',
+                                    'current' => 'bg-sky-600 text-white dark:bg-sky-500',
+                                    default => 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-100',
+                                };
+                                $stateLabel = match ($step['state']) {
+                                    'complete' => __('Complete'),
+                                    'current' => __('Current'),
+                                    default => __('Upcoming'),
+                                };
                             @endphp
-                            <div class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                {{ trans_choice(':count of :total document anchored|:count of :total documents anchored', $anchoredDocs->count(), ['count' => $anchoredDocs->count(), 'total' => $totalDocs]) }}
-                            </div>
-                            @if ($anchoredDocs->isNotEmpty())
-                                <div class="mt-2 space-y-1">
-                                    @foreach ($anchoredDocs as $doc)
-                                        <div class="truncate text-xs font-mono text-zinc-500 dark:text-zinc-400" title="{{ $doc->documentHash->transaction_id }}">
-                                            {{ __('TX:') }} {{ \Illuminate\Support\Str::limit($doc->documentHash->transaction_id, 24) }}
-                                        </div>
-                                    @endforeach
+                            <div class="flex min-w-[8.5rem] flex-1 flex-col rounded-xl border p-3.5 {{ $stepStyles }}" title="{{ $step['description'] }}">
+                                <div class="flex items-center justify-between gap-1.5">
+                                    <span class="inline-flex size-6 items-center justify-center rounded-full text-[10px] font-bold {{ $badgeStyles }}">{{ $index + 1 }}</span>
+                                    <span class="text-[9px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ $stateLabel }}</span>
                                 </div>
-                            @else
-                                <div class="mt-1 text-xs text-amber-600 dark:text-amber-400">{{ __('Blockchain service was unavailable — can be retried.') }}</div>
-                            @endif
-                        </div>
+                                <div class="mt-2 text-xs font-semibold leading-snug text-zinc-900 dark:text-zinc-100">{{ $step['label'] }}</div>
+                                <p class="mt-1 line-clamp-2 text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{{ $step['description'] }}</p>
+                            </div>
+                        @endforeach
                     </div>
 
-                    {{-- Ready for actions --}}
-                    <div class="mt-5 flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-4 dark:border-emerald-800">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{{ __('Ready for:') }}</span>
-                        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                            {{ __('Download') }}
-                        </span>
-                        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
-                            {{ __('Verification') }}
-                        </span>
-                        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>
-                            {{ __('Archive') }}
-                        </span>
-                    </div>
+                    @if ($this->currentWorkflowStep && $notaryRequest->status !== NotaryRequestStatus::Notarized)
+                        <flux:callout variant="info" class="mt-5" icon="information-circle">
+                            <flux:callout.heading>{{ __('Focus on this step') }}</flux:callout.heading>
+                            <flux:callout.text>{{ $this->currentWorkflowStep['description'] }}</flux:callout.text>
+                        </flux:callout>
+                    @endif
                 </section>
             @endif
 
@@ -343,7 +220,10 @@
 
             <section id="section-session" class="ui-panel order-5 scroll-mt-6 p-6 sm:p-8">
                 <flux:heading size="lg" class="!mb-4">{{ __('Video session') }}</flux:heading>
-                @if ($canScheduleSession)
+
+                @if ($usesPerSignerVideo ?? false)
+                    @include('livewire.notary-requests.show.partials.legacy-session-signer-portal')
+                @elseif ($canScheduleSession)
                     <div class="mt-4 space-y-4">
                         <flux:field>
                             <flux:label>{{ __('Scheduled for') }}</flux:label>
@@ -368,14 +248,10 @@
                     </div>
                 @else
                     <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                        @if (!$isNotary)
-                            {{ __('Only the assigned notary can schedule video sessions.') }}
-                        @else
-                            {{ __('Video session scheduling becomes available after all signers have completed signing.') }}
-                        @endif
+                        {{ __('Video session scheduling becomes available after all signers have completed signing.') }}
                     </div>
                 @endif
-                @if ($recentSessions->isNotEmpty())
+                @if (! ($usesPerSignerVideo ?? false) && $recentSessions->isNotEmpty())
                     <div class="mt-5 space-y-3 border-t border-zinc-100 pt-5 dark:border-zinc-800">
                         <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Sessions') }}</h3>
                         @foreach ($recentSessions as $session)
@@ -425,26 +301,10 @@
 
                                     {{-- Attorney checklist (NOTARY ROLE ONLY) --}}
                                     @if ($isNotary)
-                                        <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
-                                            <div class="flex items-center gap-2">
-                                                <svg class="h-4 w-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
-                                                <span class="text-xs font-semibold text-amber-800 dark:text-amber-300">{{ __('Attorney verification checklist') }}</span>
-                                            </div>
-                                            <p class="mt-1 text-[11px] text-amber-700 dark:text-amber-400">{{ __('Complete all items before ending the session. Only the assigned notary can perform this step.') }}</p>
-                                            <div class="mt-3 space-y-2">
-                                                @foreach (config('docutrust.notary.verification_checklist', []) as $key)
-                                                    <label class="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-amber-100/50 dark:hover:bg-amber-950/30">
-                                                        <input type="checkbox" class="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 dark:border-amber-700" wire:model.live="sessionChecklist.{{ $key }}" />
-                                                        <span class="text-xs text-zinc-700 dark:text-zinc-300">{{ __(ucfirst(str_replace('_', ' ', $key))) }}</span>
-                                                    </label>
-                                                @endforeach
-                                            </div>
-                                            <flux:error name="sessionChecklist" />
-                                            <div class="mt-4">
-                                                <flux:button variant="primary" size="sm" type="button" wire:click="completeSession({{ $session->id }})">{{ __('Complete session') }}</flux:button>
-                                                <flux:error name="completeSession" />
-                                            </div>
-                                        </div>
+                                        @include('livewire.notary-requests.show.partials.video-session-checklist', [
+                                            'sessionId' => $session->id,
+                                            'class' => 'mt-4',
+                                        ])
                                     @else
                                         {{-- Non-notary sees a waiting message --}}
                                         <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-400">
@@ -640,7 +500,7 @@
                 <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
                     @if (! $isNotary)
                     <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Philippines location check') }}</h3>
-                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Uses your browser coordinates together with server-side IP intelligence. Failed checks flag the request automatically.') }}</p>
+                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Uses your browser coordinates together with server-side IP intelligence. Failed checks flag the case automatically.') }}</p>
                     <div class="mt-3 grid gap-3 sm:grid-cols-2">
                         <flux:field>
                             <flux:label>{{ __('Latitude (optional)') }}</flux:label>
@@ -653,7 +513,7 @@
                         <flux:field class="sm:col-span-2">
                             <flux:label>{{ __('Signer (optional)') }}</flux:label>
                             <select wire:model="geoSignerId" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                                <option value="">{{ __('Entire request') }}</option>
+                                <option value="">{{ __('Entire case') }}</option>
                                 @foreach ($requestSigners as $signer)
                                     <option value="{{ $signer->id }}">{{ $signer->full_name }}</option>
                                 @endforeach
@@ -884,7 +744,7 @@
                 {{-- Upload Document Form (Attorney / Admin) --}}
                 @if (($isNotary || $canManageLifecycle) && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
                     <div class="mt-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
-                        <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload a new document for this request') }}</div>
+                        <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload a new document for this case') }}</div>
                         <div class="mt-3 space-y-3">
                             <flux:field>
                                 <flux:label>{{ __('Document title') }} <span class="text-rose-500">*</span></flux:label>
@@ -913,7 +773,7 @@
                     </div>
                 @else
                     <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                        <div class="font-medium">{{ __('This request is not ready to finalize yet.') }}</div>
+                        <div class="font-medium">{{ __('This notarization is not ready to finalize yet.') }}</div>
                         <ul class="mt-2 list-disc pl-5">
                             @foreach ($finalizationReadiness['issues'] as $issue)
                                 <li>{{ $issue }}</li>
@@ -946,7 +806,7 @@
             <nav class="ui-panel p-5 sm:p-6">
                 <flux:heading size="lg" class="mb-3">{{ __('On this page') }}</flux:heading>
                 <ul class="space-y-1.5 text-sm">
-                    <li><a href="#section-workflow" class="font-medium text-zinc-600 hover:text-teal-700 dark:text-zinc-400 dark:hover:text-teal-400">{{ __('Workflow') }}</a></li>
+                    <li><a href="#section-workflow" class="font-medium text-zinc-600 hover:text-teal-700 dark:text-zinc-400 dark:hover:text-teal-400">{{ $isNotary ? __('Workflow') : __('Your progress') }}</a></li>
                     @unless ($isEnotaryPortalSigner)
                         <li><a href="#section-documents" class="font-medium text-zinc-600 hover:text-teal-700 dark:text-zinc-400 dark:hover:text-teal-400">{{ __('Documents') }}</a></li>
                     @endunless
@@ -983,7 +843,7 @@
                     @endif
                     @if (! $canVerifyIdentity && ! $canVerifyLocation)
                         <div class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                            {{ __('Verification actions appear when the request is submitted or when manual review is required.') }}
+                            {{ __('Verification actions appear when the notarization is submitted or when manual review is required.') }}
                         </div>
                     @endif
                 </div>
@@ -1048,7 +908,7 @@
 
                     @if ($paymentRequired && ! $hasSettledPayment)
                         <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
-                            {{ __('This request is blocked until a successful payment is recorded.') }}
+                            {{ __('This case is blocked until a successful payment is recorded.') }}
                         </div>
                     @endif
 
@@ -1201,11 +1061,11 @@
                             <div class="border-t border-zinc-200 pt-4 dark:border-zinc-700">
                                 <flux:field>
                                     <flux:label>{{ __('Rejection reason') }}</flux:label>
-                                    <flux:textarea wire:model="rejectionReason" rows="4" placeholder="{{ __('Explain why this request cannot proceed.') }}" />
+                                    <flux:textarea wire:model="rejectionReason" rows="4" placeholder="{{ __('Explain why this notarization cannot proceed.') }}" />
                                     <flux:error name="rejectionReason" />
                                 </flux:field>
                                 <div class="mt-3">
-                                    <flux:button variant="outline" type="button" wire:click="rejectRequest">{{ __('Reject request') }}</flux:button>
+                                    <flux:button variant="outline" type="button" wire:click="rejectRequest">{{ __('Reject notarization') }}</flux:button>
                                     <flux:error name="rejectRequest" />
                                 </div>
                             </div>

@@ -2,7 +2,7 @@
     use App\Enums\NotaryRequestStatus;
 @endphp
 
-            <div class="ui-panel p-6 sm:p-8">
+            <div class="ui-panel w-full p-5 sm:p-6 lg:p-7">
                 <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{{ __('Document') }}</h2>
                 <p class="text-sm text-zinc-600 dark:text-zinc-400">{{ __('One instrument per case: signers sign, video verification, attorney signature, then the sealed instrument is ready.') }}</p>
 
