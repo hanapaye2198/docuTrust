@@ -311,6 +311,13 @@ new #[Layout('components.layouts.app')] class extends Component {
             'latestEInvoice' => $this->notaryRequest->eInvoices->sortByDesc('created_at')->first(),
             'attorneyRegistryDraft' => $this->notaryRequest->attorneyNotarialRegistry,
             'finalizationReadiness' => $readiness,
+            'settlementSteps' => $workflow->settlementSteps($this->notaryRequest),
+            'settlementDueAmount' => $workflow->settlementDueAmount($this->notaryRequest),
+            'caseShowRoute' => $user->role->value === 'notary' ? 'notary.requests.show' : 'notary-requests.show',
+            'canCreatePayment' => $user->role->value === 'notary'
+                && (int) $this->notaryRequest->notary_user_id === (int) $user->id,
+            'canPayNotaryFee' => ($this->notaryRequest->user_id === $user->id || ($user->isEnotaryPortalSigner() && $user->isNotarySignerOn($this->notaryRequest)))
+                && $user->role->value !== 'notary',
             'documentWorkflowStates' => $requestDocuments
                 ->mapWithKeys(fn (Document $document) => [
                     $document->id => [
@@ -1215,6 +1222,14 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function createGatewayPayment(): void
     {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+        abort_unless(
+            $user->role->value === 'notary'
+                && (int) $this->notaryRequest->notary_user_id === (int) $user->id,
+            403
+        );
+
         $validated = $this->validate([
             'paymentGateway' => ['required', Rule::in(collect($this->enabledPaymentGateways)->pluck('code')->all())],
         ]);
@@ -1231,14 +1246,60 @@ new #[Layout('components.layouts.app')] class extends Component {
                 $payment,
             );
 
+            session()->put('notary_payment_reminder_sent.'.$payment->id, now()->timestamp);
+
             $this->refreshRequest();
 
             session()->flash('status', $payment->wasRecentlyCreated
-                ? __('Payment created. Display the QR code or checkout link to the customer.')
-                : __('An active pending payment already exists. Payment email was sent again to the customer.'));
+                ? __('Payment link created. Share the checkout link or QR code with the client.')
+                : __('An active pending payment already exists. Payment email was sent again to the client.'));
         } catch (\RuntimeException $exception) {
             $this->addError('createGatewayPayment', $exception->getMessage());
         }
+    }
+
+    public function resendPaymentLinkToClient(): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+        abort_unless(
+            $user->role->value === 'notary'
+                && (int) $this->notaryRequest->notary_user_id === (int) $user->id,
+            403
+        );
+
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $request = $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry', 'requester', 'notary']);
+
+        if (! $workflow->paymentRequired($request) || $workflow->hasSettledPayment($request)) {
+            $this->addError('resendPaymentLinkToClient', __('No outstanding payment is due for this case.'));
+
+            return;
+        }
+
+        $pendingPayment = Payment::query()
+            ->where('notary_request_id', $request->id)
+            ->where('status', PaymentStatus::Pending)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $pendingPayment instanceof Payment) {
+            $this->addError('resendPaymentLinkToClient', __('Create a payment link first, then resend it to the client.'));
+
+            return;
+        }
+
+        if ($pendingPayment->expires_at !== null && $pendingPayment->expires_at->isPast()) {
+            $this->addError('resendPaymentLinkToClient', __('This payment link has expired. Generate a new payment link first.'));
+
+            return;
+        }
+
+        app(NotaryNotificationService::class)->notifyPaymentReady($request, $pendingPayment);
+        session()->put('notary_payment_reminder_sent.'.$pendingPayment->id, now()->timestamp);
+        session()->flash('status', __('Payment link email sent to the client.'));
+        $this->refreshRequest();
     }
 
     public function refreshPaymentStatus(int $paymentId): void
@@ -1432,7 +1493,13 @@ new #[Layout('components.layouts.app')] class extends Component {
             $pendingPayment instanceof Payment
             && ($pendingPayment->expires_at === null || ! $pendingPayment->expires_at->isPast())
         ) {
+            $reminderKey = 'notary_payment_reminder_sent.'.$pendingPayment->id;
+            if (session()->has($reminderKey)) {
+                return;
+            }
+
             app(NotaryNotificationService::class)->notifyPaymentReady($request, $pendingPayment);
+            session()->put($reminderKey, now()->timestamp);
             session()->flash('status', __('Payment reminder email sent to the client.'));
             $this->refreshRequest();
 

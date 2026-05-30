@@ -198,6 +198,22 @@ new #[Layout('components.layouts.app')] class extends Component {
             return null;
         }
 
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $request = $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']);
+
+        if ($workflow->hasSettledPayment($request)) {
+            return null;
+        }
+
+        if ($request->payments->contains(fn ($payment): bool => $payment->status === \App\Enums\PaymentStatus::Pending)) {
+            return null;
+        }
+
+        $draftFees = (float) ($request->attorneyNotarialRegistry?->fees ?? 0);
+        if ($draftFees > 0) {
+            return null;
+        }
+
         try {
             $gateways = app(GatewayHubService::class)->enabledGateways();
             $gatewayCode = collect($gateways)

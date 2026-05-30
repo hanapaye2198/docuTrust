@@ -128,9 +128,9 @@
                     <div class="font-semibold">{{ __('Payment required before notarization can continue') }}</div>
                     <div class="mt-1">
                         @if ($isNotary)
-                            {{ __('The notarial register entry has been created. The client must complete payment before attorney review can finish or digital notarization can begin.') }}
+                            {{ __('Save fee details and share a payment link with the client. Payment must be completed before the official register entry and digital notarization can finish.') }}
                         @else
-                            {{ __('The attorney has created the notarial register entry. Complete the payment in the sidebar to continue.') }}
+                            {{ __('Your attorney has set a notarial fee for this case. Complete payment below to continue.') }}
                         @endif
                     </div>
                     <div class="mt-3">

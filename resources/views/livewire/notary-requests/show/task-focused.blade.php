@@ -136,16 +136,20 @@
         <flux:callout variant="warning" icon="banknotes">
             <flux:callout.heading>{{ __('Payment required') }}</flux:callout.heading>
             <flux:callout.text>
-                {{ __('The register entry is recorded. Client payment must be completed before review and digital notarization can finish.') }}
+                @if ($isNotary)
+                    {{ __('A notarial fee is outstanding. Create or share the payment link so the client can pay before you finalize the register entry.') }}
+                @else
+                    {{ __('A notarial fee is due. Open payment below to complete checkout.') }}
+                @endif
             </flux:callout.text>
             <div class="mt-2">
-                    <a
-                        href="{{ route('notary.requests.show', ['notaryRequest' => $notaryRequest->id, 'tab' => 'closing']) }}#section-payment"
-                        data-open-payment-debug="true"
-                        class="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                    >
-                        {{ __('Open payment') }}
-                    </a>
+                <button
+                    type="button"
+                    wire:click="setActiveTab('closing')"
+                    class="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                    {{ __('Open payment') }}
+                </button>
             </div>
         </flux:callout>
     @endif
@@ -306,21 +310,18 @@
                 </ol>
             </div>
 
-            @if ($paymentRequired && ! $hasSettledPayment)
-                @php $sidebarRegisterEntry = $notaryRequest->registerEntries->sortByDesc('created_at')->first(); @endphp
-                @if ($sidebarRegisterEntry)
-                    <div class="ui-panel p-5">
-                        <flux:heading size="sm" class="mb-2">{{ __('Payment due') }}</flux:heading>
-                        <p class="text-lg font-bold text-zinc-900 dark:text-zinc-100">PHP {{ number_format((float) $sidebarRegisterEntry->fees, 2) }}</p>
-                        <a
-                            href="{{ route('notary.requests.show', ['notaryRequest' => $notaryRequest->id, 'tab' => 'closing']) }}#section-payment"
-                            data-open-payment-debug="true"
-                            class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                        >
-                            {{ __('View payment') }}
-                        </a>
-                    </div>
-                @endif
+            @if ($paymentRequired && ! $hasSettledPayment && $settlementDueAmount > 0)
+                <div class="ui-panel p-5">
+                    <flux:heading size="sm" class="mb-2">{{ __('Payment due') }}</flux:heading>
+                    <p class="text-lg font-bold text-zinc-900 dark:text-zinc-100">PHP {{ number_format((float) $settlementDueAmount, 2) }}</p>
+                    <button
+                        type="button"
+                        wire:click="setActiveTab('closing')"
+                        class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                        {{ __('View payment') }}
+                    </button>
+                </div>
             @endif
         </aside>
     </div>
@@ -328,25 +329,8 @@
     @include('livewire.notary-requests.show.partials.notary-status-poll-config')
 </x-admin.page>
 
-<div
-    id="payment-debug-badge"
-    class="fixed bottom-4 right-4 z-50 hidden max-w-sm rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 shadow-lg dark:border-amber-700 dark:bg-amber-950/90 dark:text-amber-100"
->
-    Payment debug: idle
-</div>
-
 <script>
-    const paymentDebugBadge = document.getElementById('payment-debug-badge');
-    const updatePaymentDebugBadge = (message) => {
-        if (!paymentDebugBadge) {
-            return;
-        }
-
-        paymentDebugBadge.classList.remove('hidden');
-        paymentDebugBadge.textContent = `Payment debug: ${message}`;
-    };
-
-    const scrollToSectionWithRetry = (targetId, source) => {
+    const scrollToSectionWithRetry = (targetId) => {
         let attempts = 0;
         const maxAttempts = 24;
         const timer = window.setInterval(() => {
@@ -354,43 +338,31 @@
 
             const element = document.getElementById(targetId);
             const isVisible = element && element.offsetParent !== null;
-            updatePaymentDebugBadge(`${source} | target=${targetId} | attempt ${attempts}/${maxAttempts} | found=${element ? 'yes' : 'no'} | visible=${isVisible ? 'yes' : 'no'}`);
 
-            if (element && element.offsetParent !== null) {
+            if (element && isVisible) {
                 element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                updatePaymentDebugBadge(`${source} | scrolled on attempt ${attempts}`);
                 window.clearInterval(timer);
+
                 return;
             }
 
             if (attempts >= maxAttempts) {
-                updatePaymentDebugBadge(`${source} | stopped: section-payment not visible`);
                 window.clearInterval(timer);
             }
         }, 100);
     };
 
-    const scrollToPaymentHashTarget = (source = 'unknown') => {
-        const hash = window.location.hash;
-        updatePaymentDebugBadge(`${source} | hash=${hash || '(empty)'}`);
-
-        if (hash !== '#section-payment') {
-            updatePaymentDebugBadge(`${source} | ignored hash ${hash || '(empty)'}`);
+    const scrollToPaymentHashTarget = () => {
+        if (window.location.hash !== '#section-payment') {
             return;
         }
 
-        scrollToSectionWithRetry('section-payment', source);
+        scrollToSectionWithRetry('section-payment');
     };
 
-    document.querySelectorAll('[data-open-payment-debug="true"]').forEach((link) => {
-        link.addEventListener('click', () => {
-            updatePaymentDebugBadge(`click -> ${link.getAttribute('href')}`);
-        });
-    });
-
-    window.addEventListener('hashchange', () => scrollToPaymentHashTarget('hashchange'));
-    window.addEventListener('DOMContentLoaded', () => scrollToPaymentHashTarget('dom-ready'));
-    window.addEventListener('livewire:navigated', () => scrollToPaymentHashTarget('livewire-nav'));
+    window.addEventListener('hashchange', scrollToPaymentHashTarget);
+    window.addEventListener('DOMContentLoaded', scrollToPaymentHashTarget);
+    window.addEventListener('livewire:navigated', scrollToPaymentHashTarget);
 
     window.addEventListener('scroll-to-section', (event) => {
         const payload = Array.isArray(event?.detail) ? event.detail[0] : event?.detail;
@@ -399,6 +371,6 @@
             return;
         }
 
-        scrollToSectionWithRetry(targetId, 'livewire-dispatch');
+        scrollToSectionWithRetry(targetId);
     });
 </script>

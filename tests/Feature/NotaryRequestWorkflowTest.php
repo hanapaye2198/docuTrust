@@ -2,13 +2,15 @@
 
 namespace Tests\Feature;
 
-use App\Enums\DocumentStatus;
 use App\Enums\DocumentSignerStatus;
+use App\Enums\DocumentStatus;
 use App\Enums\NotaryRequestStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\TemplateRoleType;
+use App\Models\AttorneyNotarialRegistry;
 use App\Models\Document;
-use App\Models\DocumentSigner;
 use App\Models\DocumentHash;
+use App\Models\DocumentSigner;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
@@ -97,7 +99,10 @@ class NotaryRequestWorkflowTest extends TestCase
         $workflowService->beginAttorneySigning($request->fresh());
         $this->assertSame(NotaryRequestStatus::AttorneySigning, $request->fresh()->status);
 
-        $credential = NotaryCredential::factory()->for($notary)->create();
+        $credential = NotaryCredential::factory()->for($notary)->create([
+            'seal_image_path' => 'seals/workflow-seal.png',
+        ]);
+
         NotarialRegisterEntry::factory()->create([
             'notary_request_id' => $request->id,
             'notary_credential_id' => $credential->id,
@@ -330,7 +335,72 @@ class NotaryRequestWorkflowTest extends TestCase
 
         $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($request);
 
-        $this->assertSame('Digital notarization', $steps[6]['label']);
-        $this->assertSame('complete', $steps[6]['state']);
+        $this->assertSame('Digital notarization', $steps[7]['label']);
+        $this->assertSame('complete', $steps[7]['state']);
+    }
+
+    public function test_can_create_register_entry_requires_attorney_signing_seal_and_payment(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneyApproved,
+        ]);
+
+        $workflow = app(NotaryRequestWorkflowService::class);
+
+        $this->assertFalse($workflow->canCreateRegisterEntry($request));
+    }
+
+    public function test_can_create_register_entry_allows_case_when_prerequisites_are_met(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'email' => $notary->email,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signing_order' => 999,
+        ]);
+
+        NotaryCredential::query()
+            ->where('user_id', $notary->id)
+            ->update(['seal_image_path' => 'seals/test-seal.png']);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 0,
+        ]);
+
+        $workflow = app(NotaryRequestWorkflowService::class);
+
+        $this->assertTrue($workflow->canCreateRegisterEntry($request->fresh(['documents.documentSigners'])));
+    }
+
+    public function test_settlement_due_amount_uses_registry_draft_before_register_entry(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 750.00,
+        ]);
+
+        $workflow = app(NotaryRequestWorkflowService::class);
+
+        $this->assertSame(750.0, $workflow->settlementDueAmount($request->fresh()));
     }
 }

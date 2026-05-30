@@ -579,7 +579,7 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Workflow')
             ->assertSee('Documents')
             ->assertSee('Parties')
-            ->assertSee('Closing')
+            ->assertSee('Settlement')
             ->assertSee('Signers sign')
             ->assertSee('Video conference')
             ->assertSee('Attorney signed')
@@ -587,10 +587,10 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Seal (attorney personal seal)')
             ->assertSee('Registry entry')
             ->assertSee('Attorney review')
-            ->assertSee('Attorney review becomes available after the video session is complete, the attorney has signed, the register entry exists, and the client payment has been completed.')
+            ->assertSee('Available after the video session, attorney signing, register entry, and client payment (if required) are complete.')
             ->assertDontSee('Complete attorney review')
-            ->assertSee('Notarial register')
-            ->assertSee('Register entry creation becomes available after attorney signing, payment completion, and attorney seal availability.')
+            ->assertSee('Official notarial register')
+            ->assertSee('Available after you sign the document, save fee details, collect payment (if required), and upload your personal seal.')
             ->assertDontSee('Create register entry');
     }
 
@@ -729,11 +729,32 @@ class NotaryRequestPagesTest extends TestCase
         $request = NotaryRequest::factory()->for($notary)->create([
             'organization_id' => $notary->organization_id,
             'notary_user_id' => $notary->id,
-            'status' => NotaryRequestStatus::AttorneyApproved,
+            'status' => NotaryRequestStatus::AttorneySigning,
             'title' => 'Auto payment affidavit',
         ]);
 
-        NotaryCredential::factory()->for($notary)->create();
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        NotaryCredential::query()
+            ->where('user_id', $notary->id)
+            ->update(['seal_image_path' => 'seals/test-seal.png']);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 0,
+        ]);
 
         $this->actingAs($notary);
 
@@ -795,7 +816,7 @@ class NotaryRequestPagesTest extends TestCase
             ->get(route('notary-requests.show', $request))
             ->assertOk()
             ->assertSee('Payment required before notarization can continue')
-            ->assertSee('Complete the payment in the sidebar to continue.');
+            ->assertSee('Complete payment below to continue.');
     }
 
     public function test_client_sees_expired_payment_message_and_regenerate_call_to_action(): void
@@ -1587,6 +1608,34 @@ class NotaryRequestPagesTest extends TestCase
             return $mail->notaryRequest->is($request)
                 && $mail->payment->is($payment);
         });
+    }
+
+    public function test_client_cannot_create_gateway_payment_on_notary_request(): void
+    {
+        $client = User::factory()->enotarySigner()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500.00,
+        ]);
+
+        NotarySigner::factory()->for($request)->create([
+            'email' => $client->email,
+        ]);
+
+        $this->actingAs($client);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('enabledPaymentGateways', [['code' => 'gcash', 'name' => 'Gcash']])
+            ->set('paymentGateway', 'gcash')
+            ->call('createGatewayPayment')
+            ->assertForbidden();
     }
 
     private function ensureEisSigningPrivateKeyPath(): string

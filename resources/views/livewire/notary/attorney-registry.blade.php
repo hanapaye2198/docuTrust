@@ -40,7 +40,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             __('Attorney registry becomes available after the attorney signs the document.')
         );
 
-        $this->notaryRequest = $notaryRequest->loadMissing('attorneyNotarialRegistry');
+        $this->notaryRequest = $notaryRequest->loadMissing(['attorneyNotarialRegistry', 'signers', 'identityVerifications']);
 
         $existing = $this->notaryRequest->attorneyNotarialRegistry;
         if ($existing instanceof AttorneyNotarialRegistry) {
@@ -55,6 +55,45 @@ new #[Layout('components.layouts.app')] class extends Component {
             $this->officialReceiptNo = (string) ($existing->official_receipt_no ?? '');
         } else {
             $this->title = $notaryRequest->title;
+            $this->notarialActType = $notaryRequest->request_type ?? 'acknowledgment';
+
+            if ($notaryRequest->signers->isNotEmpty()) {
+                $this->parties = $notaryRequest->signers
+                    ->map(fn ($signer): array => [
+                        'name' => (string) $signer->full_name,
+                        'address' => (string) ($signer->address ?? ''),
+                    ])
+                    ->values()
+                    ->all();
+            }
+
+            $approvedVerifications = $notaryRequest->identityVerifications
+                ->where('verification_status', \App\Enums\NotaryIdentityVerificationStatus::Verified);
+
+            if ($approvedVerifications->isNotEmpty()) {
+                $this->competentEvidence = $approvedVerifications
+                    ->map(function ($verification): array {
+                        $signer = $verification->signer;
+
+                        return [
+                            'person_name' => $signer?->full_name ?? (string) ($verification->id_type ?? __('Signer')),
+                            'id_type' => (string) ($verification->id_type ?? ''),
+                            'id_number' => (string) ($verification->id_number ?? ''),
+                        ];
+                    })
+                    ->filter(fn (array $row): bool => trim($row['person_name']) !== '')
+                    ->values()
+                    ->all();
+            } elseif ($notaryRequest->signers->isNotEmpty()) {
+                $this->competentEvidence = $notaryRequest->signers
+                    ->map(fn ($signer): array => [
+                        'person_name' => (string) $signer->full_name,
+                        'id_type' => '',
+                        'id_number' => '',
+                    ])
+                    ->values()
+                    ->all();
+            }
         }
     }
 
@@ -125,12 +164,6 @@ new #[Layout('components.layouts.app')] class extends Component {
             ->latest()
             ->first();
 
-        $notarizationTimestamps = collect($validated['parties'])
-            ->mapWithKeys(fn (array $party): array => [
-                strtolower(trim((string) ($party['name'] ?? ''))) => now()->timezone(config('docutrust.notary.timezone', 'Asia/Manila'))->toDateTimeString(),
-            ])
-            ->all();
-
         AttorneyNotarialRegistry::query()->updateOrCreate(
             ['notary_request_id' => $this->notaryRequest->id],
             [
@@ -143,7 +176,6 @@ new #[Layout('components.layouts.app')] class extends Component {
                     ->values()
                     ->all(),
                 'competent_evidence' => $validated['competentEvidence'],
-                'notarization_timestamps' => $notarizationTimestamps,
                 'notarial_act_type' => $validated['notarialActType'],
                 'fees' => (float) ($validated['fees'] ?? 0),
                 'official_receipt_no' => trim((string) ($validated['officialReceiptNo'] ?? '')) !== '' ? trim((string) $validated['officialReceiptNo']) : null,
@@ -151,7 +183,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             ],
         );
 
-        session()->flash('status', __('Attorney notarial registry draft saved. Continue to Payment.'));
+        session()->flash('status', __('Fee and party details saved. Continue to payment if a fee applies.'));
         $this->redirect(route('notary.requests.show', $this->notaryRequest), navigate: true);
     }
 }; ?>
@@ -247,7 +279,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
 
             <div class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100">
-                {{ __('Date & time of notarization is auto-timestamped per listed party when you save this draft.') }}
+                {{ __('Date and time of notarization are recorded automatically when you create the official register entry.') }}
             </div>
 
             <div class="flex items-center gap-3">

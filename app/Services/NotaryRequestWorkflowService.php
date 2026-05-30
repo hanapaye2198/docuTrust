@@ -172,9 +172,9 @@ class NotaryRequestWorkflowService
                 'label' => __('Payment'),
                 'description' => __('Client completes payment after attorney signing using attorney registry fee details.'),
                 'state' => match (true) {
-                    ! $attorneyHasSigned && ! $isAttorneyApproved && ! $isDigitalized && ! $isNotarized => 'upcoming',
+                    ! $attorneyHasSigned && ! $isDigitalized && ! $isNotarized => 'upcoming',
                     ! $paymentRequired && $attorneyHasSigned => 'complete',
-                    $hasSettledPayment || $isAttorneyApproved || $isDigitalized || $isNotarized => 'complete',
+                    $hasSettledPayment || $isDigitalized || $isNotarized => 'complete',
                     $attorneyHasSigned && $hasAttorneyRegistry => 'current',
                     default => 'upcoming',
                 },
@@ -294,15 +294,148 @@ class NotaryRequestWorkflowService
 
     public function canCreateRegisterEntry(NotaryRequest $request): bool
     {
-        if ($this->hasAttorneySignedAllDocuments($request) && $this->hasAttorneySealOnFile($request)) {
-            return ! $this->paymentRequired($request) || $this->hasSettledPayment($request);
-        }
-
-        return in_array($request->status, [
-            NotaryRequestStatus::AttorneyApproved,
+        if (in_array($request->status, [
             NotaryRequestStatus::Digitalized,
             NotaryRequestStatus::Notarized,
-        ], true);
+        ], true)) {
+            return false;
+        }
+
+        if (! $this->hasAttorneySignedAllDocuments($request)) {
+            return false;
+        }
+
+        if (! $this->hasAttorneySealOnFile($request)) {
+            return false;
+        }
+
+        if ($this->paymentRequired($request) && ! $this->hasSettledPayment($request)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function settlementDueAmount(NotaryRequest $request): float
+    {
+        $request->loadMissing(['registerEntries', 'attorneyNotarialRegistry']);
+
+        $latestRegisterEntry = $request->registerEntries->sortByDesc('created_at')->first();
+        if ($latestRegisterEntry !== null && (float) $latestRegisterEntry->fees > 0) {
+            return (float) $latestRegisterEntry->fees;
+        }
+
+        return (float) ($request->attorneyNotarialRegistry?->fees ?? 0);
+    }
+
+    /**
+     * @return list<array{
+     *   key: string,
+     *   label: string,
+     *   description: string,
+     *   state: 'complete'|'current'|'upcoming'|'blocked',
+     *   actor: 'attorney'|'client'|'system',
+     *   section_id: ?string,
+     *   href: ?string
+     * }>
+     */
+    public function settlementSteps(NotaryRequest $request): array
+    {
+        $request->loadMissing(['attorneyNotarialRegistry', 'registerEntries', 'payments', 'notary']);
+
+        $attorneyHasSigned = $this->hasAttorneySignedAllDocuments($request);
+        $hasDraft = $request->attorneyNotarialRegistry !== null;
+        $hasSeal = $this->hasAttorneySealOnFile($request);
+        $paymentRequired = $this->paymentRequired($request);
+        $hasSettledPayment = $this->hasSettledPayment($request);
+        $hasRegisterEntry = $request->registerEntries->isNotEmpty();
+        $canReview = $this->canApprove($request);
+        $isReviewComplete = $request->status === NotaryRequestStatus::AttorneyApproved
+            || in_array($request->status, [NotaryRequestStatus::Digitalized, NotaryRequestStatus::Notarized], true);
+        $canDigitalize = $this->canDigitalize($request);
+        $isDigitalized = in_array($request->status, [NotaryRequestStatus::Digitalized, NotaryRequestStatus::Notarized], true);
+
+        $resolveState = function (bool $complete, bool $current, bool $blocked = false): string {
+            if ($complete) {
+                return 'complete';
+            }
+
+            if ($blocked) {
+                return 'blocked';
+            }
+
+            return $current ? 'current' : 'upcoming';
+        };
+
+        $draftComplete = $hasDraft;
+        $draftCurrent = $attorneyHasSigned && ! $hasDraft;
+        $paymentComplete = ! $paymentRequired || $hasSettledPayment;
+        $paymentCurrent = $paymentRequired && $hasDraft && ! $hasSettledPayment && $attorneyHasSigned;
+        $sealComplete = $hasSeal;
+        $sealCurrent = $attorneyHasSigned && ! $hasSeal && ($hasSettledPayment || ! $paymentRequired) && $hasDraft;
+        $registerComplete = $hasRegisterEntry;
+        $registerCurrent = $this->canCreateRegisterEntry($request) && ! $hasRegisterEntry;
+        $reviewComplete = $isReviewComplete;
+        $reviewCurrent = $canReview && ! $isReviewComplete;
+        $digitalComplete = $isDigitalized;
+        $digitalCurrent = $canDigitalize && ! $isDigitalized;
+
+        return [
+            [
+                'key' => 'registry_draft',
+                'label' => __('Fee & party details'),
+                'description' => __('Save draft registry with fees, parties, and identity evidence.'),
+                'state' => $resolveState($draftComplete, $draftCurrent, ! $attorneyHasSigned),
+                'actor' => 'attorney',
+                'section_id' => 'section-attorney-registry',
+                'href' => route('notary.attorney-registry', $request),
+            ],
+            [
+                'key' => 'payment',
+                'label' => __('Pay notarial fee'),
+                'description' => __('Client completes payment using the fee amount from the registry draft.'),
+                'state' => $resolveState($paymentComplete, $paymentCurrent, ! $hasDraft || ! $paymentRequired),
+                'actor' => 'client',
+                'section_id' => 'section-payment',
+                'href' => null,
+            ],
+            [
+                'key' => 'seal',
+                'label' => __('Attorney personal seal'),
+                'description' => __('Upload your seal in credentials before creating the official register entry.'),
+                'state' => $resolveState($sealComplete, $sealCurrent, ! $attorneyHasSigned),
+                'actor' => 'attorney',
+                'section_id' => 'section-attorney-seal',
+                'href' => route('notary.credentials'),
+            ],
+            [
+                'key' => 'register_entry',
+                'label' => __('Official register entry'),
+                'description' => __('Create the final notarial book entry from your saved draft.'),
+                'state' => $resolveState($registerComplete, $registerCurrent, ! $attorneyHasSigned),
+                'actor' => 'attorney',
+                'section_id' => 'section-register',
+                'href' => route('notary.register-entry', $request),
+            ],
+            [
+                'key' => 'attorney_review',
+                'label' => __('Attorney review'),
+                'description' => __('Confirm identity, consent, and jurisdiction after payment and register entry.'),
+                'state' => $resolveState($reviewComplete, $reviewCurrent, ! $hasRegisterEntry),
+                'actor' => 'attorney',
+                'section_id' => 'section-review',
+                'href' => null,
+            ],
+            [
+                'key' => 'digital_notarization',
+                'label' => __('Digital notarization'),
+                'description' => __('Apply seal, QR verification, certificate, and document timestamp.'),
+                'state' => $resolveState($digitalComplete, $digitalCurrent, ! $hasRegisterEntry),
+                'actor' => 'attorney',
+                'section_id' => 'section-digital-notarization',
+                'href' => null,
+            ],
+        ];
     }
 
     public function canApprove(NotaryRequest $request): bool
