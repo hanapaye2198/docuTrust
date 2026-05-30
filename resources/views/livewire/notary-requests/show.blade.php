@@ -100,6 +100,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     public string $activeTab = 'documents';
 
     public bool $showAuditPanel = false;
+    public bool $scrollToPaymentOnLoad = false;
 
     public function mount(NotaryRequest $notaryRequest): void
     {
@@ -116,8 +117,19 @@ new #[Layout('components.layouts.app')] class extends Component {
         $keys = config('docutrust.notary.verification_checklist', []);
         $this->sessionChecklist = array_fill_keys($keys, false);
 
+        $requestedTab = request()->query('tab');
+        if (is_string($requestedTab) && in_array($requestedTab, $this->availableTabs(), true)) {
+            $this->activeTab = $requestedTab;
+            $this->scrollToPaymentOnLoad = $requestedTab === 'closing';
+        }
+
         if ($user->role === \App\Enums\UserRole::Notary) {
-            $this->activeTab = $this->resolveDefaultAttorneyTab();
+            $availableTabs = $this->availableTabs();
+            $hasValidRequestedTab = is_string($requestedTab) && in_array($requestedTab, $availableTabs, true);
+
+            if (! $hasValidRequestedTab) {
+                $this->activeTab = $this->resolveDefaultAttorneyTab();
+            }
 
             if ($this->activeTab === 'session') {
                 $this->syncVideoPartiesIfReady(notify: false);
@@ -125,6 +137,20 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
 
         $this->ensureActiveTabIsAvailable();
+
+        if ($this->activeTab === 'closing') {
+            $this->sendSettlementPaymentReminder();
+        }
+    }
+
+    public function rendered(): void
+    {
+        if (! $this->scrollToPaymentOnLoad || $this->activeTab !== 'closing') {
+            return;
+        }
+
+        $this->dispatch('scroll-to-section', id: 'section-payment');
+        $this->scrollToPaymentOnLoad = false;
     }
 
     public function setActiveTab(string $tab): void
@@ -138,6 +164,10 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         if ($tab === 'session') {
             $this->syncVideoPartiesIfReady(notify: false);
+        }
+
+        if ($tab === 'closing') {
+            $this->sendSettlementPaymentReminder();
         }
     }
 
@@ -155,6 +185,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $this->activeTab = 'closing';
         $this->dispatch('scroll-to-section', id: 'section-payment');
+        $this->sendSettlementPaymentReminder();
     }
 
     /**
@@ -1370,6 +1401,46 @@ new #[Layout('components.layouts.app')] class extends Component {
             $this->paymentGateway = '';
             report($exception);
         }
+    }
+
+    private function sendSettlementPaymentReminder(): void
+    {
+        $user = Auth::user();
+        if ($user === null || $user->role->value !== 'notary') {
+            return;
+        }
+
+        if ((int) $this->notaryRequest->notary_user_id !== (int) $user->id) {
+            return;
+        }
+
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $request = $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry', 'requester', 'notary']);
+
+        if (! $workflow->paymentRequired($request) || $workflow->hasSettledPayment($request)) {
+            return;
+        }
+
+        $pendingPayment = Payment::query()
+            ->where('notary_request_id', $request->id)
+            ->where('status', PaymentStatus::Pending)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (
+            $pendingPayment instanceof Payment
+            && ($pendingPayment->expires_at === null || ! $pendingPayment->expires_at->isPast())
+        ) {
+            app(NotaryNotificationService::class)->notifyPaymentReady($request, $pendingPayment);
+            session()->flash('status', __('Payment reminder email sent to the client.'));
+            $this->refreshRequest();
+
+            return;
+        }
+
+        // Do not auto-create gateway payments on tab open.
+        // Settlement open should stay fast and focused on navigation.
     }
 
     /**

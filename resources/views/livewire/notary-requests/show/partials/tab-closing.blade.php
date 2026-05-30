@@ -5,36 +5,9 @@
 @endphp
 
 <div class="space-y-4">
-                <div id="section-attorney-registry" class="ui-panel p-5 sm:p-6">
-                    <flux:heading size="lg" class="!mb-2">{{ __('Attorney notarial registry') }}</flux:heading>
-                    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                        {{ __('Capture entry no., title, parties, witnesses, identity evidence, act type, fees, O.R. no., and attorney signature details before payment.') }}
-                    </p>
-                    <div class="mt-4 flex flex-wrap items-center gap-2">
-                        <flux:button variant="primary" :href="route('notary.attorney-registry', $notaryRequest)" wire:navigate>{{ __('Open attorney registry') }}</flux:button>
-                        @if ($attorneyRegistryDraft)
-                            <flux:badge color="emerald">{{ __('Saved') }}</flux:badge>
-                        @else
-                            <flux:badge color="amber">{{ __('Not yet saved') }}</flux:badge>
-                        @endif
-                    </div>
-                    @if ($attorneyRegistryDraft)
-                        <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                            <div class="font-medium">{{ $attorneyRegistryDraft->title }}</div>
-                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                {{ __('Entry no.: :entry | Act: :act | Fee: PHP :fee', [
-                                    'entry' => $attorneyRegistryDraft->entry_no ?: __('(auto)'),
-                                    'act' => ucfirst(str_replace('_', ' ', $attorneyRegistryDraft->notarial_act_type)),
-                                    'fee' => number_format((float) $attorneyRegistryDraft->fees, 2),
-                                ]) }}
-                            </div>
-                        </div>
-                    @endif
-                </div>
-
             @if ($isNotary || $canManageLifecycle || $isEnotaryPortalSigner || $isRequester)
                 <div id="section-payment" class="ui-panel scroll-mt-6 p-5 sm:p-6">
-                    <flux:heading size="lg" class="!mb-2">{{ __('Payment') }}</flux:heading>
+                    <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Payment') }}</h2>
                     @php
                         $latestRegisterEntry = $notaryRequest->registerEntries->sortByDesc('created_at')->first();
                         $paymentDue = $latestRegisterEntry
@@ -99,7 +72,13 @@
                                     {{ __('This payment link has expired. Generate a new payment to continue.') }}
                                 </div>
                                 <div class="mt-4">
-                                    <flux:button variant="outline" type="button" wire:click="refreshPaymentStatus({{ $latestPayment->id }})">{{ __('Re-check status') }}</flux:button>
+                                    <button
+                                        type="button"
+                                        wire:click="refreshPaymentStatus({{ $latestPayment->id }})"
+                                        class="inline-flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                    >
+                                        {{ __('Re-check status') }}
+                                    </button>
                                 </div>
                             @elseif ($latestPayment->status === PaymentStatus::Pending)
                                 <div class="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_280px]">
@@ -114,10 +93,18 @@
                                         @endif
                                         <div>
                                             <div class="text-xs font-semibold uppercase tracking-wider">{{ __('QR payload') }}</div>
-                                            <textarea readonly rows="5" class="mt-2 w-full rounded-xl border border-current/15 bg-white/70 px-3 py-2 text-xs font-mono text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100">{{ $latestPayment->qr_data }}</textarea>
+                                            <textarea readonly rows="5" class="mt-2 w-full rounded-xl border border-current/15 bg-white/70 px-3 py-2 text-xs font-mono text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100">{{ $latestPayment->qr_data ?? '' }}</textarea>
                                         </div>
-                                        <flux:button variant="outline" type="button" wire:click="refreshPaymentStatus({{ $latestPayment->id }})">{{ __('Verify status from GatewayHub') }}</flux:button>
-                                        <flux:error name="refreshPaymentStatus" />
+                                        <button
+                                            type="button"
+                                            wire:click="refreshPaymentStatus({{ $latestPayment->id }})"
+                                            class="inline-flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                        >
+                                            {{ __('Verify status from GatewayHub') }}
+                                        </button>
+                                        @error('refreshPaymentStatus')
+                                            <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                        @enderror
                                     </div>
                                     <div class="flex items-start justify-center">
                                         @if ($latestPayment->qr_data)
@@ -131,7 +118,13 @@
                                 </div>
                             @else
                                 <div class="mt-4">
-                                    <flux:button variant="outline" type="button" wire:click="refreshPaymentStatus({{ $latestPayment->id }})">{{ __('Re-check status') }}</flux:button>
+                                    <button
+                                        type="button"
+                                        wire:click="refreshPaymentStatus({{ $latestPayment->id }})"
+                                        class="inline-flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                    >
+                                        {{ __('Re-check status') }}
+                                    </button>
                                 </div>
                             @endif
                         </div>
@@ -142,17 +135,34 @@
                             <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $currentPaymentExpired ? __('Generate a new GatewayHub payment') : __('Create GatewayHub payment') }}</div>
                             @if ($enabledPaymentGateways !== [])
                                 <div class="mt-3 space-y-3">
-                                    <flux:field>
-                                        <flux:label>{{ __('Gateway') }}</flux:label>
-                                        <select wire:model="paymentGateway" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                                    <div class="space-y-1.5">
+                                        <label for="payment-gateway" class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Gateway') }}</label>
+                                        <select id="payment-gateway" wire:model="paymentGateway" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
                                             @foreach ($enabledPaymentGateways as $gatewayOption)
                                                 <option value="{{ $gatewayOption['code'] }}">{{ $gatewayOption['name'] }}</option>
                                             @endforeach
                                         </select>
-                                        <flux:error name="paymentGateway" />
-                                    </flux:field>
-                                    <flux:button variant="primary" type="button" wire:click="createGatewayPayment">{{ $currentPaymentExpired ? __('Generate new payment') : __('Create payment') }}</flux:button>
-                                    <flux:error name="createGatewayPayment" />
+                                        @error('paymentGateway')
+                                            <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                        @enderror
+                                    </div>
+                                    <button
+                                        type="button"
+                                        wire:click="createGatewayPayment"
+                                        wire:loading.attr="disabled"
+                                        wire:target="createGatewayPayment"
+                                        class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <span wire:loading.remove wire:target="createGatewayPayment">
+                                            {{ $currentPaymentExpired ? __('Generate new payment') : __('Create payment') }}
+                                        </span>
+                                        <span wire:loading wire:target="createGatewayPayment">
+                                            {{ __('Processing...') }}
+                                        </span>
+                                    </button>
+                                    @error('createGatewayPayment')
+                                        <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                    @enderror
                                 </div>
                             @else
                                 <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
@@ -210,6 +220,33 @@
                 </div>
             @endif
 
+                <div id="section-attorney-registry" class="ui-panel p-5 sm:p-6">
+                    <flux:heading size="lg" class="!mb-2">{{ __('Attorney notarial registry') }}</flux:heading>
+                    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                        {{ __('Capture entry no., title, parties, witnesses, identity evidence, act type, fees, O.R. no., and attorney signature details before payment.') }}
+                    </p>
+                    <div class="mt-4 flex flex-wrap items-center gap-2">
+                        <flux:button variant="primary" :href="route('notary.attorney-registry', $notaryRequest)" wire:navigate>{{ __('Open attorney registry') }}</flux:button>
+                        @if ($attorneyRegistryDraft)
+                            <flux:badge color="emerald">{{ __('Saved') }}</flux:badge>
+                        @else
+                            <flux:badge color="amber">{{ __('Not yet saved') }}</flux:badge>
+                        @endif
+                    </div>
+                    @if ($attorneyRegistryDraft)
+                        <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                            <div class="font-medium">{{ $attorneyRegistryDraft->title }}</div>
+                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                {{ __('Entry no.: :entry | Act: :act | Fee: PHP :fee', [
+                                    'entry' => $attorneyRegistryDraft->entry_no ?: __('(auto)'),
+                                    'act' => ucfirst(str_replace('_', ' ', $attorneyRegistryDraft->notarial_act_type)),
+                                    'fee' => number_format((float) $attorneyRegistryDraft->fees, 2),
+                                ]) }}
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
                 @if ($isNotary)
                 <div id="section-attorney-seal" class="ui-panel scroll-mt-6 p-5 sm:p-6">
                     <flux:heading size="lg" class="!mb-2">{{ __('Seal (attorney personal seal)') }}</flux:heading>
@@ -229,26 +266,113 @@
                 @endif
 
                 <div id="section-register" class="ui-panel p-5 sm:p-6">
-                    <flux:heading size="lg" class="!mb-2">{{ __('Notarial register') }}</flux:heading>
+                    <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Notarial register') }}</h2>
+                    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Official entries should be clearly reviewable in one table view.') }}</p>
+
                     @if ($canCreateRegisterEntry)
-                        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{{ __('Create the final official register entry after payment and attorney seal are completed.') }}</p>
                         <div class="mt-4">
-                            <flux:button variant="primary" :href="route('notary.register-entry', $notaryRequest)" wire:navigate>{{ __('Create register entry') }}</flux:button>
+                            <a
+                                href="{{ route('notary.register-entry', $notaryRequest) }}"
+                                class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500"
+                            >
+                                {{ __('Create register entry') }}
+                            </a>
                         </div>
                     @else
                         <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
                             {{ __('Register entry creation becomes available after attorney signing, payment completion, and attorney seal availability.') }}
                         </div>
                     @endif
+
                     @if ($notaryRequest->registerEntries->isNotEmpty())
-                        <div class="mt-4 space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-700">
-                            @foreach ($notaryRequest->registerEntries as $entry)
-                                <div class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                                    <div class="font-medium text-zinc-800 dark:text-zinc-200">{{ __('Entry') }} {{ str_pad($entry->entry_number, 3, '0', STR_PAD_LEFT) }} — {{ ucfirst(str_replace('_', ' ', $entry->notarial_act_type)) }}</div>
-                                    <div class="text-zinc-500 dark:text-zinc-400">{{ $entry->document_title }}</div>
-                                    <div class="text-xs text-zinc-400 dark:text-zinc-500">{{ $entry->notarized_at?->timezone('Asia/Manila')->format('M j, Y g:i:s A') }} (PHT)</div>
-                                </div>
-                            @endforeach
+                        <div class="mt-5 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
+                            <table class="min-w-[1200px] w-full border-collapse text-left text-xs">
+                                <thead class="bg-zinc-50 text-zinc-600 dark:bg-zinc-900/70 dark:text-zinc-300">
+                                    <tr class="align-top">
+                                        <th class="border-b border-r border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('1 Entry no.') }}</th>
+                                        <th class="border-b border-r border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('2 Title and description') }}</th>
+                                        <th class="border-b border-r border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('3 Names & address of parties') }}</th>
+                                        <th class="border-b border-r border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('4 Names & address of witnesses') }}</th>
+                                        <th class="border-b border-r border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('5 Competent evidence of identity') }}</th>
+                                        <th class="border-b border-r border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('6 Date & time notarization') }}</th>
+                                        <th class="border-b border-r border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('7 Type of notarial act') }}</th>
+                                        <th class="border-b border-r border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('8 Fees & O.R. no.') }}</th>
+                                        <th class="border-b border-zinc-200 px-3 py-2.5 font-semibold uppercase tracking-wide dark:border-zinc-700">{{ __('9 Notary signature') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+                                    @foreach ($notaryRequest->registerEntries->sortByDesc('entry_number') as $entry)
+                                        @php
+                                            $parties = is_array($entry->parties) ? $entry->parties : [];
+                                            $witnesses = is_array($entry->witnesses) ? $entry->witnesses : [];
+                                            $evidenceList = is_array($entry->competent_evidence) ? $entry->competent_evidence : [];
+                                        @endphp
+                                        <tr class="align-top">
+                                            <td class="border-t border-r border-zinc-200 px-3 py-3 text-sm font-semibold dark:border-zinc-700">
+                                                {{ str_pad((string) $entry->entry_number, 3, '0', STR_PAD_LEFT) }}
+                                            </td>
+                                            <td class="border-t border-r border-zinc-200 px-3 py-3 dark:border-zinc-700">
+                                                <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ $entry->document_title }}</div>
+                                                @if ($entry->document_description)
+                                                    <div class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ $entry->document_description }}</div>
+                                                @endif
+                                            </td>
+                                            <td class="border-t border-r border-zinc-200 px-3 py-3 dark:border-zinc-700">
+                                                @forelse ($parties as $party)
+                                                    <div class="mb-1 last:mb-0">
+                                                        <div class="font-medium">{{ $party['name'] ?? '-' }}</div>
+                                                        <div class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ $party['address'] ?? '-' }}</div>
+                                                    </div>
+                                                @empty
+                                                    <span class="text-zinc-400">-</span>
+                                                @endforelse
+                                            </td>
+                                            <td class="border-t border-r border-zinc-200 px-3 py-3 dark:border-zinc-700">
+                                                @forelse ($witnesses as $witness)
+                                                    <div class="mb-1 last:mb-0">
+                                                        <div class="font-medium">{{ $witness['name'] ?? '-' }}</div>
+                                                        <div class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ $witness['address'] ?? '-' }}</div>
+                                                    </div>
+                                                @empty
+                                                    <span class="text-zinc-400">-</span>
+                                                @endforelse
+                                            </td>
+                                            <td class="border-t border-r border-zinc-200 px-3 py-3 dark:border-zinc-700">
+                                                @forelse ($evidenceList as $evidence)
+                                                    <div class="mb-1 rounded-md border border-zinc-200 px-2 py-1 last:mb-0 dark:border-zinc-700">
+                                                        <div class="font-medium">{{ $evidence['id_type'] ?? __('ID') }}</div>
+                                                        <div class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ $evidence['id_number'] ?? '-' }}</div>
+                                                    </div>
+                                                @empty
+                                                    <span class="text-zinc-400">-</span>
+                                                @endforelse
+                                            </td>
+                                            <td class="border-t border-r border-zinc-200 px-3 py-3 dark:border-zinc-700">
+                                                {{ $entry->notarized_at?->timezone('Asia/Manila')->format('M d, Y g:i:s A') ?? '-' }}
+                                                <div class="text-[11px] text-zinc-500 dark:text-zinc-400">(PHT)</div>
+                                            </td>
+                                            <td class="border-t border-r border-zinc-200 px-3 py-3 font-medium uppercase dark:border-zinc-700">
+                                                {{ str_replace('_', ' ', $entry->notarial_act_type) }}
+                                            </td>
+                                            <td class="border-t border-r border-zinc-200 px-3 py-3 dark:border-zinc-700">
+                                                <div class="font-semibold">PHP {{ number_format((float) $entry->fees, 2) }}</div>
+                                                <div class="text-[11px] text-zinc-500 dark:text-zinc-400">OR: {{ $entry->official_receipt_number ?: '-' }}</div>
+                                            </td>
+                                            <td class="border-t border-zinc-200 px-3 py-3 dark:border-zinc-700">
+                                                @if ($entry->notary_signature_path)
+                                                    <img
+                                                        src="{{ \Illuminate\Support\Facades\Storage::disk((string) config('filesystems.docutrust_disk', 'local'))->url($entry->notary_signature_path) }}"
+                                                        alt="{{ __('Notary signature') }}"
+                                                        class="h-10 w-auto max-w-28 object-contain"
+                                                    >
+                                                @else
+                                                    <span class="text-zinc-400">-</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
                         </div>
                     @endif
                 </div>

@@ -1490,6 +1490,55 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSet('activeTab', 'closing');
     }
 
+    public function test_notary_request_open_payment_section_resends_payment_email_for_active_pending_payment(): void
+    {
+        Mail::fake();
+
+        $client = User::factory()->enotarySigner()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+            'title' => 'Settlement reminder request',
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 1500.00,
+        ]);
+
+        $payment = Payment::query()->create([
+            'organization_id' => $request->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $client->id,
+            'created_by_user_id' => $notary->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-open-section-1',
+            'provider_transaction_id' => 'payment-open-section-1',
+            'gateway' => 'gcash',
+            'reference' => 'NREQ-OPEN-SECTION-1',
+            'amount' => 1500.00,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Pending,
+            'checkout_url' => 'https://gatewayhub.test/checkout/open-section',
+            'expires_at' => now()->addHour(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->call('openPaymentSection')
+            ->assertSet('activeTab', 'closing')
+            ->assertHasNoErrors();
+
+        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment): bool {
+            return $mail->notaryRequest->is($request)
+                && $mail->payment->is($payment);
+        });
+    }
+
     public function test_create_gateway_payment_resends_payment_ready_email_when_pending_payment_exists(): void
     {
         Mail::fake();
