@@ -22,7 +22,7 @@
     </h2>
     <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         @if ($canCreatePayment)
-            {{ __('Email the client to this payment section after you save the notarial fee. The client will choose a payment method here before you complete the register entry.') }}
+            {{ __('Email the client a no-login payment page after you save the notarial fee. The client will choose a payment method there before you complete the register entry.') }}
         @elseif ($canPayNotaryFee)
             {{ __('Choose a payment method to create your checkout link. Payment must be completed before notarization can finish.') }}
         @else
@@ -130,8 +130,8 @@
                         @if (($canManageLifecycle || $canCreatePayment) && $paymentEmailUrl)
                             <div class="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100">
                                 <div class="font-medium">{{ __('Payment email link preview') }}</div>
-                                <p class="mt-1 text-xs">{{ __('This is the same case payment page link sent by email to the client.') }}</p>
-                                <a href="{{ $paymentEmailUrl }}"
+                                <p class="mt-1 text-xs">{{ __('This is the same no-login payment page sent by email to the client.') }}</p>
+                                <a href="{{ $paymentEmailPreviewUrl }}"
                                    class="mt-3 inline-flex items-center justify-center rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900">
                                     {{ __('Open email payment page') }}
                                 </a>

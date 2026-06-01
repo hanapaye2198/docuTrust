@@ -16,6 +16,7 @@ use App\Http\Controllers\NotaryDocumentSignerSignatureImageController;
 use App\Http\Controllers\NotaryIdentityVerificationImageController;
 use App\Http\Controllers\NotaryPaymentLinkController;
 use App\Http\Controllers\NotarySettlementFeeController;
+use App\Http\Controllers\PublicNotaryPaymentController;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
@@ -66,6 +67,11 @@ Route::middleware('throttle:signing-links')->group(function () {
     Route::post('/sign/{token}/trust/authorize', [SignDocumentController::class, 'startTrustAuthorization'])->name('sign.trust.authorize');
     Route::get('/sign/{token}/trust/authorize/{session}', [SignDocumentController::class, 'pollTrustAuthorization'])->name('sign.trust.authorize.poll');
     Route::post('/sign/{token}/complete', [SignDocumentController::class, 'complete'])->name('sign.complete');
+});
+
+Route::middleware(['signed', 'throttle:signing-links'])->group(function () {
+    Route::get('/notary/payment/{notaryRequest}', [PublicNotaryPaymentController::class, 'show'])->name('public.notary.payment.show');
+    Route::post('/notary/payment/{notaryRequest}', [PublicNotaryPaymentController::class, 'checkout'])->name('public.notary.payment.checkout');
 });
 
 Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(function () {

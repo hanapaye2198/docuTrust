@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\NotaryRequest;
 use App\Models\Payment;
+use App\Services\NotaryPublicPaymentLinkService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
@@ -39,11 +40,7 @@ class NotaryPaymentReadyMail extends Mailable implements ShouldQueue
                 'notaryName' => $this->notaryRequest->notary?->name ?? 'Notary Public',
                 'amount' => number_format((float) $this->payment->amount, 2),
                 'expiresAt' => $this->payment->expires_at?->timezone('Asia/Manila')->format('M j, Y g:i A').' (PHT)',
-                'paymentUrl' => route('notary-requests.show', [
-                    'notaryRequest' => $this->notaryRequest,
-                    'tab' => 'closing',
-                    'section' => 'payment',
-                ]),
+                'paymentUrl' => app(NotaryPublicPaymentLinkService::class)->paymentPageUrl($this->notaryRequest),
             ],
         );
     }

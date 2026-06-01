@@ -27,6 +27,7 @@ use App\Models\NotarySigner;
 use App\Models\Payment;
 use App\Models\SignatureField;
 use App\Models\User;
+use App\Services\NotaryPublicPaymentLinkService;
 use App\Services\NotarialCertificateService;
 use App\Services\NotarySealService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -2071,7 +2072,7 @@ class NotaryRequestPagesTest extends TestCase
         });
     }
 
-    public function test_payment_ready_email_points_to_case_payment_page(): void
+    public function test_payment_ready_email_points_to_public_payment_page(): void
     {
         $client = User::factory()->enotarySigner()->create();
         $notary = User::factory()->for($client->organization)->notary()->create();
@@ -2100,15 +2101,11 @@ class NotaryRequestPagesTest extends TestCase
         ]);
 
         $html = (new NotaryPaymentReadyMail($request->fresh(['notary']), $payment))->render();
-
         $this->assertStringContainsString(
-            e(route('notary-requests.show', [
-                'notaryRequest' => $request,
-                'tab' => 'closing',
-                'section' => 'payment',
-            ])),
+            e(url('/notary/payment/'.$request->id)),
             $html
         );
+        $this->assertStringContainsString('signature=', $html);
         $this->assertStringContainsString('Pay Now', $html);
     }
 
@@ -2151,14 +2148,108 @@ class NotaryRequestPagesTest extends TestCase
             ->get(route('notary-requests.show', $request))
             ->assertOk()
             ->assertSee('Payment email link preview')
-            ->assertSee(route('notary-requests.show', [
-                'notaryRequest' => $request,
-                'tab' => 'closing',
-                'section' => 'payment',
-            ]))
+            ->assertSee(url('/notary/payment/'.$request->id))
+            ->assertSee('signature=')
             ->assertSee('Temporary testing link')
             ->assertSee('Open temporary payment link')
             ->assertSee('https://gatewayhub.test/checkout/admin-temporary');
+    }
+
+    public function test_public_payment_page_is_accessible_without_login(): void
+    {
+        $client = User::factory()->enotarySigner()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+            'title' => 'Public payment request',
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 1250.00,
+        ]);
+
+        $this->get(app(NotaryPublicPaymentLinkService::class)->paymentPageUrl($request))
+            ->assertOk()
+            ->assertSee('Pay notarial fee')
+            ->assertSee('Continue to payment');
+    }
+
+    public function test_public_payment_page_can_create_checkout_without_login(): void
+    {
+        Http::fake([
+            'https://gatewayhub.io/api/payments' => Http::response([
+                'success' => true,
+                'data' => [
+                    'payment_id' => 'payment-public-create-1',
+                    'transaction_id' => 'payment-public-create-1',
+                    'gateway' => 'gcash',
+                    'amount' => 1250,
+                    'currency' => 'PHP',
+                    'status' => 'pending',
+                    'qr_data' => '000201-public-create',
+                    'expires_at' => now()->addMinutes(30)->toIso8601String(),
+                    'redirect_url' => null,
+                    'checkout_url' => 'https://gatewayhub.test/checkout/public-created',
+                ],
+                'error' => null,
+            ], 200),
+            'https://gatewayhub.io/api/gateways/enabled' => Http::response([
+                'data' => [
+                    'gateways' => [
+                        ['code' => 'gcash', 'name' => 'Gcash'],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        config()->set('services.gatewayhub.api_key', 'test-key');
+
+        $client = User::factory()->enotarySigner()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+            'title' => 'Public checkout request',
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 1250.00,
+        ]);
+
+        $showUrl = app(NotaryPublicPaymentLinkService::class)->paymentPageUrl($request);
+        parse_str((string) parse_url($showUrl, PHP_URL_QUERY), $query);
+
+        $postUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+            'public.notary.payment.checkout',
+            \Illuminate\Support\Carbon::createFromTimestamp((int) ($query['expires'] ?? now()->addDays(7)->timestamp)),
+            ['notaryRequest' => $request->id],
+        );
+
+        $response = $this->post($postUrl, [
+            'payment_gateway' => 'gcash',
+        ]);
+
+        $response->assertRedirect();
+
+        $this->get($response->headers->get('Location'))
+            ->assertOk()
+            ->assertSee('Payment link created. Scan the QR code or open checkout below to continue.')
+            ->assertSee('Open checkout')
+            ->assertSee('https://api.qrserver.com/v1/create-qr-code/');
+
+        $this->assertDatabaseHas('payments', [
+            'notary_request_id' => $request->id,
+            'provider_payment_id' => 'payment-public-create-1',
+            'payer_user_id' => $client->id,
+            'status' => PaymentStatus::Pending->value,
+        ]);
     }
 
     public function test_client_can_create_gateway_payment_from_email_payment_page(): void

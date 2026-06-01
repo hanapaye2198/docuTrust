@@ -390,11 +390,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             'finalizationReadiness' => $readiness,
             'settlementSteps' => $workflow->settlementSteps($this->notaryRequest),
             'settlementDueAmount' => $workflow->settlementDueAmount($this->notaryRequest),
-            'paymentEmailUrl' => route('notary-requests.show', [
-                'notaryRequest' => $this->notaryRequest,
-                'tab' => 'closing',
-                'section' => 'payment',
-            ]),
+            'paymentEmailUrl' => app(\App\Services\NotaryPublicPaymentLinkService::class)->paymentPageUrl($this->notaryRequest),
+            'paymentEmailPreviewUrl' => app(\App\Services\NotaryPublicPaymentLinkService::class)->paymentPageUrl($this->notaryRequest),
             'settlementPendingCount' => $workflow->settlementPendingCount(
                 $this->notaryRequest,
                 $user->role->value === 'notary',
