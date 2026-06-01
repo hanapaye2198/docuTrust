@@ -22,12 +22,14 @@ use Illuminate\Support\Facades\Mail;
 
 class NotaryNotificationService
 {
-    public function notifyPaymentReady(NotaryRequest $request, Payment $payment): void
+    public function notifyPaymentReady(NotaryRequest $request, Payment $payment, ?string $recipientEmail = null): void
     {
         $request = $request->loadMissing(['requester', 'notary']);
+        $recipientEmail = $this->normalizedEmail($recipientEmail)
+            ?? $this->normalizedEmail($request->requester?->email);
 
-        if ($request->requester !== null && $request->requester->email !== '') {
-            Mail::to($request->requester->email)
+        if ($recipientEmail !== null) {
+            Mail::to($recipientEmail)
                 ->queue(new NotaryPaymentReadyMail($request, $payment));
         }
 
@@ -114,5 +116,16 @@ class NotaryNotificationService
             'read_at' => null,
             'created_at' => now(),
         ]);
+    }
+
+    private function normalizedEmail(?string $email): ?string
+    {
+        if (! is_string($email)) {
+            return null;
+        }
+
+        $email = strtolower(trim($email));
+
+        return $email === '' ? null : $email;
     }
 }

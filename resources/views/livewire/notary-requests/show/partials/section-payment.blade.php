@@ -47,6 +47,28 @@
         </div>
     @endif
 
+    @if ($canCreatePayment)
+        <div class="mt-4 rounded-xl border border-zinc-200 bg-white px-4 py-4 dark:border-zinc-700 dark:bg-zinc-950/40">
+            <label for="payment-recipient-email" class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Payment recipient email') }}</label>
+            <input
+                id="payment-recipient-email"
+                type="email"
+                wire:model.live="paymentRecipientEmail"
+                placeholder="client@example.com"
+                class="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            >
+            <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                {{ __('Enter the exact recipient before emailing the no-login payment page.') }}
+                @if ($notaryRequest->requester?->email)
+                    {{ __('Requester on file: :email', ['email' => $notaryRequest->requester->email]) }}
+                @endif
+            </p>
+            @error('paymentRecipientEmail')
+                <p class="mt-2 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+            @enderror
+        </div>
+    @endif
+
     @if ($paymentRequired && ! $hasSettledPayment)
         <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
             {{ __('This case is waiting for a successful payment before the register entry and digital notarization can finish.') }}
@@ -232,9 +254,10 @@
                             </span>
                         </button>
                     @else
-                        <form method="POST" action="{{ route('notary.requests.payment-link', $notaryRequest) }}">
+                <form method="POST" action="{{ route('notary.requests.payment-link', $notaryRequest) }}">
                             @csrf
                             <input type="hidden" name="payment_gateway" value="{{ $paymentGateway }}">
+                            <input type="hidden" name="recipient_email" value="{{ $paymentRecipientEmail }}">
                             <button
                                 type="submit"
                                 class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -261,6 +284,13 @@
                             @endforeach
                         </select>
                         @error('payment_gateway')
+                            <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="recipient-email" class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Recipient email') }}</label>
+                        <input id="recipient-email" type="email" name="recipient_email" value="{{ old('recipient_email', $paymentRecipientEmail) }}" placeholder="client@example.com" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                        @error('recipient_email')
                             <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                         @enderror
                     </div>

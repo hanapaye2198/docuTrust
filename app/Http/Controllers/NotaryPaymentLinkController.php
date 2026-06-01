@@ -23,6 +23,7 @@ class NotaryPaymentLinkController extends Controller
 
         $validated = $request->validate([
             'payment_gateway' => ['required', 'string', 'max:50'],
+            'recipient_email' => ['required', 'email:rfc', 'max:255'],
         ]);
 
         $payment = app(NotaryPaymentService::class)->createGatewayPayment(
@@ -34,6 +35,7 @@ class NotaryPaymentLinkController extends Controller
         app(NotaryNotificationService::class)->notifyPaymentReady(
             $notaryRequest->fresh(['requester', 'notary']),
             $payment,
+            (string) $validated['recipient_email'],
         );
 
         session()->put('notary_payment_reminder_sent.'.$payment->id, now()->timestamp);
@@ -41,7 +43,7 @@ class NotaryPaymentLinkController extends Controller
         return redirect()
             ->route('notary.requests.show', ['notaryRequest' => $notaryRequest, 'tab' => 'closing', 'section' => 'payment'])
             ->with('status', $payment->wasRecentlyCreated
-                ? __('Payment link created. Share the checkout link or QR code with the client.')
-                : __('An active pending payment already exists. Payment email was sent again to the client.'));
+                ? __('Payment link created and emailed to :email.', ['email' => $validated['recipient_email']])
+                : __('An active pending payment already exists. Payment email was sent again to :email.', ['email' => $validated['recipient_email']]));
     }
 }

@@ -59,10 +59,13 @@ class TestNotaryPaymentFlowCommandTest extends TestCase
             'fees' => 1250.00,
         ]);
 
+        $recipientEmail = 'command-payment@example.test';
+
         $exitCode = Artisan::call('notary:test-payment-flow', [
             'action' => 'prepare',
             '--request' => $request->id,
             '--gateway' => 'coins',
+            '--recipient' => $recipientEmail,
             '--email' => true,
         ]);
 
@@ -71,6 +74,7 @@ class TestNotaryPaymentFlowCommandTest extends TestCase
         $this->assertSame(0, $exitCode);
         $this->assertStringContainsString('Prepared notary payment flow.', $output);
         $this->assertStringContainsString('request_id: '.$request->id, $output);
+        $this->assertStringContainsString('recipient_email: '.$recipientEmail, $output);
         $this->assertStringContainsString('payment_gateway: coins', $output);
         $this->assertStringContainsString('payment_status: pending', $output);
         $this->assertStringContainsString('qr_available: yes', $output);
@@ -86,9 +90,10 @@ class TestNotaryPaymentFlowCommandTest extends TestCase
         $this->assertSame('payment-command-prepare-1', $payment->provider_payment_id);
         $this->assertSame(PaymentStatus::Pending, $payment->status);
 
-        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment): bool {
+        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment, $recipientEmail): bool {
             return $mail->notaryRequest->is($request)
-                && $mail->payment->is($payment);
+                && $mail->payment->is($payment)
+                && $mail->hasTo($recipientEmail);
         });
     }
 

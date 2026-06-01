@@ -1925,16 +1925,19 @@ class NotaryRequestPagesTest extends TestCase
         ]);
 
         $this->actingAs($notary);
+        $recipientEmail = 'client-payment@example.test';
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->set('enabledPaymentGateways', [['code' => 'gcash', 'name' => 'Gcash']])
             ->set('paymentGateway', 'gcash')
+            ->set('paymentRecipientEmail', $recipientEmail)
             ->call('createGatewayPayment')
             ->assertHasNoErrors();
 
-        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment): bool {
+        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment, $recipientEmail): bool {
             return $mail->notaryRequest->is($request)
-                && $mail->payment->is($payment);
+                && $mail->payment->is($payment)
+                && $mail->hasTo($recipientEmail);
         });
     }
 
@@ -1978,9 +1981,12 @@ class NotaryRequestPagesTest extends TestCase
             'fees' => 1250.00,
         ]);
 
+        $recipientEmail = 'client-payment@example.test';
+
         $this->actingAs($notary)
             ->post(route('notary.requests.payment-link', $request), [
                 'payment_gateway' => 'gcash',
+                'recipient_email' => $recipientEmail,
             ])
             ->assertRedirect(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing', 'section' => 'payment']));
 
@@ -1988,9 +1994,10 @@ class NotaryRequestPagesTest extends TestCase
         $this->assertNotNull($payment);
         $this->assertSame('gcash', $payment->gateway);
 
-        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment): bool {
+        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment, $recipientEmail): bool {
             return $mail->notaryRequest->is($request)
-                && $mail->payment->is($payment);
+                && $mail->payment->is($payment)
+                && $mail->hasTo($recipientEmail);
         });
     }
 
@@ -2052,10 +2059,12 @@ class NotaryRequestPagesTest extends TestCase
         ]);
 
         $this->actingAs($notary);
+        $recipientEmail = 'client-payment@example.test';
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->set('enabledPaymentGateways', [['code' => 'gcash', 'name' => 'Gcash']])
             ->set('paymentGateway', 'gcash')
+            ->set('paymentRecipientEmail', $recipientEmail)
             ->call('resendPaymentLinkToClient')
             ->assertHasNoErrors();
 
@@ -2066,10 +2075,42 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->assertNotNull($replacementPayment);
 
-        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $replacementPayment): bool {
+        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $replacementPayment, $recipientEmail): bool {
             return $mail->notaryRequest->is($request)
-                && $mail->payment->is($replacementPayment);
+                && $mail->payment->is($replacementPayment)
+                && $mail->hasTo($recipientEmail);
         });
+    }
+
+    public function test_notary_must_choose_payment_email_recipient_before_sending(): void
+    {
+        Mail::fake();
+
+        $client = User::factory()->enotarySigner()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+            'title' => 'Missing payment recipient request',
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 1250.00,
+        ]);
+
+        $this->actingAs($notary)
+            ->from(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing', 'section' => 'payment']))
+            ->post(route('notary.requests.payment-link', $request), [
+                'payment_gateway' => 'gcash',
+                'recipient_email' => '',
+            ])
+            ->assertRedirect(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing', 'section' => 'payment']))
+            ->assertSessionHasErrors(['recipient_email']);
+
+        Mail::assertNothingQueued();
     }
 
     public function test_payment_ready_email_points_to_public_payment_page(): void

@@ -86,6 +86,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     public ?int $identityRejectId = null;
 
     public string $paymentGateway = '';
+    public string $paymentRecipientEmail = '';
 
     public string $settlementFee = '';
 
@@ -120,6 +121,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->settlementFee = $notaryRequest->attorneyNotarialRegistry !== null
             ? number_format((float) $notaryRequest->attorneyNotarialRegistry->fees, 2, '.', '')
             : '';
+        $this->paymentRecipientEmail = '';
         $this->loadPaymentGateways();
 
         $requestedTab = request()->query('tab');
@@ -1375,6 +1377,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $validated = $this->validate([
             'paymentGateway' => ['required', Rule::in(collect($this->enabledPaymentGateways)->pluck('code')->all())],
+            'paymentRecipientEmail' => ['required', 'email:rfc', 'max:255'],
         ]);
 
         try {
@@ -1387,6 +1390,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             app(NotaryNotificationService::class)->notifyPaymentReady(
                 $this->notaryRequest->fresh(['requester', 'notary']),
                 $payment,
+                (string) $validated['paymentRecipientEmail'],
             );
 
             session()->put('notary_payment_reminder_sent.'.$payment->id, now()->timestamp);
@@ -1394,8 +1398,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             $this->refreshRequest();
 
             session()->flash('status', $payment->wasRecentlyCreated
-                ? __('Payment link created. Share the checkout link or QR code with the client.')
-                : __('An active pending payment already exists. Payment email was sent again to the client.'));
+                ? __('Payment link created and emailed to :email.', ['email' => $validated['paymentRecipientEmail']])
+                : __('An active pending payment already exists. Payment email was sent again to :email.', ['email' => $validated['paymentRecipientEmail']]));
             $this->queueSettlementScroll('section-payment');
         } catch (\RuntimeException $exception) {
             $this->addError('createGatewayPayment', $exception->getMessage());
@@ -1448,6 +1452,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                 && (int) $this->notaryRequest->notary_user_id === (int) $user->id,
             403
         );
+
+        $validated = $this->validate([
+            'paymentRecipientEmail' => ['required', 'email:rfc', 'max:255'],
+        ]);
 
         $workflow = app(NotaryRequestWorkflowService::class);
         $request = $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry', 'requester', 'notary']);
@@ -1503,11 +1511,15 @@ new #[Layout('components.layouts.app')] class extends Component {
             }
         }
 
-        app(NotaryNotificationService::class)->notifyPaymentReady($request->fresh(['requester', 'notary']), $resentPayment);
+        app(NotaryNotificationService::class)->notifyPaymentReady(
+            $request->fresh(['requester', 'notary']),
+            $resentPayment,
+            (string) $validated['paymentRecipientEmail'],
+        );
         session()->put('notary_payment_reminder_sent.'.$resentPayment->id, now()->timestamp);
         session()->flash('status', $resentPayment->is($pendingPayment)
-            ? __('Payment link email sent to the client.')
-            : __('Expired payment link replaced and emailed to the client.'));
+            ? __('Payment link email sent to :email.', ['email' => $validated['paymentRecipientEmail']])
+            : __('Expired payment link replaced and emailed to :email.', ['email' => $validated['paymentRecipientEmail']]));
         $this->refreshRequest();
     }
 
@@ -1681,48 +1693,8 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     private function sendSettlementPaymentReminder(): void
     {
-        $user = Auth::user();
-        if ($user === null || $user->role->value !== 'notary') {
-            return;
-        }
-
-        if ((int) $this->notaryRequest->notary_user_id !== (int) $user->id) {
-            return;
-        }
-
-        $workflow = app(NotaryRequestWorkflowService::class);
-        $request = $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry', 'requester', 'notary']);
-
-        if (! $workflow->paymentRequired($request) || $workflow->hasSettledPayment($request)) {
-            return;
-        }
-
-        $pendingPayment = Payment::query()
-            ->where('notary_request_id', $request->id)
-            ->where('status', PaymentStatus::Pending)
-            ->orderByDesc('created_at')
-            ->orderByDesc('id')
-            ->first();
-
-        if (
-            $pendingPayment instanceof Payment
-            && ($pendingPayment->expires_at === null || ! $pendingPayment->expires_at->isPast())
-        ) {
-            $reminderKey = 'notary_payment_reminder_sent.'.$pendingPayment->id;
-            if (session()->has($reminderKey)) {
-                return;
-            }
-
-            app(NotaryNotificationService::class)->notifyPaymentReady($request, $pendingPayment);
-            session()->put($reminderKey, now()->timestamp);
-            session()->flash('status', __('Payment reminder email sent to the client.'));
-            $this->refreshRequest();
-
-            return;
-        }
-
-        // Do not auto-create gateway payments on tab open.
-        // Settlement open should stay fast and focused on navigation.
+        // Payment emails now require an explicit recipient chosen by the attorney.
+        // Opening the settlement tab should never auto-send a payment message.
     }
 
     /**

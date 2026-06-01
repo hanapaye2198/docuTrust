@@ -16,6 +16,7 @@ class TestNotaryPaymentFlow extends Command
         {action : prepare or verify}
         {--request= : Existing notary request ID}
         {--gateway= : Gateway code to use in prepare mode}
+        {--recipient= : Recipient email for the payment-ready email in prepare mode}
         {--email : Queue the payment-ready email in prepare mode}
         {--refresh : Refresh the latest payment from GatewayHub in verify mode}
         {--webhook= : Path to a JSON webhook payload file to apply in verify mode}
@@ -97,7 +98,11 @@ class TestNotaryPaymentFlow extends Command
         );
 
         if ($this->option('email')) {
-            $notificationService->notifyPaymentReady($notaryRequest->fresh(['requester', 'notary']), $payment);
+            $notificationService->notifyPaymentReady(
+                $notaryRequest->fresh(['requester', 'notary']),
+                $payment,
+                $this->resolvedRecipientEmail(),
+            );
         }
 
         $publicPaymentUrl = $publicPaymentLinkService->paymentPageUrl($notaryRequest);
@@ -109,6 +114,7 @@ class TestNotaryPaymentFlow extends Command
             'request_title' => (string) $notaryRequest->title,
             'request_status' => $notaryRequest->status->value,
             'requester_email' => (string) ($notaryRequest->requester?->email ?? ''),
+            'recipient_email' => (string) ($this->resolvedRecipientEmail() ?? ($notaryRequest->requester?->email ?? '')),
             'notary_email' => (string) ($notaryRequest->notary?->email ?? ''),
             'fee_amount' => number_format((float) $payment->amount, 2, '.', ''),
             'public_payment_url' => $publicPaymentUrl,
@@ -221,6 +227,13 @@ class TestNotaryPaymentFlow extends Command
         return (string) DB::table($table)
             ->where('queue', $queue)
             ->count();
+    }
+
+    private function resolvedRecipientEmail(): ?string
+    {
+        $recipientEmail = trim((string) $this->option('recipient'));
+
+        return $recipientEmail === '' ? null : $recipientEmail;
     }
 
     /**

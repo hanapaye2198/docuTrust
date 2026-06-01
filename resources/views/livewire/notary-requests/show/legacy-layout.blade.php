@@ -912,6 +912,26 @@
                         </div>
                     @endif
 
+                    @if ($canCreatePayment)
+                        <div class="mt-4 rounded-xl border border-zinc-200 bg-white px-4 py-4 dark:border-zinc-700 dark:bg-zinc-950/40">
+                            <label for="legacy-payment-recipient-email" class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Payment recipient email') }}</label>
+                            <input
+                                id="legacy-payment-recipient-email"
+                                type="email"
+                                wire:model.live="paymentRecipientEmail"
+                                placeholder="client@example.com"
+                                class="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                            >
+                            <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                {{ __('Enter the exact recipient before emailing the no-login payment page.') }}
+                                @if ($notaryRequest->requester?->email)
+                                    {{ __('Requester on file: :email', ['email' => $notaryRequest->requester->email]) }}
+                                @endif
+                            </p>
+                            <flux:error name="paymentRecipientEmail" />
+                        </div>
+                    @endif
+
                     @if (($canManageLifecycle || $isNotary) && $hasSettlementFeeConfigured)
                         <div class="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100">
                             <div class="font-medium">{{ __('Payment email link preview') }}</div>
