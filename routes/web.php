@@ -14,6 +14,8 @@ use App\Http\Controllers\MarketingFeatureController;
 use App\Http\Controllers\NotaryCredentialDocumentController;
 use App\Http\Controllers\NotaryDocumentSignerSignatureImageController;
 use App\Http\Controllers\NotaryIdentityVerificationImageController;
+use App\Http\Controllers\NotaryPaymentLinkController;
+use App\Http\Controllers\NotarySettlementFeeController;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
@@ -123,6 +125,8 @@ Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function 
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
+    Route::post('notary/requests/{notaryRequest}/settlement-fee', NotarySettlementFeeController::class)->name('notary.requests.settlement-fee');
+    Route::post('notary/requests/{notaryRequest}/payment-link', NotaryPaymentLinkController::class)->name('notary.requests.payment-link');
     Volt::route('notary/requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')->name('notary.requests.session.live')->middleware(AllowMediaPermissions::class);
     Volt::route('notary/attorney-registries', 'notary.attorney-registries.index')->name('notary.attorney-registries.index');
     Volt::route('notary/requests/{notaryRequest}/attorney-registry', 'notary.attorney-registry')->name('notary.attorney-registry');

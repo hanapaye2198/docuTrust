@@ -44,8 +44,6 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public bool $orEditable = false;
 
-    public bool $feesEditable = true;
-
     public function mount(NotaryRequest $notaryRequest): void
     {
         $user = Auth::user();
@@ -84,8 +82,6 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->verifiedIdentityCount = $state['verified_identity_count'];
         $this->signerSignatures = $state['signer_signatures'];
         $this->orEditable = $state['or_editable'];
-        $this->feesEditable = $state['fees_editable'];
-
         $credential = NotaryCredential::query()
             ->where('user_id', $user->id)
             ->where('status', 'active')
@@ -111,6 +107,19 @@ new #[Layout('components.layouts.app')] class extends Component {
         $user = Auth::user();
         abort_unless($user !== null && $user->role === UserRole::Notary, 403);
 
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $request = $this->notaryRequest->fresh(['documents.documentSigners', 'registerEntries', 'payments', 'attorneyNotarialRegistry']);
+        abort_unless($request instanceof NotaryRequest, 404);
+
+        if (! $workflow->canAccessAttorneyRegistry($request)) {
+            session()->flash('status', __('Complete client payment on the Settlement tab before opening the notarial register entry.'));
+            $this->redirect(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing']), navigate: true);
+
+            return;
+        }
+
+        $this->notaryRequest = $request;
+
         $registryService = app(AttorneyNotarialRegistryService::class);
         $requiresOr = $registryService->paymentRequired($this->notaryRequest)
             && $registryService->hasSettledPayment($this->notaryRequest)
@@ -119,7 +128,6 @@ new #[Layout('components.layouts.app')] class extends Component {
         $validated = $this->validate([
             'title' => ['required', 'string', 'max:255'],
             'notarialActType' => ['required', 'in:acknowledgment,jurat,affidavit,oath,other'],
-            'fees' => ['nullable', 'numeric', 'min:0'],
             'officialReceiptNo' => [$requiresOr ? 'required' : 'nullable', 'string', 'max:100'],
             'parties' => ['required', 'array', 'min:1'],
             'parties.*.name' => ['required', 'string', 'max:255'],
@@ -133,14 +141,10 @@ new #[Layout('components.layouts.app')] class extends Component {
             'competentEvidence.*.id_number' => ['required', 'string', 'max:100'],
         ]);
 
-        $fees = $this->feesEditable
-            ? (float) ($validated['fees'] ?? 0)
-            : (float) ($this->notaryRequest->attorneyNotarialRegistry?->fees ?? 0);
-
         $registryService->saveDraft($this->notaryRequest, $user, [
             'title' => $validated['title'],
             'notarial_act_type' => $validated['notarialActType'],
-            'fees' => $fees,
+            'fees' => (float) ($this->notaryRequest->attorneyNotarialRegistry?->fees ?? 0),
             'official_receipt_no' => $this->orEditable ? ($validated['officialReceiptNo'] ?? null) : null,
             'parties' => $validated['parties'],
             'witnesses' => $validated['witnesses'] ?? [],
@@ -216,7 +220,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'notarialActTypes' => $notarialActTypes,
             'signerSignatures' => $signerSignatures,
             'orEditable' => $orEditable,
-            'feesEditable' => $feesEditable,
+            'feesEditable' => false,
         ])
 
         <div class="ui-panel flex flex-col gap-4 border-t border-zinc-200 bg-zinc-50 px-4 py-4 dark:border-zinc-700 dark:bg-zinc-900/50 sm:flex-row sm:items-center sm:justify-between">

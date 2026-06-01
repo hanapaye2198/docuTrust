@@ -52,6 +52,18 @@ new #[Layout('components.layouts.app')] class extends Component {
         $user = Auth::user();
         abort_unless($user !== null && $user->role === UserRole::Notary, 403);
 
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $request = $this->notaryRequest->fresh(['documents.documentSigners', 'registerEntries', 'payments', 'attorneyNotarialRegistry']);
+        abort_unless($request instanceof NotaryRequest, 404);
+
+        abort_unless(
+            $workflow->canCreateRegisterEntry($request),
+            403,
+            __('Register entry can only be created after attorney signing, payment, and attorney seal completion.')
+        );
+
+        $this->notaryRequest = $request;
+
         $draft = $this->notaryRequest->attorneyNotarialRegistry;
         abort_unless($draft instanceof AttorneyNotarialRegistry, 404);
 

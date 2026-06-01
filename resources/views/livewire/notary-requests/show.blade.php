@@ -143,8 +143,16 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $this->ensureActiveTabIsAvailable();
 
+        $requestedSection = request()->query('section');
+        if ($this->activeTab === 'closing' && $requestedSection === 'payment') {
+            $this->pendingScrollSectionId = 'section-payment';
+            $this->scrollToSettlementOnLoad = false;
+        }
+
         if ($this->activeTab === 'closing') {
-            $this->scrollToSettlementOnLoad = true;
+            if ($requestedSection !== 'payment') {
+                $this->scrollToSettlementOnLoad = true;
+            }
             $this->sendSettlementPaymentReminder();
         }
     }
@@ -238,6 +246,16 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->activeTab = 'closing';
         $this->focusSettlementSection('section-payment');
         $this->sendSettlementPaymentReminder();
+    }
+
+    public function openSettlementSection(string $sectionId): void
+    {
+        if (! in_array('closing', $this->availableTabs(), true)) {
+            return;
+        }
+
+        $this->activeTab = 'closing';
+        $this->focusSettlementSection($sectionId);
     }
 
     /**
@@ -372,6 +390,11 @@ new #[Layout('components.layouts.app')] class extends Component {
             'finalizationReadiness' => $readiness,
             'settlementSteps' => $workflow->settlementSteps($this->notaryRequest),
             'settlementDueAmount' => $workflow->settlementDueAmount($this->notaryRequest),
+            'paymentEmailUrl' => route('notary-requests.show', [
+                'notaryRequest' => $this->notaryRequest,
+                'tab' => 'closing',
+                'section' => 'payment',
+            ]),
             'settlementPendingCount' => $workflow->settlementPendingCount(
                 $this->notaryRequest,
                 $user->role->value === 'notary',
@@ -1329,7 +1352,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         );
 
         $validated = $this->validate([
-            'settlementFee' => ['required', 'numeric', 'min:0'],
+            'settlementFee' => ['required', 'numeric', 'gt:0'],
         ]);
 
         app(AttorneyNotarialRegistryService::class)->saveSettlementFee(
@@ -1382,6 +1405,43 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
     }
 
+    public function createGatewayPaymentForClient(): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null, 401);
+
+        $canPay = ($this->notaryRequest->user_id === $user->id
+            || ($user->isEnotaryPortalSigner() && $user->isNotarySignerOn($this->notaryRequest)))
+            && $user->role->value !== 'notary';
+        abort_unless($canPay, 403);
+
+        $validated = $this->validate([
+            'paymentGateway' => ['required', Rule::in(collect($this->enabledPaymentGateways)->pluck('code')->all())],
+        ]);
+
+        try {
+            $payment = app(NotaryPaymentService::class)->createGatewayPayment(
+                $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']),
+                $validated['paymentGateway'],
+                $user->id,
+            );
+
+            $this->refreshRequest();
+            $this->queueSettlementScroll('section-payment');
+
+            $paymentUrl = $payment->checkout_url ?? $payment->redirect_url;
+            if (is_string($paymentUrl) && $paymentUrl !== '') {
+                $this->redirect($paymentUrl, navigate: false);
+
+                return;
+            }
+
+            session()->flash('status', __('Payment link created. Open checkout below to continue.'));
+        } catch (\RuntimeException $exception) {
+            $this->addError('createGatewayPaymentForClient', $exception->getMessage());
+        }
+    }
+
     public function resendPaymentLinkToClient(): void
     {
         $user = Auth::user();
@@ -1414,15 +1474,43 @@ new #[Layout('components.layouts.app')] class extends Component {
             return;
         }
 
-        if ($pendingPayment->expires_at !== null && $pendingPayment->expires_at->isPast()) {
-            $this->addError('resendPaymentLinkToClient', __('This payment link has expired. Generate a new payment link first.'));
+        $resentPayment = $pendingPayment;
 
-            return;
+        if ($pendingPayment->expires_at !== null && $pendingPayment->expires_at->isPast()) {
+            $gateway = trim((string) $pendingPayment->gateway);
+
+            if ($gateway === '') {
+                $gateway = trim((string) $this->paymentGateway);
+            }
+
+            if ($gateway === '' && $this->enabledPaymentGateways !== []) {
+                $gateway = (string) ($this->enabledPaymentGateways[0]['code'] ?? '');
+            }
+
+            if ($gateway === '') {
+                $this->addError('resendPaymentLinkToClient', __('No payment gateway is available to regenerate the expired payment link.'));
+
+                return;
+            }
+
+            try {
+                $resentPayment = app(NotaryPaymentService::class)->createGatewayPayment(
+                    $request->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']),
+                    $gateway,
+                    $user->id,
+                );
+            } catch (\RuntimeException $exception) {
+                $this->addError('resendPaymentLinkToClient', $exception->getMessage());
+
+                return;
+            }
         }
 
-        app(NotaryNotificationService::class)->notifyPaymentReady($request, $pendingPayment);
-        session()->put('notary_payment_reminder_sent.'.$pendingPayment->id, now()->timestamp);
-        session()->flash('status', __('Payment link email sent to the client.'));
+        app(NotaryNotificationService::class)->notifyPaymentReady($request->fresh(['requester', 'notary']), $resentPayment);
+        session()->put('notary_payment_reminder_sent.'.$resentPayment->id, now()->timestamp);
+        session()->flash('status', $resentPayment->is($pendingPayment)
+            ? __('Payment link email sent to the client.')
+            : __('Expired payment link replaced and emailed to the client.'));
         $this->refreshRequest();
     }
 
@@ -1709,20 +1797,23 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         if ($workflow->hasAttorneySignedAllDocuments($request) && ! $hasFeeConfigured) {
             return [
-                'type' => 'tab',
-                'label' => __('Set notarial fee'),
+                'type' => 'wire',
+                'label' => __('Open fee step'),
                 'description' => __('Enter the fee amount on Settlement before creating a payment link.'),
                 'variant' => 'primary',
+                'action' => 'openSettlementSection',
+                'params' => ['section-settlement-fee'],
                 'tab' => 'closing',
             ];
         }
 
         if ($paymentRequired && ! $hasSettledPayment && $hasFeeConfigured) {
             return [
-                'type' => 'tab',
-                'label' => __('Collect payment'),
+                'type' => 'wire',
+                'label' => __('Open payment step'),
                 'description' => __('Generate or share the payment link using the fee amount you set.'),
                 'variant' => 'primary',
+                'action' => 'openPaymentSection',
                 'tab' => 'closing',
             ];
         }

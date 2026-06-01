@@ -56,13 +56,14 @@
             @endif
         </div>
 
-        <div class="flex w-full shrink-0 flex-wrap items-center gap-2 lg:max-w-md lg:justify-end">
+        <div class="flex w-full shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:max-w-md lg:justify-end">
             @if ($primaryAction)
                 @if ($primaryAction['type'] === 'link')
                     <flux:button
                         :variant="$primaryAction['variant']"
                         :href="$primaryAction['href']"
                         wire:navigate
+                        class="w-full sm:w-auto"
                     >
                         {{ $primaryAction['label'] }}
                     </flux:button>
@@ -79,6 +80,7 @@
                             type="button"
                             wire:click="{{ $wireAction }}"
                             wire:confirm="{{ $primaryAction['confirm'] }}"
+                            class="w-full sm:w-auto"
                         >
                             {{ $primaryAction['label'] }}
                         </flux:button>
@@ -87,6 +89,7 @@
                             :variant="$primaryAction['variant']"
                             type="button"
                             wire:click="{{ $wireAction }}"
+                            class="w-full sm:w-auto"
                         >
                             {{ $primaryAction['label'] }}
                         </flux:button>
@@ -96,6 +99,7 @@
                         :variant="$primaryAction['variant']"
                         type="button"
                         wire:click="setActiveTab('{{ $primaryAction['tab'] }}')"
+                        class="w-full sm:w-auto"
                     >
                         {{ $primaryAction['label'] }}
                     </flux:button>
@@ -103,7 +107,7 @@
             @endif
 
             @if (! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
-                <flux:dropdown>
+                <flux:dropdown class="self-end sm:self-auto">
                     <flux:button variant="ghost" icon="ellipsis-horizontal" />
                     <flux:menu>
                         @if ($canManageLifecycle && $notaryRequest->status === \App\Enums\NotaryRequestStatus::Draft)

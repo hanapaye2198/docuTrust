@@ -39,6 +39,11 @@ class NotaryPaymentReadyMail extends Mailable implements ShouldQueue
                 'notaryName' => $this->notaryRequest->notary?->name ?? 'Notary Public',
                 'amount' => number_format((float) $this->payment->amount, 2),
                 'expiresAt' => $this->payment->expires_at?->timezone('Asia/Manila')->format('M j, Y g:i A').' (PHT)',
+                'paymentUrl' => route('notary-requests.show', [
+                    'notaryRequest' => $this->notaryRequest,
+                    'tab' => 'closing',
+                    'section' => 'payment',
+                ]),
             ],
         );
     }

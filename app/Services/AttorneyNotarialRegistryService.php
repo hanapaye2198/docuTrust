@@ -68,10 +68,8 @@ class AttorneyNotarialRegistryService
 
         $existing = $request->attorneyNotarialRegistry;
         $credential = $this->activeCredential($attorney);
-        $paymentSettled = $this->hasSettledPayment($request);
+        $paymentSettled = $this->hasActualPaidPayment($request);
         $orEditable = $paymentSettled || ! $this->paymentRequired($request);
-        $feesEditable = ! $paymentSettled;
-
         $base = $existing instanceof AttorneyNotarialRegistry
             ? [
                 'title' => (string) $existing->title,
@@ -103,7 +101,7 @@ class AttorneyNotarialRegistryService
             'signer_signatures' => $this->signerSignaturesForRequest($request),
             'payment_settled' => $paymentSettled,
             'or_editable' => $orEditable,
-            'fees_editable' => $feesEditable,
+            'fees_editable' => false,
         ]);
     }
 
@@ -270,6 +268,15 @@ class AttorneyNotarialRegistryService
             return true;
         }
 
+        $request->loadMissing('payments');
+
+        return $request->payments->contains(
+            fn ($payment): bool => $payment->status === PaymentStatus::Paid
+        );
+    }
+
+    private function hasActualPaidPayment(NotaryRequest $request): bool
+    {
         $request->loadMissing('payments');
 
         return $request->payments->contains(

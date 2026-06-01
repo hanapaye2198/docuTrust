@@ -11,10 +11,10 @@ Your notarization is ready for payment.
 **Payment expires:** {{ $expiresAt }}
 @endif
 
-Complete the payment from your case page to continue the notarization workflow.
+Use the payment link below to open your case payment page, choose a payment method, and continue the notarization workflow.
 
-<x-mail::button :url="route('notary-requests.show', $notaryRequest)">
-View Notarization
+<x-mail::button :url="$paymentUrl">
+Pay Now
 </x-mail::button>
 
 Thanks,<br>

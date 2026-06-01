@@ -175,7 +175,7 @@
                                     <flux:error name="fees" />
                                 @else
                                     <div class="text-sm font-semibold">₱{{ number_format((float) $fees, 2) }}</div>
-                                    <p class="text-[10px] text-zinc-500 dark:text-zinc-400">{{ __('Fee set on Settlement before payment') }}</p>
+                                    <p class="text-[10px] text-zinc-500 dark:text-zinc-400">{{ __('Fee is managed from Settlement on the case page.') }}</p>
                                 @endif
                                 @if ($orEditable)
                                     <p class="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">{{ __('O.R. no.') }}</p>

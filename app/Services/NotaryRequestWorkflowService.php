@@ -478,7 +478,8 @@ class NotaryRequestWorkflowService
     {
         $request->loadMissing('attorneyNotarialRegistry');
 
-        return $request->attorneyNotarialRegistry !== null;
+        return $request->attorneyNotarialRegistry !== null
+            && (float) $request->attorneyNotarialRegistry->fees > 0;
     }
 
     public function hasPreparedRegistryDraft(NotaryRequest $request): bool
