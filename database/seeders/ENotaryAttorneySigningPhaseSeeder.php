@@ -19,7 +19,6 @@ use App\Models\SignatureField;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -33,7 +32,7 @@ class ENotaryAttorneySigningPhaseSeeder extends Seeder
             'email' => 'atty-phase-notary@docutrust.test',
         ], [
             'name' => 'Atty. Phase Tester',
-            'password' => Hash::make('password'),
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'role' => UserRole::Notary,
             'organization_role' => OrganizationRole::Member,
@@ -50,7 +49,7 @@ class ENotaryAttorneySigningPhaseSeeder extends Seeder
         ], [
             'organization_id' => $notary->organization_id,
             'name' => 'Client Phase Tester',
-            'password' => Hash::make('password'),
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'role' => UserRole::Client,
             'organization_role' => OrganizationRole::Member,
@@ -204,8 +203,8 @@ class ENotaryAttorneySigningPhaseSeeder extends Seeder
         ]);
 
         $this->command?->info('Seeded attorney signing phase e-notary demo data.');
-        $this->command?->line('Notary login: atty-phase-notary@docutrust.test / password');
-        $this->command?->line('Client login: atty-phase-client@docutrust.test / password');
+        $this->command?->line('Notary login: atty-phase-notary@docutrust.test / '.DatabaseSeeder::DEMO_PASSWORD);
+        $this->command?->line('Client login: atty-phase-client@docutrust.test / '.DatabaseSeeder::DEMO_PASSWORD);
         $this->command?->line(sprintf('Request ID: %d | Document ID: %d | Attorney signer ID: %d', $request->id, $document->id, $attorneySigner->id));
     }
 

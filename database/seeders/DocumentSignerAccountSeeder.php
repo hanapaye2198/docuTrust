@@ -43,7 +43,7 @@ class DocumentSignerAccountSeeder extends Seeder
                 'email' => $account['email'],
             ], [
                 'name' => $account['name'],
-                'password' => 'password',
+                'password' => DatabaseSeeder::DEMO_PASSWORD,
                 'email_verified_at' => now(),
                 'role' => UserRole::Client,
                 'workspace' => UserWorkspace::Signing,
@@ -61,7 +61,7 @@ class DocumentSignerAccountSeeder extends Seeder
                 $this->seedSampleDocuments($user);
             }
 
-            $this->command?->info("Document signer: {$account['email']} / password");
+            $this->command?->info("Document signer: {$account['email']} / ".DatabaseSeeder::DEMO_PASSWORD);
         }
     }
 

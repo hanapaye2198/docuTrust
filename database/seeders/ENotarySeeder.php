@@ -35,7 +35,7 @@ class ENotarySeeder extends Seeder
             'email' => 'notaryatty@docutrust.tech',
         ], [
             'name' => 'Atty. Maria Santos',
-            'password' => 'password',
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'role' => UserRole::Notary,
             'organization_role' => OrganizationRole::Member,
@@ -52,7 +52,7 @@ class ENotarySeeder extends Seeder
         ], [
             'organization_id' => $notary->organization_id,
             'name' => 'Admin Reyes',
-            'password' => 'password',
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'role' => UserRole::NotaryAdmin,
             'organization_role' => OrganizationRole::Admin,
@@ -69,7 +69,7 @@ class ENotarySeeder extends Seeder
         ], [
             'organization_id' => $notary->organization_id,
             'name' => 'Juan Dela Cruz',
-            'password' => 'password',
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'role' => UserRole::Client,
             'workspace' => UserWorkspace::Enotary,
@@ -87,7 +87,7 @@ class ENotarySeeder extends Seeder
         ], [
             'organization_id' => $notary->organization_id,
             'name' => 'Ana Marie Garcia',
-            'password' => 'password',
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'role' => UserRole::Client,
             'workspace' => UserWorkspace::Enotary,

@@ -28,7 +28,7 @@ class ProductionTestAccountSeeder extends Seeder
             'email' => 'atty.test@docutrust.tech',
         ], [
             'name' => 'Atty. Test Notary',
-            'password' => 'password',
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'mobile_number' => '+639170000001',
             'mobile_verified_at' => now(),
@@ -41,14 +41,14 @@ class ProductionTestAccountSeeder extends Seeder
             'two_factor_onboarding_completed_at' => now(),
         ]);
 
-        $this->command->info("Notary: atty.test@docutrust.tech / password (org: {$notary->organization_id})");
+        $this->command->info('Notary: atty.test@docutrust.tech / '.DatabaseSeeder::DEMO_PASSWORD." (org: {$notary->organization_id})");
 
         // ─── Client Account ──────────────────────────────────────────────
         $client = User::query()->updateOrCreate([
             'email' => 'client.test@docutrust.tech',
         ], [
             'name' => 'Test Client',
-            'password' => 'password',
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'mobile_number' => '+639170000002',
             'mobile_verified_at' => now(),
@@ -61,14 +61,14 @@ class ProductionTestAccountSeeder extends Seeder
             'two_factor_onboarding_completed_at' => now(),
         ]);
 
-        $this->command->info("Client: client.test@docutrust.tech / password (org: {$client->organization_id})");
+        $this->command->info('Client: client.test@docutrust.tech / '.DatabaseSeeder::DEMO_PASSWORD." (org: {$client->organization_id})");
 
         // ─── Notary Admin Account ────────────────────────────────────────
         $admin = User::query()->updateOrCreate([
             'email' => 'admin.test@docutrust.tech',
         ], [
             'name' => 'Test Admin',
-            'password' => 'password',
+            'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'mobile_number' => '+639170000003',
             'mobile_verified_at' => now(),
@@ -81,9 +81,9 @@ class ProductionTestAccountSeeder extends Seeder
             'two_factor_onboarding_completed_at' => now(),
         ]);
 
-        $this->command->info("Admin: admin.test@docutrust.tech / password (org: {$admin->organization_id})");
+        $this->command->info('Admin: admin.test@docutrust.tech / '.DatabaseSeeder::DEMO_PASSWORD." (org: {$admin->organization_id})");
 
         $this->command->newLine();
-        $this->command->info('All accounts: password = "password", MFA bypassed, fully onboarded.');
+        $this->command->info('All accounts: password = "'.DatabaseSeeder::DEMO_PASSWORD.'", MFA bypassed, fully onboarded.');
     }
 }

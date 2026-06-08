@@ -30,7 +30,7 @@ class SuperAdminSeeder extends Seeder
                 'name' => 'Super Administrator',
                 'first_name' => 'Super',
                 'last_name' => 'Administrator',
-                'password' => 'password',
+                'password' => DatabaseSeeder::DEMO_PASSWORD,
                 'email_verified_at' => now(),
                 'role' => UserRole::SuperAdmin,
                 'organization_role' => OrganizationRole::Admin,

@@ -55,7 +55,7 @@ class ENotarySignerAccountSeeder extends Seeder
             ], [
                 'organization_id' => $notary->organization_id,
                 'name' => $account['name'],
-                'password' => 'password',
+                'password' => DatabaseSeeder::DEMO_PASSWORD,
                 'email_verified_at' => now(),
                 'role' => UserRole::Client,
                 'workspace' => UserWorkspace::Enotary,
@@ -83,7 +83,7 @@ class ENotarySignerAccountSeeder extends Seeder
                 ],
             ]);
 
-            $this->command?->info("eNotary signer: {$account['email']} / password (assigned to {$notary->email})");
+            $this->command?->info("eNotary signer: {$account['email']} / ".DatabaseSeeder::DEMO_PASSWORD." (assigned to {$notary->email})");
         }
     }
 }

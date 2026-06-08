@@ -10,13 +10,15 @@ use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
+    public const DEMO_PASSWORD = 'birthday';
+
     public function run(): void
     {
         User::query()->updateOrCreate([
             'email' => 'adminsigner@docutrust.tech',
         ], [
             'name' => 'Demo Admin',
-            'password' => 'password',
+            'password' => self::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'role' => UserRole::NotaryAdmin,
             'organization_role' => OrganizationRole::Admin,

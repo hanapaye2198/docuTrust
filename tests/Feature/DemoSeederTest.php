@@ -34,10 +34,10 @@ class DemoSeederTest extends TestCase
         $this->assertNotNull($eNotaryAdminUser);
         $this->assertNotNull($eNotaryClientUser);
         $this->assertNotNull($eNotarySigner);
-        $this->assertTrue(Hash::check('password', (string) $documentSigner->password));
-        $this->assertTrue(Hash::check('password', (string) $eNotaryUser->password));
-        $this->assertTrue(Hash::check('password', (string) $eNotaryAdminUser->password));
-        $this->assertTrue(Hash::check('password', (string) $eNotaryClientUser->password));
+        $this->assertTrue(Hash::check(DatabaseSeeder::DEMO_PASSWORD, (string) $documentSigner->password));
+        $this->assertTrue(Hash::check(DatabaseSeeder::DEMO_PASSWORD, (string) $eNotaryUser->password));
+        $this->assertTrue(Hash::check(DatabaseSeeder::DEMO_PASSWORD, (string) $eNotaryAdminUser->password));
+        $this->assertTrue(Hash::check(DatabaseSeeder::DEMO_PASSWORD, (string) $eNotaryClientUser->password));
         $this->assertSame('signing', $documentSigner->workspace?->value);
         $this->assertSame('enotary', $eNotarySigner->workspace?->value);
         $this->assertSame(8, Document::query()->where('user_id', $documentSigner->id)->count());
