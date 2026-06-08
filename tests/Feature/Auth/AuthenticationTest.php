@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use App\Services\TwoFactorAuthenticationService;
+use App\Support\AuthSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt as LivewireVolt;
 use Tests\TestCase;
@@ -82,6 +83,43 @@ class AuthenticationTest extends TestCase
         $response
             ->assertHasNoErrors()
             ->assertRedirect(route('two-factor.challenge', absolute: false));
+    }
+
+    public function test_login_with_remember_me_sets_remember_token(): void
+    {
+        $user = User::factory()->create([
+            'remember_token' => null,
+        ]);
+
+        LivewireVolt::test('auth.login')
+            ->set('email', $user->email)
+            ->set('password', 'password')
+            ->set('remember', true)
+            ->call('login')
+            ->assertHasNoErrors()
+            ->assertRedirect(route($user->homeRouteName(), absolute: false));
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertNotNull($user->fresh()->remember_token);
+    }
+
+    public function test_login_with_remember_me_stores_pending_two_factor_remember_for_mfa_users(): void
+    {
+        $user = User::factory()->create([
+            'two_factor_enabled' => true,
+            'two_factor_confirmed_at' => now(),
+            'two_factor_secret' => app(TwoFactorAuthenticationService::class)->generateSecretKey(),
+        ]);
+
+        LivewireVolt::test('auth.login')
+            ->set('email', $user->email)
+            ->set('password', 'password')
+            ->set('remember', true)
+            ->call('login')
+            ->assertHasNoErrors()
+            ->assertRedirect(route('two-factor.challenge', absolute: false));
+
+        $this->assertTrue((bool) session(AuthSession::PENDING_TWO_FACTOR_REMEMBER));
     }
 
     public function test_users_can_logout(): void

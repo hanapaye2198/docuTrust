@@ -120,10 +120,16 @@
                 autocomplete="one-time-code"
                 placeholder="{{ __('xxxx-xxxx') }}"
             />
+            @php
+                $rememberDeviceChecked = old('remember_device') !== null
+                    ? (bool) old('remember_device')
+                    : (bool) session(\App\Support\AuthSession::PENDING_TWO_FACTOR_REMEMBER, false);
+            @endphp
             <flux:checkbox
                 name="remember_device"
                 value="1"
                 label="{{ __('Trust this device for 30 days') }}"
+                @if ($rememberDeviceChecked) checked @endif
             />
             @error('code')
                 <p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">

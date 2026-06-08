@@ -10,6 +10,7 @@ use App\Support\AuthSession;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -76,11 +77,20 @@ class TwoFactorChallengeController extends Controller
 
         RateLimiter::clear($this->throttleKey($userId));
         $request->session()->put(AuthSession::TWO_FACTOR_PASSED, true);
-        if ((bool) $request->boolean('remember_device')) {
+
+        $rememberFromLogin = (bool) $request->session()->get(AuthSession::PENDING_TWO_FACTOR_REMEMBER, false);
+        $rememberDevice = (bool) $request->boolean('remember_device') || $rememberFromLogin;
+
+        if ($rememberDevice) {
             $trustedDevices->trustCurrentDevice($user, $request, 30);
         } else {
             $request->session()->forget(AuthSession::TRUSTED_DEVICE_UNTIL);
         }
+
+        if ($rememberFromLogin) {
+            Auth::guard('web')->login($user, true);
+        }
+
         $request->session()->forget([
             AuthSession::PENDING_TWO_FACTOR_USER_ID,
             AuthSession::PENDING_TWO_FACTOR_REMEMBER,

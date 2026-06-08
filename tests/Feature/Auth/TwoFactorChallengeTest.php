@@ -173,6 +173,40 @@ class TwoFactorChallengeTest extends TestCase
             ->assertSessionHasErrors('code');
     }
 
+    public function test_login_remember_preference_creates_trusted_device_after_two_factor(): void
+    {
+        $twoFactor = app(TwoFactorAuthenticationService::class);
+        $secret = $twoFactor->generateSecretKey();
+        $code = app(Google2FA::class)->getCurrentOtp($secret);
+
+        $user = User::factory()->signer()->create([
+            'onboarding_step' => OnboardingStep::Completed,
+            'mfa_enabled' => true,
+            'two_factor_secret' => $secret,
+            'two_factor_enabled' => true,
+            'two_factor_confirmed_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->withSession([
+                AuthSession::TWO_FACTOR_PASSED => false,
+                AuthSession::PENDING_TWO_FACTOR_STARTED_AT => now()->timestamp,
+                AuthSession::PENDING_TWO_FACTOR_REMEMBER => true,
+            ])
+            ->withServerVariables([
+                'HTTP_USER_AGENT' => 'PHPUnitLoginRememberDevice',
+                'HTTP_ACCEPT_LANGUAGE' => 'en',
+                'REMOTE_ADDR' => '127.0.0.1',
+            ])
+            ->post(route('two-factor.verify'), [
+                'code' => $code,
+            ])
+            ->assertRedirect(route($user->homeRouteName()));
+
+        $this->assertDatabaseCount('trusted_devices', 1);
+        $this->assertNotNull($user->fresh()->remember_token);
+    }
+
     public function test_remember_device_creates_trusted_device_record(): void
     {
         $twoFactor = app(TwoFactorAuthenticationService::class);

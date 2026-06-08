@@ -251,9 +251,14 @@
         animation: login-shimmer 1.5s ease-in-out infinite;
     }
 
+    .login-shell .login-sidebar-bg {
+        will-change: opacity;
+    }
+
     @media (prefers-reduced-motion: reduce) {
-        .login-shell .login-shimmer {
-            animation: none;
+        .login-shell .login-shimmer,
+        .login-shell .login-sidebar-bg {
+            transition: none;
         }
     }
 }
