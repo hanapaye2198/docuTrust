@@ -17,14 +17,14 @@
   data-logo-light="{{ $chatbotLogoLight }}"
 >
   <button type="button" class="dt-chatbot-toggle" id="docutrustChatbotToggle" aria-expanded="false" aria-controls="docutrustChatbotPanel" aria-label="{{ __('Open DocuTrust AI assistant') }}">
-    <img src="{{ $chatbotLogo }}" alt="" class="dt-chatbot-toggle-logo" width="28" height="28" decoding="async">
+    <img src="{{ $chatbotLogoLight }}" alt="" class="dt-chatbot-toggle-logo" width="28" height="28" decoding="async">
     <span class="dt-chatbot-toggle-label">{{ __('Ask AI') }}</span>
   </button>
 
   <div class="dt-chatbot-panel" id="docutrustChatbotPanel" role="dialog" aria-label="{{ __('DocuTrust AI assistant') }}" hidden>
     <div class="dt-chatbot-header">
       <div class="dt-chatbot-header-brand">
-        <img src="{{ $chatbotLogo }}" alt="" class="dt-chatbot-header-logo" width="36" height="36" decoding="async">
+        <img src="{{ $chatbotLogoLight }}" alt="" class="dt-chatbot-header-logo" width="36" height="36" decoding="async">
         <div>
           <div class="dt-chatbot-title">{{ __('DocuTrust Assistant') }}</div>
           <div class="dt-chatbot-subtitle">{{ __('Powered by AI · Product & compliance questions') }}</div>
@@ -38,7 +38,7 @@
     <div class="dt-chatbot-body">
       <div class="dt-chatbot-messages" id="docutrustChatbotMessages" aria-live="polite">
         <div class="dt-chatbot-msg-row dt-chatbot-msg-row-assistant">
-          <img src="{{ $chatbotLogo }}" alt="" class="dt-chatbot-avatar" width="32" height="32" decoding="async">
+          <img src="{{ $chatbotLogoLight }}" alt="" class="dt-chatbot-avatar" width="32" height="32" decoding="async">
           <div class="dt-chatbot-msg dt-chatbot-msg-assistant">
             <p>{{ __('Hi! I can answer questions about DocuTrust features, security, CSC membership, trials, and how digital signing works. How can I help?') }}</p>
           </div>
@@ -80,32 +80,23 @@
 .dt-chatbot{
   --dt-chat-teal:#2EC4B6;
   --dt-chat-teal-dark:#1a9e92;
-  --dt-chat-bg:#0d1a1f;
-  --dt-chat-surface:#152428;
-  --dt-chat-text:#e8f4f2;
-  --dt-chat-muted:#7a9e9b;
-  --dt-chat-border:rgba(46,196,182,0.18);
+  --dt-chat-bg:#ffffff;
+  --dt-chat-surface:#f4faf9;
+  --dt-chat-text:#0f172a;
+  --dt-chat-muted:#64748b;
+  --dt-chat-border:rgba(13,148,136,0.16);
   position:fixed;
   right:max(16px,env(safe-area-inset-right));
   bottom:max(16px,env(safe-area-inset-bottom));
   z-index:250;
   font-family:'Source Sans 3',system-ui,sans-serif;
 }
-@media (prefers-color-scheme:light){
-  .dt-chatbot{
-    --dt-chat-bg:#ffffff;
-    --dt-chat-surface:#f4faf9;
-    --dt-chat-text:#0f172a;
-    --dt-chat-muted:#64748b;
-    --dt-chat-border:rgba(13,148,136,0.16);
-  }
-}
-html.light-scheme .dt-chatbot{
-  --dt-chat-bg:#ffffff;
-  --dt-chat-surface:#f4faf9;
-  --dt-chat-text:#0f172a;
-  --dt-chat-muted:#64748b;
-  --dt-chat-border:rgba(13,148,136,0.16);
+html.dark-scheme .dt-chatbot{
+  --dt-chat-bg:#0d1a1f;
+  --dt-chat-surface:#152428;
+  --dt-chat-text:#e8f4f2;
+  --dt-chat-muted:#7a9e9b;
+  --dt-chat-border:rgba(46,196,182,0.18);
 }
 .dt-chatbot-toggle{
   display:inline-flex;
@@ -413,13 +404,10 @@ html.light-scheme .dt-chatbot{
   }
 
   function chatbotLogoSrc () {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-      return logoLightUrl;
+    if (document.documentElement.classList.contains('dark-scheme')) {
+      return logoUrl;
     }
-    if (document.documentElement.classList.contains('light-scheme')) {
-      return logoLightUrl;
-    }
-    return logoUrl;
+    return logoLightUrl;
   }
 
   function getCsrfToken () {

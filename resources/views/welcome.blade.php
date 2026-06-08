@@ -8,27 +8,22 @@
 @endphp
 <html lang="en" class="docutrust-smooth-scroll">
 <head>
-<script>
-(function () {
-  function docuTrustSyncColorScheme () {
-    var m = window.matchMedia('(prefers-color-scheme: light)');
-    document.documentElement.classList.toggle('light-scheme', m.matches);
-  }
-  docuTrustSyncColorScheme();
-  var mq = window.matchMedia('(prefers-color-scheme: light)');
-  if (typeof mq.addEventListener === 'function') {
-    mq.addEventListener('change', docuTrustSyncColorScheme);
-  } else if (typeof mq.addListener === 'function') {
-    mq.addListener(docuTrustSyncColorScheme);
-  }
-})();
-</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#060d10" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f0f7f5" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f0f7f5" id="welcomeThemeColor">
+<script>
+(function () {
+  var isDark = localStorage.getItem('theme') === 'dark';
+  document.documentElement.classList.toggle('dark-scheme', isDark);
+  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+  var themeColor = document.getElementById('welcomeThemeColor');
+  if (themeColor) {
+    themeColor.content = isDark ? '#060d10' : '#f0f7f5';
+  }
+})();
+</script>
 <title>DocuTrust | Secure & Tamper-Proof Digital Signatures</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -37,6 +32,37 @@
 :root {
   --font-body: 'Source Sans 3', system-ui, sans-serif;
   --font-display: 'Outfit', system-ui, sans-serif;
+  --teal: #0d9488;
+  --teal-dark: #0f766e;
+  --teal-light: #0f766e;
+  --green: #166534;
+  --green-mid: #15803d;
+  --gold: #b45309;
+  --bg: #f0f7f5;
+  --surface: #ffffff;
+  --surface2: #e8f3f0;
+  --border: rgba(13, 148, 136, 0.2);
+  --border2: rgba(13, 148, 136, 0.1);
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-dim: #64748b;
+  --headline: #0a1917;
+  --header-bg: rgba(255, 255, 255, 0.92);
+  --mobile-nav-bg: rgba(255, 255, 255, 0.98);
+  --trust-bar-bg: rgba(255, 255, 255, 0.86);
+  --badge-float2-bg: rgba(255, 255, 255, 0.96);
+  --footer-bg: rgba(248, 252, 251, 0.97);
+  --overlay-dark: rgba(15, 23, 42, 0.06);
+  --overlay-signer: rgba(15, 23, 42, 0.05);
+  --overlay-kpi: rgba(15, 23, 42, 0.05);
+  --progress-track: rgba(15, 23, 42, 0.08);
+  --chip-bg: rgba(15, 23, 42, 0.04);
+  --ai-bubble-bg: rgba(15, 23, 42, 0.06);
+  --logo-tile-bg: #ffffff;
+  --logo-tile-shadow: 0 2px 10px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.08);
+}
+
+html.dark-scheme{
   --teal: #2EC4B6;
   --teal-dark: #1a9e92;
   --teal-light: #7ce8dc;
@@ -67,118 +93,8 @@
   --logo-tile-shadow: 0 0 20px rgba(46,196,182,0.2);
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --teal: #0d9488;
-    --teal-dark: #0f766e;
-    --teal-light: #0f766e;
-    --green: #166534;
-    --green-mid: #15803d;
-    --gold: #b45309;
-    --bg: #f0f7f5;
-    --surface: #ffffff;
-    --surface2: #e8f3f0;
-    --border: rgba(13, 148, 136, 0.2);
-    --border2: rgba(13, 148, 136, 0.1);
-    --text: #0f172a;
-    --text-muted: #475569;
-    --text-dim: #64748b;
-    --headline: #0a1917;
-    --header-bg: rgba(255, 255, 255, 0.92);
-    --mobile-nav-bg: rgba(255, 255, 255, 0.98);
-    --trust-bar-bg: rgba(255, 255, 255, 0.86);
-    --badge-float2-bg: rgba(255, 255, 255, 0.96);
-    --footer-bg: rgba(248, 252, 251, 0.97);
-    --overlay-dark: rgba(15, 23, 42, 0.06);
-    --overlay-signer: rgba(15, 23, 42, 0.05);
-    --overlay-kpi: rgba(15, 23, 42, 0.05);
-    --progress-track: rgba(15, 23, 42, 0.08);
-    --chip-bg: rgba(15, 23, 42, 0.04);
-    --ai-bubble-bg: rgba(15, 23, 42, 0.06);
-    --logo-tile-bg: #ffffff;
-    --logo-tile-shadow: 0 2px 10px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.08);
-  }
-
-  body::before {
-    opacity: 0.35;
-  }
-
-  body::after {
-    background-image:
-      linear-gradient(rgba(46,196,182,0.07) 1px,transparent 1px),
-      linear-gradient(90deg,rgba(46,196,182,0.07) 1px,transparent 1px);
-  }
-
-  .doc-card {
-    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(46,196,182,0.06);
-  }
-
-  .ai-visual {
-    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
-  }
-
-  .orb {
-    opacity: 0.12;
-  }
-
-  .feature-card:hover {
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(46,196,182,0.12);
-  }
-
-  .about-media {
-    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
-  }
-
-  .about-media::after {
-    background: linear-gradient(to top,rgba(15,23,42,0.35),rgba(15,23,42,0.06) 45%,transparent 75%);
-  }
-
-  .about-surepay {
-    background: rgba(255,255,255,0.86);
-    border: 1px solid rgba(13, 148, 136, 0.24);
-    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
-  }
-
-  .about-surepay-label {
-    color: var(--green);
-  }
-
-  .feature-card {
-    background: linear-gradient(180deg, rgba(13, 148, 136, 0.06), rgba(22, 163, 74, 0.04));
-    border-color: rgba(13, 148, 136, 0.2);
-  }
-
-  .feature-card.featured {
-    background: linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(22, 163, 74, 0.1));
-    border-color: rgba(13, 148, 136, 0.3);
-  }
-
-  .feature-icon {
-    background: rgba(13, 148, 136, 0.12);
-    border-color: rgba(13, 148, 136, 0.24);
-  }
-
-  .badge-float {
-    background: rgba(13, 148, 136, 0.14);
-    border: 1px solid rgba(13, 148, 136, 0.25);
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
-  }
-
-  .badge-float-text {
-    color: var(--green);
-  }
-
-  .badge-float-icon {
-    background: rgba(13, 148, 136, 0.14);
-  }
-
-  .badge-float-icon svg {
-    color: var(--teal-dark);
-  }
-}
-
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{color-scheme:dark light;font-size:18px}
+html{color-scheme:light dark;font-size:18px}
 @media (prefers-reduced-motion:no-preference){
   html.docutrust-smooth-scroll{scroll-behavior:smooth}
 }
@@ -198,7 +114,7 @@ body::before{
   background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
   pointer-events:none;
   z-index:0;
-  opacity:.5;
+  opacity:.35;
 }
 
 /* ── GRID BG ── */
@@ -207,11 +123,18 @@ body::after{
   position:fixed;
   inset:0;
   background-image:
-    linear-gradient(rgba(46,196,182,0.04) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(46,196,182,0.04) 1px,transparent 1px);
+    linear-gradient(rgba(46,196,182,0.07) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(46,196,182,0.07) 1px,transparent 1px);
   background-size:60px 60px;
   pointer-events:none;
   z-index:0;
+}
+
+html.dark-scheme body::before{opacity:.5}
+html.dark-scheme body::after{
+  background-image:
+    linear-gradient(rgba(46,196,182,0.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(46,196,182,0.04) 1px,transparent 1px);
 }
 
 /* ── GLOW ORBS ── */
@@ -221,12 +144,13 @@ body::after{
   pointer-events:none;
   z-index:0;
   filter:blur(100px);
-  opacity:.18;
+  opacity:.12;
   animation:orbFloat 12s ease-in-out infinite;
 }
 .orb1{width:500px;height:500px;background:var(--teal);top:-100px;right:-100px;animation-delay:0s}
 .orb2{width:400px;height:400px;background:var(--green);bottom:-100px;left:-100px;animation-delay:-4s}
 .orb3{width:300px;height:300px;background:var(--gold);top:50%;left:50%;transform:translate(-50%,-50%);animation-delay:-8s;opacity:.06}
+html.dark-scheme .orb{opacity:.18}
 
 @keyframes orbFloat{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-30px) scale(1.05)}}
 .orb2{animation-name:orbFloat2}
@@ -277,51 +201,6 @@ header{
 .logo-mark picture{
   display:contents;
 }
-/* JS adds .light-scheme on <html> so tile + wordmark track system light mode reliably */
-html.light-scheme{
-  --logo-tile-bg:#ffffff;
-  --logo-tile-shadow:0 2px 10px rgba(0,0,0,0.06),0 0 0 1px rgba(0,0,0,0.08);
-}
-html.light-scheme .feature-card{
-  background: linear-gradient(180deg, rgba(13, 148, 136, 0.06), rgba(22, 163, 74, 0.04));
-  border-color: rgba(13, 148, 136, 0.2);
-}
-html.light-scheme .feature-card.featured{
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(22, 163, 74, 0.1));
-  border-color: rgba(13, 148, 136, 0.3);
-}
-html.light-scheme .feature-icon{
-  background: rgba(13, 148, 136, 0.12);
-  border-color: rgba(13, 148, 136, 0.24);
-}
-html.light-scheme .about-media{
-  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
-}
-html.light-scheme .about-media::after{
-  background: linear-gradient(to top,rgba(15,23,42,0.35),rgba(15,23,42,0.06) 45%,transparent 75%);
-}
-html.light-scheme .about-surepay{
-  background: rgba(255,255,255,0.86);
-  border: 1px solid rgba(13, 148, 136, 0.24);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
-}
-html.light-scheme .about-surepay-label{
-  color: var(--green);
-}
-html.light-scheme .badge-float{
-  background: rgba(13, 148, 136, 0.14);
-  border: 1px solid rgba(13, 148, 136, 0.25);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
-}
-html.light-scheme .badge-float-text{
-  color: var(--green);
-}
-html.light-scheme .badge-float-icon{
-  background: rgba(13, 148, 136, 0.14);
-}
-html.light-scheme .badge-float-icon svg{
-  color: var(--teal-dark);
-}
 .logo-img{
   width:100%;
   height:100%;
@@ -331,50 +210,36 @@ html.light-scheme .badge-float-icon svg{
   display:block;
   border-radius:8px;
 }
-/* Light theme: huwag gumamit ng screen blend — nagpapawala sa buong icon. Banayad na filter lang; pinakamaganda ay PNG na may transparent background. */
-@media (prefers-color-scheme: light) {
-  .logo-mark{
-    background:#ffffff;
-  }
-  /* Banayad na ayos lang kung isang PNG lang; kung may docutrust-logo-light.png, walang filter */
-  .logo-mark .logo-img{
-    filter:brightness(1.12) contrast(1.05);
-  }
-  .logo-mark:has(picture) .logo-img{
-    filter:none;
-  }
-}
-html.light-scheme .logo-mark{
-  background:#ffffff;
-}
-html.light-scheme .logo-mark .logo-img{
+.logo-mark .logo-img{
   filter:brightness(1.12) contrast(1.05);
 }
-html.light-scheme .logo-mark:has(picture) .logo-img{
+.logo-mark:has(picture) .logo-img{
+  filter:none;
+}
+html.dark-scheme .logo-mark{
+  background:#0a0a0a;
+}
+html.dark-scheme .logo-mark .logo-img{
   filter:none;
 }
 .logo-text{
   font-family:var(--font-display);
   font-weight:800;
   font-size:1.2rem;
-  color:var(--text);
-}
-/* Light theme: solid brand color — mas mabasa kaysa gradient+transparent (iwas puti/hindi lumilitaw) */
-@media (prefers-color-scheme: light) {
-  .logo-text,
-  .footer-logo > .logo-text {
-    color:var(--teal-dark);
-    background:none;
-    -webkit-text-fill-color:currentColor;
-    background-clip:border-box;
-  }
-}
-html.light-scheme .logo-text,
-html.light-scheme .footer-logo > .logo-text{
   color:var(--teal-dark);
   background:none;
   -webkit-text-fill-color:currentColor;
   background-clip:border-box;
+}
+.footer-logo > .logo-text{
+  color:var(--teal-dark);
+  background:none;
+  -webkit-text-fill-color:currentColor;
+  background-clip:border-box;
+}
+html.dark-scheme .logo-text,
+html.dark-scheme .footer-logo > .logo-text{
+  color:var(--text);
 }
 .footer-logo .logo-mark{
   box-shadow:none;
@@ -449,6 +314,43 @@ nav a:hover{color:var(--teal)}
   outline:2px solid var(--teal);
   outline-offset:2px;
 }
+.theme-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  box-sizing:border-box;
+  width:44px;
+  height:44px;
+  padding:8px;
+  margin:0;
+  background:var(--chip-bg);
+  border:1px solid var(--border);
+  border-radius:12px;
+  cursor:pointer;
+  -webkit-tap-highlight-color:rgba(46,196,182,0.15);
+  touch-action:manipulation;
+  transition:background .15s,border-color .15s,transform .1s;
+}
+.theme-toggle:hover{
+  background:rgba(46,196,182,0.08);
+  border-color:rgba(46,196,182,0.35);
+}
+.theme-toggle:active{transform:scale(0.96)}
+.theme-toggle:focus-visible{
+  outline:2px solid var(--teal);
+  outline-offset:2px;
+}
+.theme-toggle svg{
+  width:20px;
+  height:20px;
+}
+.theme-toggle-icon--moon{display:block}
+.theme-toggle-icon--sun{display:none}
+html.dark-scheme .theme-toggle-icon--moon{display:none}
+html.dark-scheme .theme-toggle-icon--sun{display:block}
+.theme-toggle-icon--moon{fill:#6d28d9}
+.theme-toggle-icon--sun{fill:#eab308}
 body.mobile-nav-open{overflow:hidden;overscroll-behavior:none}
 
 /* ── SECTIONS ── */
@@ -566,8 +468,11 @@ section{position:relative;z-index:1}
   border:1px solid var(--border);
   border-radius:20px;
   padding:24px;
-  box-shadow:0 24px 80px rgba(0,0,0,0.6),0 0 0 1px rgba(46,196,182,0.08);
+  box-shadow:0 24px 80px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(46,196,182,0.06);
   animation:cardFloat 5s ease-in-out infinite;
+}
+html.dark-scheme .doc-card{
+  box-shadow:0 24px 80px rgba(0,0,0,0.6),0 0 0 1px rgba(46,196,182,0.08);
 }
 @keyframes cardFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
 .doc-header{
@@ -666,22 +571,30 @@ section{position:relative;z-index:1}
   position:absolute;
   top:-20px;
   right:-20px;
-  background:rgba(27,94,32,0.9);
-  border:1px solid rgba(46,196,182,0.3);
+  background:rgba(13, 148, 136, 0.14);
+  border:1px solid rgba(13, 148, 136, 0.25);
   backdrop-filter:blur(16px);
   border-radius:14px;
   padding:12px 16px;
   display:flex;
   align-items:center;
   gap:8px;
-  box-shadow:0 8px 32px rgba(0,0,0,0.5);
+  box-shadow:0 10px 28px rgba(15, 23, 42, 0.12);
   animation:badgeFloat 4.5s ease-in-out infinite;
   z-index:2;
 }
 @keyframes badgeFloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
-.badge-float-text{font-size:.72rem;font-weight:600;color:var(--teal-light)}
-.badge-float-icon{width:28px;height:28px;border-radius:8px;background:rgba(46,196,182,0.2);display:flex;align-items:center;justify-content:center}
-.badge-float-icon svg{width:14px;height:14px;color:var(--teal)}
+.badge-float-text{font-size:.72rem;font-weight:600;color:var(--green)}
+.badge-float-icon{width:28px;height:28px;border-radius:8px;background:rgba(13, 148, 136, 0.14);display:flex;align-items:center;justify-content:center}
+.badge-float-icon svg{width:14px;height:14px;color:var(--teal-dark)}
+html.dark-scheme .badge-float{
+  background:rgba(27,94,32,0.9);
+  border:1px solid rgba(46,196,182,0.3);
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);
+}
+html.dark-scheme .badge-float-text{color:var(--teal-light)}
+html.dark-scheme .badge-float-icon{background:rgba(46,196,182,0.2)}
+html.dark-scheme .badge-float-icon svg{color:var(--teal)}
 
 .badge-float2{
   position:absolute;
@@ -840,8 +753,8 @@ section{position:relative;z-index:1}
 }
 .feature-card{
   display:block;
-  background:var(--surface);
-  border:1px solid var(--border2);
+  background:linear-gradient(180deg, rgba(13, 148, 136, 0.06), rgba(22, 163, 74, 0.04));
+  border:1px solid rgba(13, 148, 136, 0.2);
   border-radius:18px;
   padding:28px;
   transition:all .3s;
@@ -850,6 +763,10 @@ section{position:relative;z-index:1}
   text-decoration:none;
   color:inherit;
   cursor:pointer;
+}
+html.dark-scheme .feature-card{
+  background:var(--surface);
+  border-color:var(--border2);
 }
 .feature-card:focus-visible{
   outline:2px solid var(--teal);
@@ -875,21 +792,32 @@ section{position:relative;z-index:1}
 .feature-card:hover{
   border-color:rgba(46,196,182,0.35);
   transform:translateY(-4px);
+  box-shadow:0 20px 60px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(46,196,182,0.12);
+}
+html.dark-scheme .feature-card:hover{
   box-shadow:0 20px 60px rgba(0,0,0,0.4),0 0 0 1px rgba(46,196,182,0.1);
 }
 .feature-card:hover::after{opacity:1}
 .feature-card.featured{
+  background:linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(22, 163, 74, 0.1));
+  border-color:rgba(13, 148, 136, 0.3);
+  grid-column:span 1;
+}
+html.dark-scheme .feature-card.featured{
   background:linear-gradient(135deg,rgba(46,196,182,0.1),rgba(27,94,32,0.1));
   border-color:rgba(46,196,182,0.25);
-  grid-column:span 1;
 }
 .feature-icon{
   width:44px;height:44px;
-  background:rgba(46,196,182,0.1);
-  border:1px solid rgba(46,196,182,0.2);
+  background:rgba(13, 148, 136, 0.12);
+  border:1px solid rgba(13, 148, 136, 0.24);
   border-radius:12px;
   display:flex;align-items:center;justify-content:center;
   margin-bottom:18px;
+}
+html.dark-scheme .feature-icon{
+  background:rgba(46,196,182,0.1);
+  border-color:rgba(46,196,182,0.2);
 }
 .feature-icon svg{width:20px;height:20px;color:var(--teal)}
 .feature-badge{
@@ -999,6 +927,9 @@ section{position:relative;z-index:1}
   border:1px solid var(--border);
   border-radius:20px;
   padding:24px;
+  box-shadow:0 24px 80px rgba(15, 23, 42, 0.08);
+}
+html.dark-scheme .ai-visual{
   box-shadow:0 24px 80px rgba(0,0,0,0.5);
 }
 .ai-chat{display:flex;flex-direction:column;gap:12px}
@@ -1097,6 +1028,9 @@ section{position:relative;z-index:1}
   overflow:hidden;
   border:1px solid var(--border);
   background:var(--surface);
+  box-shadow:0 18px 44px rgba(15, 23, 42, 0.12);
+}
+html.dark-scheme .about-media{
   box-shadow:0 18px 50px rgba(0,0,0,0.35);
 }
 .about-media img{
@@ -1109,8 +1043,11 @@ section{position:relative;z-index:1}
   content:'';
   position:absolute;
   inset:0;
-  background:linear-gradient(to top,rgba(6,13,16,0.62),rgba(6,13,16,0.12) 45%,transparent 75%);
+  background:linear-gradient(to top,rgba(15,23,42,0.35),rgba(15,23,42,0.06) 45%,transparent 75%);
   pointer-events:none;
+}
+html.dark-scheme .about-media::after{
+  background:linear-gradient(to top,rgba(6,13,16,0.62),rgba(6,13,16,0.12) 45%,transparent 75%);
 }
 .about-surepay{
   position:absolute;
@@ -1124,6 +1061,11 @@ section{position:relative;z-index:1}
   border-radius:14px;
   padding:10px 12px;
   backdrop-filter:blur(10px);
+  background:rgba(255,255,255,0.86);
+  border:1px solid rgba(13, 148, 136, 0.24);
+  box-shadow:0 8px 20px rgba(15, 23, 42, 0.12);
+}
+html.dark-scheme .about-surepay{
   background:rgba(6,13,16,0.68);
   border:1px solid rgba(46,196,182,0.24);
   box-shadow:0 8px 28px rgba(0,0,0,0.4);
@@ -1139,8 +1081,11 @@ section{position:relative;z-index:1}
   font-weight:600;
   letter-spacing:.06em;
   text-transform:uppercase;
-  color:var(--teal-light);
+  color:var(--green);
   line-height:1.35;
+}
+html.dark-scheme .about-surepay-label{
+  color:var(--teal-light);
 }
 .about-stats{
   display:grid;grid-template-columns:1fr 1fr;gap:16px;
@@ -1350,10 +1295,8 @@ section{position:relative;z-index:1}
   color:var(--teal);
 }
 .text-on-body{color:var(--headline)}
-.ai-msg-user-avatar{background:rgba(255,255,255,0.1)}
-@media (prefers-color-scheme: light) {
-  .ai-msg-user-avatar{background:rgba(15,23,42,0.08)}
-}
+.ai-msg-user-avatar{background:rgba(15,23,42,0.08)}
+html.dark-scheme .ai-msg-user-avatar{background:rgba(255,255,255,0.1)}
 .cta-inner p{color:var(--text-muted);max-width:520px;margin:0 auto 32px;position:relative;z-index:1}
 .cta-actions{
   display:flex;gap:12px;justify-content:center;flex-wrap:wrap;
@@ -1550,30 +1493,17 @@ footer{
   <div class="header-inner">
     <a href="{{ route('home') }}" class="logo">
       <span class="logo-mark">
-        @if ($docutrustLogoLight)
-          <picture>
-            <source media="(prefers-color-scheme: light)" srcset="{{ $docutrustLogoLight }}">
-            <img
-              src="{{ $docutrustLogoDefault }}"
-              alt=""
-              class="logo-img"
-              width="40"
-              height="40"
-              loading="eager"
-              decoding="async"
-            >
-          </picture>
-        @else
-          <img
-            src="{{ $docutrustLogoDefault }}"
-            alt=""
-            class="logo-img"
-            width="40"
-            height="40"
-            loading="eager"
-            decoding="async"
-          >
-        @endif
+        <img
+          src="{{ $docutrustLogoLight ?? $docutrustLogoDefault }}"
+          alt=""
+          class="logo-img"
+          data-logo-default="{{ $docutrustLogoDefault }}"
+          @if ($docutrustLogoLight) data-logo-light="{{ $docutrustLogoLight }}" @endif
+          width="40"
+          height="40"
+          loading="eager"
+          decoding="async"
+        >
       </span>
       <span class="logo-text">{{ config('app.name') }}</span>
     </a>
@@ -1587,6 +1517,20 @@ footer{
       <a href="#faq">FAQ</a>
     </nav>
     <div class="header-actions">
+      <button
+        type="button"
+        id="welcomeThemeToggle"
+        class="theme-toggle"
+        aria-label="{{ __('Toggle theme') }}"
+        title="{{ __('Switch to dark mode') }}"
+      >
+        <svg class="theme-toggle-icon theme-toggle-icon--moon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+        </svg>
+        <svg class="theme-toggle-icon theme-toggle-icon--sun" viewBox="0 0 20 20" aria-hidden="true">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path>
+        </svg>
+      </button>
       <a href="{{ $secondaryHeaderUrl }}" class="btn-ghost">{{ $secondaryHeaderLabel }}</a>
       <a href="{{ $primaryCtaUrl }}" class="btn-primary">{{ $primaryCtaLabel }}</a>
       <button type="button" class="nav-mobile-toggle" id="mobileNavToggle" aria-label="{{ __('Open menu') }}" aria-expanded="false" aria-controls="mobileNav">
@@ -2193,30 +2137,17 @@ footer{
       <div>
         <a href="{{ route('home') }}" class="footer-logo">
           <span class="logo-mark">
-            @if ($docutrustLogoLight)
-              <picture>
-                <source media="(prefers-color-scheme: light)" srcset="{{ $docutrustLogoLight }}">
-                <img
-                  src="{{ $docutrustLogoDefault }}"
-                  alt=""
-                  class="logo-img"
-                  width="36"
-                  height="36"
-                  loading="lazy"
-                  decoding="async"
-                >
-              </picture>
-            @else
-              <img
-                src="{{ $docutrustLogoDefault }}"
-                alt=""
-                class="logo-img"
-                width="36"
-                height="36"
-                loading="lazy"
-                decoding="async"
-              >
-            @endif
+            <img
+              src="{{ $docutrustLogoLight ?? $docutrustLogoDefault }}"
+              alt=""
+              class="logo-img"
+              data-logo-default="{{ $docutrustLogoDefault }}"
+              @if ($docutrustLogoLight) data-logo-light="{{ $docutrustLogoLight }}" @endif
+              width="36"
+              height="36"
+              loading="lazy"
+              decoding="async"
+            >
           </span>
           <span class="logo-text">{{ config('app.name') }}</span>
         </a>
@@ -2325,6 +2256,35 @@ const observer = new IntersectionObserver((entries) => {
   });
 }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
 revealEls.forEach(el => observer.observe(el));
+
+// Theme toggle
+const welcomeThemeToggle = document.getElementById('welcomeThemeToggle');
+const welcomeThemeColor = document.getElementById('welcomeThemeColor');
+
+function syncWelcomeLogos(isDark) {
+  document.querySelectorAll('.logo-img[data-logo-default]').forEach((img) => {
+    const defaultSrc = img.dataset.logoDefault;
+    const lightSrc = img.dataset.logoLight;
+    img.src = isDark ? defaultSrc : (lightSrc || defaultSrc);
+  });
+}
+
+function updateWelcomeThemeUi(isDark) {
+  welcomeThemeToggle?.setAttribute('title', isDark ? '{{ __('Switch to light mode') }}' : '{{ __('Switch to dark mode') }}');
+  if (welcomeThemeColor) {
+    welcomeThemeColor.content = isDark ? '#060d10' : '#f0f7f5';
+  }
+  syncWelcomeLogos(isDark);
+}
+
+updateWelcomeThemeUi(document.documentElement.classList.contains('dark-scheme'));
+
+welcomeThemeToggle?.addEventListener('click', function () {
+  const isDark = document.documentElement.classList.toggle('dark-scheme');
+  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  updateWelcomeThemeUi(isDark);
+});
 </script>
 
 <x-marketing-chatbot />
