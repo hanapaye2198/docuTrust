@@ -69,6 +69,28 @@
         </div>
     @endif
 
+    @if ($paymentDue > 0 && ($canCreatePayment || $canManageLifecycle) && $paymentEmailUrl)
+        <div class="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-4 text-sm text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <div class="font-medium">{{ __('Direct payment page') }}</div>
+                    <p class="mt-1 text-xs text-violet-800/85 dark:text-violet-200/85">
+                        {{ __('Open the same no-login payment page the client would receive by email. Use this for faster local QA without checking Mailpit or email first.') }}
+                    </p>
+                </div>
+                <a href="{{ $paymentEmailPreviewUrl }}"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="inline-flex items-center justify-center rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900">
+                    {{ __('Open payment page') }}
+                </a>
+            </div>
+            <div class="mt-3 break-all rounded-lg border border-violet-200/80 bg-white/70 px-3 py-2 text-[11px] text-violet-800/80 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-200/80">
+                {{ $paymentEmailUrl }}
+            </div>
+        </div>
+    @endif
+
     @if ($paymentRequired && ! $hasSettledPayment)
         <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
             {{ __('This case is waiting for a successful payment before the register entry and digital notarization can finish.') }}
@@ -146,19 +168,6 @@
                                 </a>
                                 <div class="mt-2 break-all text-[11px] text-sky-800/80 dark:text-sky-200/80">
                                     {{ $latestPayment->checkout_url ?? $latestPayment->redirect_url }}
-                                </div>
-                            </div>
-                        @endif
-                        @if (($canManageLifecycle || $canCreatePayment) && $paymentEmailUrl)
-                            <div class="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100">
-                                <div class="font-medium">{{ __('Payment email link preview') }}</div>
-                                <p class="mt-1 text-xs">{{ __('This is the same no-login payment page sent by email to the client.') }}</p>
-                                <a href="{{ $paymentEmailPreviewUrl }}"
-                                   class="mt-3 inline-flex items-center justify-center rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900">
-                                    {{ __('Open email payment page') }}
-                                </a>
-                                <div class="mt-2 break-all text-[11px] text-violet-800/80 dark:text-violet-200/80">
-                                    {{ $paymentEmailUrl }}
                                 </div>
                             </div>
                         @endif

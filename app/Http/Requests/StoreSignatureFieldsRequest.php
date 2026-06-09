@@ -9,7 +9,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rules\Enum;
+use Illuminate\Validation\Rule;
 use setasign\Fpdi\Fpdi;
 use Throwable;
 
@@ -64,7 +64,7 @@ class StoreSignatureFieldsRequest extends FormRequest
         return [
             'fields' => ['required', 'array'],
             'fields.*.signer_id' => ['required', 'integer', 'exists:document_signers,id'],
-            'fields.*.type' => ['required', new Enum(SignatureFieldType::class)],
+            'fields.*.type' => ['required', Rule::in(SignatureFieldType::placeableValues())],
             'fields.*.page_number' => ['required', 'integer', 'min:1'],
             'fields.*.position_data' => ['required', 'array'],
             'fields.*.position_data.x' => ['required', 'numeric'],

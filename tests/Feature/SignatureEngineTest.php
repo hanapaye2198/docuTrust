@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class SignatureEngineTest extends TestCase
@@ -511,12 +512,12 @@ class SignatureEngineTest extends TestCase
                 ],
                 [
                     'signer_id' => $signer->id,
-                    'type' => SignatureFieldType::Checkbox->value,
+                    'type' => SignatureFieldType::Initials->value,
                     'page_number' => 1,
                     'position_data' => [
                         'x' => 0.45,
                         'y' => 0.25,
-                        'width' => 0.09,
+                        'width' => 0.12,
                         'height' => 0.055,
                     ],
                 ],
@@ -533,8 +534,42 @@ class SignatureEngineTest extends TestCase
         $this->assertDatabaseHas('signature_fields', [
             'document_id' => $document->id,
             'signer_id' => $signer->id,
-            'type' => SignatureFieldType::Checkbox->value,
+            'type' => SignatureFieldType::Initials->value,
             'page_number' => 1,
+        ]);
+    }
+
+    public function test_prepare_rejects_removed_toggle_field_types(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Draft]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $response = $this->actingAs($user)
+            ->from(route('documents.prepare', $document))
+            ->post(route('documents.signature-fields.store', $document), [
+                'fields' => [
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::Checkbox->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => 0.15,
+                            'y' => 0.25,
+                            'width' => 0.1,
+                            'height' => 0.05,
+                        ],
+                    ],
+                ],
+            ]);
+
+        $this->assertInstanceOf(ValidationException::class, $response->exception);
+        $this->assertArrayHasKey('fields.0.type', $response->exception->errors());
+
+        $this->assertDatabaseMissing('signature_fields', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Checkbox->value,
         ]);
     }
 

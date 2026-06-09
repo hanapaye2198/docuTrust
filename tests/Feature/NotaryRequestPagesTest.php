@@ -2293,6 +2293,35 @@ class NotaryRequestPagesTest extends TestCase
         ]);
     }
 
+    public function test_public_payment_page_still_loads_when_gateway_lookup_times_out(): void
+    {
+        Http::fake([
+            'https://gatewayhub.io/api/gateways/enabled' => Http::failedConnection(),
+        ]);
+
+        config()->set('services.gatewayhub.api_key', 'test-key');
+
+        $client = User::factory()->enotarySigner()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+
+        $request = NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+            'title' => 'Gateway timeout request',
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 1250.00,
+        ]);
+
+        $this->get(app(NotaryPublicPaymentLinkService::class)->paymentPageUrl($request))
+            ->assertOk()
+            ->assertSee('Pay notarial fee')
+            ->assertSee('Online payment is not configured right now. Please contact your attorney.');
+    }
+
     public function test_client_can_create_gateway_payment_from_email_payment_page(): void
     {
         Http::fake([

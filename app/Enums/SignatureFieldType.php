@@ -14,4 +14,21 @@ enum SignatureFieldType: string
     case Date = 'date';
     case Email = 'email';
     case Initials = 'initials';
+
+    /**
+     * @return list<string>
+     */
+    public static function placeableValues(): array
+    {
+        return [
+            self::Signature->value,
+            self::SignatureLeft->value,
+            self::SignatureRight->value,
+            self::Text->value,
+            self::Name->value,
+            self::Date->value,
+            self::Email->value,
+            self::Initials->value,
+        ];
+    }
 }

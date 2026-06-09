@@ -2,10 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Enums\SignatureFieldType;
 use App\Models\Template;
+use App\Models\TemplateSigner;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class TemplatePrepareTest extends TestCase
@@ -75,5 +78,37 @@ class TemplatePrepareTest extends TestCase
             ->assertOk()
             ->assertSee(__('Prepare template'))
             ->assertSee($template->name, escape: false);
+    }
+
+    public function test_owner_cannot_save_removed_toggle_template_fields(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create();
+        $path = 'templates/test.pdf';
+        Storage::disk('public')->put($path, 'fake-pdf');
+        $template = Template::factory()->for($user)->create(['files' => [$path]]);
+        $signer = TemplateSigner::factory()->for($template)->create([
+            'role_name' => 'Client',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->from(route('templates.prepare', $template))
+            ->post(route('templates.fields.store', $template), [
+                'fields' => [
+                    [
+                        'role_name' => $signer->role_name,
+                        'type' => SignatureFieldType::Radio->value,
+                        'position_data' => [
+                            'x' => 0.15,
+                            'y' => 0.25,
+                            'width' => 0.1,
+                            'height' => 0.05,
+                        ],
+                    ],
+                ],
+            ]);
+
+        $this->assertInstanceOf(ValidationException::class, $response->exception);
+        $this->assertArrayHasKey('fields.0.type', $response->exception->errors());
     }
 }

@@ -7,7 +7,7 @@ use App\Enums\TemplateRoleType;
 use App\Models\Template;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Enum;
+use Illuminate\Validation\Rule;
 
 class StoreTemplateFieldsRequest extends FormRequest
 {
@@ -39,7 +39,7 @@ class StoreTemplateFieldsRequest extends FormRequest
         return [
             'fields' => ['required', 'array'],
             'fields.*.role_name' => ['required', 'string', 'max:255'],
-            'fields.*.type' => ['required', new Enum(SignatureFieldType::class)],
+            'fields.*.type' => ['required', Rule::in(SignatureFieldType::placeableValues())],
             'fields.*.position_data' => ['required', 'array'],
             'fields.*.position_data.x' => ['required', 'numeric', 'between:0,1'],
             'fields.*.position_data.y' => ['required', 'numeric', 'between:0,1'],

@@ -27,8 +27,9 @@ class PublicNotaryPaymentController extends Controller
 
         try {
             $enabledGateways = app(GatewayHubService::class)->enabledGateways();
-        } catch (\RuntimeException) {
+        } catch (\Throwable $exception) {
             $enabledGateways = [];
+            report($exception);
         }
 
         $expiresAt = (int) $request->query('expires', now()->addDays(7)->timestamp);

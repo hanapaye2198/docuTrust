@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -81,11 +82,15 @@ class GatewayHubService
             throw new RuntimeException('GatewayHub API key is not configured.');
         }
 
-        $response = Http::baseUrl($baseUrl)
-            ->withToken($apiKey)
-            ->acceptJson()
-            ->timeout($timeout)
-            ->send($method, $path, $payload === [] ? [] : ['json' => $payload]);
+        try {
+            $response = Http::baseUrl($baseUrl)
+                ->withToken($apiKey)
+                ->acceptJson()
+                ->timeout($timeout)
+                ->send($method, $path, $payload === [] ? [] : ['json' => $payload]);
+        } catch (ConnectionException $exception) {
+            throw new RuntimeException('GatewayHub is temporarily unavailable.', previous: $exception);
+        }
 
         if ($response->successful()) {
             return $response;
