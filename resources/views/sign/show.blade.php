@@ -516,6 +516,7 @@
                         'trustAuthorizationRequired' => __('Start trust authorization before completing your assigned fields.'),
                         'legacyTrustAuthorizationRequired' => __('Start trust authorization to enable cloud signing for this document.'),
                         'legacyTrustAuthorizationReady' => __('Trust authorization is active. You can complete cloud signing now.'),
+                        'returningToWorkflow' => __('Returning to the notarization workflow...'),
                     ],
                 ]) !!}
             </script>

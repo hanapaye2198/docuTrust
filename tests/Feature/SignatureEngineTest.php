@@ -26,7 +26,6 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class SignatureEngineTest extends TestCase
@@ -399,6 +398,58 @@ class SignatureEngineTest extends TestCase
             );
     }
 
+    public function test_authenticated_notary_signature_save_returns_notary_workflow_redirect_when_attorney_completes_signing(): void
+    {
+        Storage::fake('local');
+
+        $client = User::factory()->enotarySigner()->create();
+        $notary = User::factory()->for($client->organization)->notary()->create();
+        $request = \App\Models\NotaryRequest::factory()->for($client)->create([
+            'organization_id' => $client->organization_id,
+            'notary_user_id' => $notary->id,
+            'status' => \App\Enums\NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $path = 'documents/notary-signature-workflow-return.pdf';
+        $this->putValidPdf($path);
+
+        $document = Document::factory()->create([
+            'organization_id' => $client->organization_id,
+            'user_id' => $client->id,
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+        ]);
+
+        $attorneySigner = DocumentSigner::factory()->for($document)->create([
+            'user_id' => $notary->id,
+            'name' => 'Attorney Signer',
+            'email' => $notary->email,
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        $field = SignatureField::factory()->create([
+            'document_id' => $document->id,
+            'signer_id' => $attorneySigner->id,
+            'type' => SignatureFieldType::Signature,
+        ]);
+
+        $this->actingAs($notary)->postJson(
+            route('notary.sign.account.signature.store', ['signerId' => $attorneySigner->id]),
+            [
+                'signature_field_id' => $field->id,
+                'signature_image' => self::TINY_PNG_DATA_URL,
+            ]
+        )
+            ->assertOk()
+            ->assertJsonPath('redirect_url', route('notary.requests.show', [
+                'notaryRequest' => $request->id,
+                'tab' => 'closing',
+            ]))
+            ->assertJsonPath('summary.remaining', 0)
+            ->assertJsonPath('summary.signer_status', DocumentSignerStatus::Signed->value);
+    }
+
     public function test_owner_is_redirected_to_document_page_when_prepare_has_no_signers(): void
     {
         $user = User::factory()->create();
@@ -545,7 +596,7 @@ class SignatureEngineTest extends TestCase
         $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Draft]);
         $signer = DocumentSigner::factory()->for($document)->create();
 
-        $response = $this->actingAs($user)
+        $this->actingAs($user)
             ->from(route('documents.prepare', $document))
             ->post(route('documents.signature-fields.store', $document), [
                 'fields' => [
@@ -561,10 +612,9 @@ class SignatureEngineTest extends TestCase
                         ],
                     ],
                 ],
-            ]);
-
-        $this->assertInstanceOf(ValidationException::class, $response->exception);
-        $this->assertArrayHasKey('fields.0.type', $response->exception->errors());
+            ])
+            ->assertRedirect(route('documents.prepare', $document))
+            ->assertSessionHasErrors('fields.0.type');
 
         $this->assertDatabaseMissing('signature_fields', [
             'document_id' => $document->id,

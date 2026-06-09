@@ -923,6 +923,14 @@ function createSignViewSession(cfgEl) {
         modal.open && closeModal();
         showFeedback(payload.message || messages.fieldSaved, 'success');
 
+        if (payload.redirect_url && Number(payload?.summary?.remaining ?? 0) === 0) {
+            showFeedback(messages.returningToWorkflow || payload.message || messages.fieldSaved, 'success');
+            window.setTimeout(() => {
+                window.location.assign(payload.redirect_url);
+            }, 500);
+            return;
+        }
+
         if (currentCanEditFields) {
             // Navigate to the next unsigned field, preferring forward progress.
             // First check for unsigned fields on the current page or later pages.

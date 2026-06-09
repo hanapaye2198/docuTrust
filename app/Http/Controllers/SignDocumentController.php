@@ -215,10 +215,16 @@ class SignDocumentController extends Controller
                 'ip_address' => (string) request()->ip(),
             ]);
 
-            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
-                ->with('status', $signer->isApprover()
+            $redirectUrl = $this->completionRedirectUrl($signer->fresh(['document']));
+
+            return $redirectUrl !== null
+                ? redirect()->to($redirectUrl)->with('status', $signer->isApprover()
                     ? __('Thank you. Your approval has been recorded.')
-                    : __('Thank you. Your signature has been recorded.'));
+                    : __('Thank you. Your signature has been recorded.'))
+                : redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                    ->with('status', $signer->isApprover()
+                        ? __('Thank you. Your approval has been recorded.')
+                        : __('Thank you. Your signature has been recorded.'));
         } catch (TrustAuthorizationRequiredException $exception) {
             return redirect()->route('sign.account.show', ['signerId' => $signerId])
                 ->with('error', $exception->getMessage());
@@ -423,6 +429,7 @@ class SignDocumentController extends Controller
                         'id' => $field->id,
                         ...$this->signatureFieldResponsePayload($signature, $signer, true),
                     ],
+                    'redirect_url' => $this->completionRedirectUrl($signer),
                     'summary' => [
                         'assigned' => $assignedCount,
                         'completed' => $signedCount,
@@ -1025,6 +1032,24 @@ class SignDocumentController extends Controller
         return Auth::user()?->role->value === 'notary'
             ? 'notary.sign.account.'.$suffix
             : 'sign.account.'.$suffix;
+    }
+
+    private function completionRedirectUrl(DocumentSigner $signer): ?string
+    {
+        $document = $signer->document;
+
+        if (
+            Auth::user()?->role->value === 'notary'
+            && $document->notary_request_id !== null
+            && $signer->status === DocumentSignerStatus::Signed
+        ) {
+            return route('notary.requests.show', [
+                'notaryRequest' => $document->notary_request_id,
+                'tab' => 'closing',
+            ]);
+        }
+
+        return null;
     }
 
     private function authenticatedSigningPdfPath(Document $document): ?string
