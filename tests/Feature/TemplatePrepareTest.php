@@ -8,7 +8,6 @@ use App\Models\TemplateSigner;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class TemplatePrepareTest extends TestCase
@@ -91,7 +90,7 @@ class TemplatePrepareTest extends TestCase
             'role_name' => 'Client',
         ]);
 
-        $response = $this->actingAs($user)
+        $this->actingAs($user)
             ->from(route('templates.prepare', $template))
             ->post(route('templates.fields.store', $template), [
                 'fields' => [
@@ -106,9 +105,8 @@ class TemplatePrepareTest extends TestCase
                         ],
                     ],
                 ],
-            ]);
-
-        $this->assertInstanceOf(ValidationException::class, $response->exception);
-        $this->assertArrayHasKey('fields.0.type', $response->exception->errors());
+            ])
+            ->assertRedirect(route('templates.prepare', $template))
+            ->assertSessionHasErrors('fields.0.type');
     }
 }
