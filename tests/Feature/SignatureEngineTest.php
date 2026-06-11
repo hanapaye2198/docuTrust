@@ -4,8 +4,9 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
-use App\Enums\SigningMethod;
+use App\Enums\NotaryRequestStatus;
 use App\Enums\SignatureFieldType;
+use App\Enums\SigningMethod;
 use App\Jobs\GenerateCertificateJob;
 use App\Jobs\GenerateDocumentPdfJob;
 use App\Models\Document;
@@ -22,6 +23,7 @@ use App\Services\PkiSignatureService;
 use App\Services\SignerCertificateService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -404,10 +406,10 @@ class SignatureEngineTest extends TestCase
 
         $client = User::factory()->enotarySigner()->create();
         $notary = User::factory()->for($client->organization)->notary()->create();
-        $request = \App\Models\NotaryRequest::factory()->for($client)->create([
+        $request = NotaryRequest::factory()->for($client)->create([
             'organization_id' => $client->organization_id,
             'notary_user_id' => $notary->id,
-            'status' => \App\Enums\NotaryRequestStatus::AttorneySigning,
+            'status' => NotaryRequestStatus::AttorneySigning,
         ]);
 
         $path = 'documents/notary-signature-workflow-return.pdf';
@@ -1385,6 +1387,31 @@ class SignatureEngineTest extends TestCase
         $this->post(route('sign.store', $signer->access_token))
             ->assertForbidden()
             ->assertSee('Link expired or invalid');
+    }
+
+    public function test_notified_signer_is_not_treated_as_already_signed(): void
+    {
+        Event::fake();
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Notified,
+        ]);
+
+        $this->get(route('sign.show', $signer->access_token))
+            ->assertOk()
+            ->assertDontSee('You have already signed this document.');
+
+        $this->post(route('sign.store', $signer->access_token))
+            ->assertRedirect(route('sign.show', $signer->access_token))
+            ->assertSessionHas('status', 'Thank you. Your signature has been recorded.');
+
+        $signer->refresh();
+        $document->refresh();
+
+        $this->assertSame(DocumentSignerStatus::Signed, $signer->status);
+        $this->assertSame(DocumentStatus::Completed, $document->status);
     }
 
     public function test_remote_managed_backend_seals_document_using_provider_response(): void

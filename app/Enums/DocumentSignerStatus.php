@@ -14,7 +14,6 @@ enum DocumentSignerStatus: string
         return in_array($this, [
             self::Approved,
             self::Signed,
-            self::Notified,
         ], true);
     }
 }
