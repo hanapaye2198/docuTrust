@@ -13,7 +13,7 @@
             && $latestPayment->expires_at?->isPast();
         $displayPaymentStatus = $currentPaymentExpired ? \App\Enums\PaymentStatus::Expired : ($latestPayment?->status ?? null);
         $checkoutUrl = $latestPayment?->checkout_url ?? $latestPayment?->redirect_url;
-        $qrSource = $latestPayment?->qr_data ?: $checkoutUrl;
+        $qrSource = $latestPayment?->qr_data;
 
         $hasActiveLink = ($checkoutUrl || $qrSource)
             && ! $currentPaymentExpired
@@ -228,10 +228,10 @@
                                         <div class="flex flex-col items-center gap-2 sm:items-end">
                                             <div class="rounded-[28px] border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
                                                 <img
-                                                    src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=0&data={{ rawurlencode($qrSource) }}"
+                                                    src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data={{ rawurlencode($qrSource) }}"
                                                     alt="{{ __('Payment QR code') }}"
-                                                    width="240" height="240"
-                                                    class="h-auto w-full max-w-[208px] rounded-2xl"
+                                                    width="280" height="280"
+                                                    class="h-auto w-full max-w-[240px] rounded-2xl border border-current/15 bg-white p-3"
                                                 >
                                             </div>
                                             <p class="text-center text-xs text-zinc-500 dark:text-zinc-400 sm:text-right">{{ __('Scan with your banking or e-wallet app') }}</p>
