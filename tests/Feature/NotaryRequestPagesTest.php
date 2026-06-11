@@ -27,15 +27,17 @@ use App\Models\NotarySigner;
 use App\Models\Payment;
 use App\Models\SignatureField;
 use App\Models\User;
-use App\Services\NotaryPublicPaymentLinkService;
 use App\Services\NotarialCertificateService;
+use App\Services\NotaryPublicPaymentLinkService;
 use App\Services\NotarySealService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Livewire\Livewire;
 use Livewire\Volt\Volt as LivewireVolt;
 use Tests\TestCase;
@@ -99,6 +101,39 @@ class NotaryRequestPagesTest extends TestCase
         $this->assertDatabaseHas('notary_requests', [
             'title' => 'SPA — Greenfield Lot 5',
             'notary_user_id' => $attorney->id,
+        ]);
+    }
+
+    public function test_attorney_wizard_can_attach_pdf_on_document_step(): void
+    {
+        Storage::fake(config('filesystems.docutrust_disk', 'local'));
+
+        $attorney = User::factory()->notary()->create();
+
+        $this->actingAs($attorney);
+
+        $file = UploadedFile::fake()->create('deed-of-sale.pdf', 120, 'application/pdf');
+
+        LivewireVolt::test('notary-requests.create')
+            ->set('title', 'Deed of sale — Lot 5')
+            ->set('requestType', 'acknowledgment')
+            ->call('nextStep')
+            ->assertSet('wizardStep', 2)
+            ->set('caseDocument', $file)
+            ->call('skipPartiesStep')
+            ->assertHasNoErrors()
+            ->assertRedirect();
+
+        $request = NotaryRequest::query()->where('title', 'Deed of sale — Lot 5')->first();
+
+        $this->assertNotNull($request);
+        $this->assertNotNull($request->document_path);
+        Storage::disk(config('filesystems.docutrust_disk', 'local'))->assertExists($request->document_path);
+
+        $this->assertDatabaseHas('documents', [
+            'notary_request_id' => $request->id,
+            'title' => 'Deed of sale — Lot 5',
+            'status' => DocumentStatus::Draft->value,
         ]);
     }
 
@@ -2267,9 +2302,9 @@ class NotaryRequestPagesTest extends TestCase
         $showUrl = app(NotaryPublicPaymentLinkService::class)->paymentPageUrl($request);
         parse_str((string) parse_url($showUrl, PHP_URL_QUERY), $query);
 
-        $postUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+        $postUrl = URL::temporarySignedRoute(
             'public.notary.payment.checkout',
-            \Illuminate\Support\Carbon::createFromTimestamp((int) ($query['expires'] ?? now()->addDays(7)->timestamp)),
+            Carbon::createFromTimestamp((int) ($query['expires'] ?? now()->addDays(7)->timestamp)),
             ['notaryRequest' => $request->id],
         );
 

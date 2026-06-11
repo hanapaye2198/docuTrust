@@ -320,10 +320,10 @@
                             </flux:field>
                             <flux:field>
                                 <flux:label>{{ __('PDF file') }} <span class="text-rose-500">*</span></flux:label>
-                                <label class="inline-flex cursor-pointer">
-                                    <flux:button type="button" variant="primary" icon="arrow-up-tray">{{ __('Choose PDF') }}</flux:button>
-                                    <input type="file" wire:model="newDocumentFile" accept="application/pdf,.pdf" class="sr-only" />
-                                </label>
+                                <div>
+                                    <flux:button type="button" variant="primary" icon="arrow-up-tray" x-on:click="$refs.newDocumentPdf.click()">{{ __('Choose PDF') }}</flux:button>
+                                    <input x-ref="newDocumentPdf" type="file" wire:model="newDocumentFile" accept="application/pdf,.pdf" class="sr-only" />
+                                </div>
                                 <flux:error name="newDocumentFile" />
                             </flux:field>
                             <div wire:loading wire:target="newDocumentFile" class="space-y-2">

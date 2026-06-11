@@ -620,8 +620,13 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     <flux:icon.document-text class="mx-auto size-10 text-zinc-400" />
                                     <p class="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Drag & drop PDF here') }}</p>
                                     <p class="mt-1 text-xs text-zinc-500">{{ __('PDF only · max 10 MB') }}</p>
-                                    <label class="mt-5 inline-flex cursor-pointer">
-                                        <flux:button type="button" variant="primary" icon="arrow-up-tray">
+                                    <div class="mt-5">
+                                        <flux:button
+                                            type="button"
+                                            variant="primary"
+                                            icon="arrow-up-tray"
+                                            x-on:click="$refs.casePdf.click()"
+                                        >
                                             {{ __('Upload PDF') }}
                                         </flux:button>
                                         <input
@@ -631,7 +636,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                             accept="application/pdf,.pdf"
                                             class="sr-only"
                                         />
-                                    </label>
+                                    </div>
                                     <div wire:loading wire:target="caseDocument" class="mx-auto mt-4 max-w-sm space-y-2 text-left">
                                         <p class="text-sm font-semibold text-teal-800 dark:text-teal-200">
                                             <span x-text="progress > 0 ? '{{ __('Uploading') }} ' + progress + '%' : '{{ __('Uploading file…') }}'"></span>
