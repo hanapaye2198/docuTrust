@@ -19,6 +19,9 @@
             && ! $currentPaymentExpired
             && $latestPayment instanceof \App\Models\Payment
             && $latestPayment->status === \App\Enums\PaymentStatus::Pending;
+        $shouldPollStatus = $paymentRequired
+            && ! $hasSettledPayment
+            && $latestPayment instanceof \App\Models\Payment;
 
         // Progress stage: 1 = choose method, 2 = pay via active link, 3 = settled
         $stage = $hasSettledPayment ? 3 : ($hasActiveLink ? 2 : 1);
@@ -332,6 +335,18 @@
         </p>
     </main>
 
+    @if ($shouldPollStatus)
+        <script id="public-payment-status-config" type="application/json">
+            {!! json_encode([
+                'statusUrl' => $statusUrl,
+                'currentPaymentId' => $latestPayment?->id,
+                'currentPaymentStatus' => $currentPaymentExpired ? 'expired' : $latestPayment?->status?->value,
+                'hasSettledPayment' => $hasSettledPayment,
+                'interval' => 5000,
+            ]) !!}
+        </script>
+    @endif
+
     <script>
         // Copy-to-clipboard for the payment reference.
         document.querySelectorAll('[data-copy]').forEach(function (btn) {
@@ -369,6 +384,83 @@
                 if (label) label.textContent = @json(__('Preparing your payment…'));
             });
         }
+
+        // Public payment page polling: reload when payment state changes.
+        (function () {
+            var cfgEl = document.getElementById('public-payment-status-config');
+            if (!cfgEl) return;
+
+            var config;
+            try {
+                config = JSON.parse(cfgEl.textContent || '{}');
+            } catch {
+                return;
+            }
+
+            var statusUrl = config.statusUrl || '';
+            var currentPaymentId = Number(config.currentPaymentId || 0);
+            var currentPaymentStatus = String(config.currentPaymentStatus || '');
+            var hasSettledPayment = Boolean(config.hasSettledPayment);
+            var interval = Math.max(3000, Number(config.interval) || 5000);
+            var timerId = null;
+            var stopped = false;
+
+            if (!statusUrl || hasSettledPayment) return;
+
+            function schedule(delay) {
+                if (stopped) return;
+                if (timerId) clearTimeout(timerId);
+                timerId = setTimeout(checkStatus, delay);
+            }
+
+            async function checkStatus() {
+                if (stopped) return;
+
+                try {
+                    var response = await fetch(statusUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin',
+                    });
+
+                    if (!response.ok) {
+                        schedule(interval * 2);
+                        return;
+                    }
+
+                    var data = await response.json();
+                    var nextPaymentId = Number(data.payment_id || 0);
+                    var nextPaymentStatus = String(data.payment_status || '');
+                    var nextSettled = Boolean(data.has_settled_payment);
+
+                    if (
+                        nextSettled
+                        || nextPaymentId !== currentPaymentId
+                        || nextPaymentStatus !== currentPaymentStatus
+                    ) {
+                        stopped = true;
+                        window.location.reload();
+                        return;
+                    }
+                } catch {
+                    schedule(interval * 2);
+                    return;
+                }
+
+                schedule(interval);
+            }
+
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden && !stopped) {
+                    schedule(1000);
+                }
+            });
+
+            schedule(interval);
+        })();
     </script>
 </body>
 </html>

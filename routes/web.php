@@ -72,6 +72,7 @@ Route::middleware('throttle:signing-links')->group(function () {
 
 Route::middleware(['signed', 'throttle:signing-links'])->group(function () {
     Route::get('/notary/payment/{notaryRequest}', [PublicNotaryPaymentController::class, 'show'])->name('public.notary.payment.show');
+    Route::get('/notary/payment/{notaryRequest}/status', [PublicNotaryPaymentController::class, 'status'])->name('public.notary.payment.status');
     Route::post('/notary/payment/{notaryRequest}', [PublicNotaryPaymentController::class, 'checkout'])->name('public.notary.payment.checkout');
 });
 
