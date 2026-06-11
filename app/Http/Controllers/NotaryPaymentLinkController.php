@@ -8,6 +8,8 @@ use App\Services\NotaryPaymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use RuntimeException;
+use Throwable;
 
 class NotaryPaymentLinkController extends Controller
 {
@@ -26,17 +28,33 @@ class NotaryPaymentLinkController extends Controller
             'recipient_email' => ['required', 'email:rfc', 'max:255'],
         ]);
 
-        $payment = app(NotaryPaymentService::class)->createGatewayPayment(
-            $notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']),
-            (string) $validated['payment_gateway'],
-            (int) $user->id,
-        );
+        try {
+            $payment = app(NotaryPaymentService::class)->createGatewayPayment(
+                $notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']),
+                (string) $validated['payment_gateway'],
+                (int) $user->id,
+            );
 
-        app(NotaryNotificationService::class)->notifyPaymentReady(
-            $notaryRequest->fresh(['requester', 'notary']),
-            $payment,
-            (string) $validated['recipient_email'],
-        );
+            app(NotaryNotificationService::class)->notifyPaymentReady(
+                $notaryRequest->fresh(['requester', 'notary']),
+                $payment,
+                (string) $validated['recipient_email'],
+            );
+        } catch (RuntimeException $exception) {
+            report($exception);
+
+            return redirect()
+                ->route('notary.requests.show', ['notaryRequest' => $notaryRequest, 'tab' => 'closing', 'section' => 'payment'])
+                ->withInput()
+                ->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return redirect()
+                ->route('notary.requests.show', ['notaryRequest' => $notaryRequest, 'tab' => 'closing', 'section' => 'payment'])
+                ->withInput()
+                ->with('error', __('Unable to create or send the payment link right now. Please try again.'));
+        }
 
         session()->put('notary_payment_reminder_sent.'.$payment->id, now()->timestamp);
 
