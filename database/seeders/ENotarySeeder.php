@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\EkycStatus;
 use App\Enums\NotaryRequestStatus;
 use App\Enums\OnboardingStep;
 use App\Enums\OrganizationRole;
@@ -23,6 +24,7 @@ use App\Models\NotarySigner;
 use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ENotarySeeder extends Seeder
@@ -31,20 +33,49 @@ class ENotarySeeder extends Seeder
     {
         // ─── Users ───────────────────────────────────────────────────────────
 
+        $notarySignaturePath = $this->ensureDemoSvg(
+            'signatures/demo-notary-maria-santos.svg',
+            $this->signatureSvg('Maria Santos', 'MS'),
+        );
+        $notarySealPath = $this->ensureDemoSvg(
+            'notary/seals/demo-notary-maria-santos.svg',
+            $this->sealSvg('Atty. Maria Santos'),
+        );
+        $notaryKycPath = $this->ensureDemoSvg(
+            'identity/demo-notary-maria-santos-id.svg',
+            $this->idCardSvg('Atty. Maria Santos', 'DL-2026-00042'),
+        );
+
         $notary = User::query()->updateOrCreate([
             'email' => 'notaryatty@docutrust.tech',
         ], [
             'name' => 'Atty. Maria Santos',
+            'first_name' => 'Maria',
+            'last_name' => 'Santos',
             'password' => DatabaseSeeder::DEMO_PASSWORD,
             'email_verified_at' => now(),
             'role' => UserRole::Notary,
             'organization_role' => OrganizationRole::Member,
             'onboarding_step' => OnboardingStep::Completed,
+            'ekyc_status' => EkycStatus::Verified,
             'mfa_enabled' => true,
             'two_factor_enabled' => false,
             'two_factor_onboarding_completed_at' => now(),
             'mobile_number' => '+639171234567',
             'mobile_verified_at' => now(),
+            'address' => 'Unit 12B, Torres Street, Poblacion District, Davao City',
+            'nationality' => 'Filipino',
+            'date_of_birth' => '1987-03-14',
+            'government_id_type' => 'Driver License',
+            'government_id_number' => 'N01-23-456789',
+            'kyc_id_type' => 'Driver License',
+            'kyc_file_path' => $notaryKycPath,
+            'kyc_verified_at' => now()->subDays(30),
+            'selfie_verified_at' => now()->subDays(30),
+            'gps_permission_granted_at' => now()->subDays(30),
+            'signature_image_path' => $notarySignaturePath,
+            'signature_initials' => 'MS',
+            'signature_type' => 'uploaded',
         ]);
 
         $notaryAdmin = User::query()->updateOrCreate([
@@ -113,6 +144,8 @@ class ENotarySeeder extends Seeder
             'ibp_number' => 'IBP-XI-2026-0042',
             'ptr_number' => 'PTR-2026-1234',
             'mcle_compliance_number' => 'MCLE-VII-2026-0015',
+            'seal_image_path' => $notarySealPath,
+            'signature_image_path' => $notarySignaturePath,
             'status' => 'active',
         ]);
 
@@ -841,5 +874,64 @@ class ENotarySeeder extends Seeder
                 'legal_assertions' => $entry['legal_assertions'],
             ]);
         }
+    }
+
+    private function ensureDemoSvg(string $path, string $contents): string
+    {
+        $disk = (string) config('filesystems.docutrust_disk', 'local');
+
+        if (! Storage::disk($disk)->exists($path)) {
+            Storage::disk($disk)->put($path, $contents);
+        }
+
+        return $path;
+    }
+
+    private function signatureSvg(string $name, string $initials): string
+    {
+        return <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220">
+  <rect width="640" height="220" fill="#fffdf7"/>
+  <path d="M48 164 C92 94, 136 200, 182 120 S270 90, 316 140 390 182, 452 104 542 134, 592 80"
+        fill="none" stroke="#1f2937" stroke-width="6" stroke-linecap="round"/>
+  <text x="52" y="64" font-family="Georgia, serif" font-size="28" fill="#111827">{$name}</text>
+  <text x="52" y="196" font-family="Arial, sans-serif" font-size="18" fill="#6b7280">Initials: {$initials}</text>
+</svg>
+SVG;
+    }
+
+    private function sealSvg(string $label): string
+    {
+        return <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#ffffff"/>
+  <circle cx="300" cy="300" r="220" fill="none" stroke="#7f1d1d" stroke-width="18"/>
+  <circle cx="300" cy="300" r="170" fill="none" stroke="#7f1d1d" stroke-width="8"/>
+  <text x="300" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" fill="#7f1d1d">NOTARIAL SEAL</text>
+  <text x="300" y="258" text-anchor="middle" font-family="Georgia, serif" font-size="32" fill="#111827">{$label}</text>
+  <text x="300" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" fill="#7f1d1d">Davao City, Philippines</text>
+  <text x="300" y="370" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" fill="#7f1d1d">Commission No. CN-2026-0001</text>
+  <text x="300" y="420" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" fill="#7f1d1d">Valid Until 2027</text>
+</svg>
+SVG;
+    }
+
+    private function idCardSvg(string $name, string $idNumber): string
+    {
+        return <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600">
+  <rect width="960" height="600" rx="28" fill="#f3f4f6"/>
+  <rect x="40" y="40" width="880" height="520" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="4"/>
+  <rect x="72" y="92" width="220" height="220" rx="18" fill="#dbeafe"/>
+  <circle cx="182" cy="174" r="54" fill="#93c5fd"/>
+  <rect x="122" y="238" width="120" height="48" rx="24" fill="#93c5fd"/>
+  <text x="340" y="150" font-family="Arial, sans-serif" font-size="30" fill="#111827">Government ID</text>
+  <text x="340" y="220" font-family="Arial, sans-serif" font-size="42" fill="#111827">{$name}</text>
+  <text x="340" y="292" font-family="Arial, sans-serif" font-size="28" fill="#374151">ID No: {$idNumber}</text>
+  <text x="340" y="348" font-family="Arial, sans-serif" font-size="28" fill="#374151">Nationality: Filipino</text>
+  <text x="340" y="404" font-family="Arial, sans-serif" font-size="28" fill="#374151">DOB: Mar 14, 1987</text>
+  <text x="340" y="460" font-family="Arial, sans-serif" font-size="28" fill="#374151">Address: Davao City</text>
+</svg>
+SVG;
     }
 }
