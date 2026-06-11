@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\PaymentStatus;
+use App\Events\NotaryRequestStatusUpdated;
 use App\Models\AttorneyNotarialRegistry;
 use App\Models\NotarialRegisterEntry;
 use App\Models\NotaryRequest;
@@ -182,6 +183,10 @@ class NotaryPaymentService
                     'message' => $exception->getMessage(),
                 ]);
             }
+        }
+
+        if ($payment->notary_request_id !== null) {
+            event(new NotaryRequestStatusUpdated($payment->notary_request_id));
         }
 
         return $payment;

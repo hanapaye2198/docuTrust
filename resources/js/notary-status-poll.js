@@ -42,11 +42,14 @@ function createStatusPoll(cfgEl) {
     }
 
     const statusUrl = config.statusUrl || '';
+    const channelName = config.channel || '';
     const interval = Math.max(3000, Number(config.interval) || 5000);
     let currentStatus = config.currentStatus || '';
     let timerId = null;
     let stopped = false;
     let isPageVisible = true;
+    let realtimeHealthy = false;
+    let realtimeChannel = null;
 
     function owns(node) {
         return cfgEl === node;
@@ -58,12 +61,19 @@ function createStatusPoll(cfgEl) {
             clearTimeout(timerId);
             timerId = null;
         }
+
+        if (realtimeChannel && window.Echo) {
+            window.Echo.leave(channelName);
+            realtimeChannel = null;
+        }
     }
 
     function start() {
         if (!statusUrl) {
             return;
         }
+
+        subscribeToRealtime();
 
         // Listen for visibility changes to pause/resume polling
         document.addEventListener('visibilitychange', () => {
@@ -73,7 +83,7 @@ function createStatusPoll(cfgEl) {
             }
         });
 
-        schedulePoll(interval);
+        schedulePoll(realtimeHealthy ? interval * 6 : interval);
     }
 
     function schedulePoll(delay) {
@@ -89,7 +99,7 @@ function createStatusPoll(cfgEl) {
             if (stopped || !isPageVisible) {
                 // If page is hidden, just reschedule for later
                 if (!stopped) {
-                    schedulePoll(interval * 2);
+                    schedulePoll(realtimeHealthy ? interval * 6 : interval * 2);
                 }
                 return;
             }
@@ -120,7 +130,7 @@ function createStatusPoll(cfgEl) {
                     return;
                 }
 
-                schedulePoll(interval * 2); // Back off on errors
+                schedulePoll(realtimeHealthy ? interval * 6 : interval * 2); // Back off on errors
                 return;
             }
 
@@ -128,11 +138,23 @@ function createStatusPoll(cfgEl) {
             processUpdate(data);
         } catch {
             // Network error — back off
-            schedulePoll(interval * 2);
+            schedulePoll(realtimeHealthy ? interval * 6 : interval * 2);
             return;
         }
 
-        schedulePoll(interval);
+        schedulePoll(realtimeHealthy ? interval * 6 : interval);
+    }
+
+    function subscribeToRealtime() {
+        if (!channelName || !window.Echo?.private) {
+            return;
+        }
+
+        realtimeChannel = window.Echo.private(channelName)
+            .listen('.notary.request.status.updated', (payload) => {
+                realtimeHealthy = true;
+                processUpdate(payload || {});
+            });
     }
 
     function processUpdate(data) {

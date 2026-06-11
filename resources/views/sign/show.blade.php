@@ -58,6 +58,7 @@
     if (
         $isNotaryUser
         && $signer->document->notary_request_id !== null
+        && (int) $signer->user_id === (int) auth()->id()
         && $signer->status === DocumentSignerStatus::Signed
     ) {
         $continueProcessUrl = route('notary.requests.show', [
@@ -443,16 +444,20 @@
             </div>
         @endif
 
-        @if ($showFieldViewer || ($trustAuthorizationEnabled && $showLegacySign))
+        @if ($showFieldViewer || $showLegacySign)
             <script id="sign-view-config" type="application/json">
                 {!! json_encode([
                     'pdfUrl' => $showFieldViewer ? $pdfUrl : null,
                     'fieldsJson' => $fieldsJson,
                     'signedByFieldId' => $signedByFieldId,
                     'canEditFields' => $showFieldEditing,
+                    'canTakeAction' => $showFieldSigning || $showLegacySign,
                     'showLegacySign' => $showLegacySign,
+                    'realtime' => $signerSessionRealtime,
                     'signerName' => $signer->name,
                     'signerEmail' => $signer->email,
+                    'signerStatus' => $signer->status->value,
+                    'documentStatus' => $signer->document->status->value,
                     'dateLocale' => str_replace('_', '-', app()->getLocale()),
                     'trustAuthorization' => [
                         'enabled' => $trustAuthorizationEnabled,

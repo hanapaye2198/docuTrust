@@ -73,8 +73,12 @@ function createSignViewSession(cfgEl) {
     const signedByFieldId = { ...(config.signedByFieldId || {}) };
     const signerName = config.signerName || '';
     const signerEmail = config.signerEmail || '';
+    const realtimeConfig = config.realtime && typeof config.realtime === 'object'
+        ? config.realtime
+        : null;
     const dateLocale = config.dateLocale || 'en-US';
     const canEditFields = Boolean(config.canEditFields);
+    const canTakeAction = Boolean(config.canTakeAction);
     const trustAuthorizationConfig = config.trustAuthorization && typeof config.trustAuthorization === 'object'
         ? config.trustAuthorization
         : {};
@@ -141,9 +145,13 @@ function createSignViewSession(cfgEl) {
     let totalPages = 1;
     let isRenderingPage = false;
     let currentCanEditFields = canEditFields;
+    let currentCanTakeAction = canTakeAction;
     let currentViewport = null;
     let currentModalFieldType = 'signature';
+    let currentSignerStatus = config.signerStatus || null;
+    let currentDocumentStatus = config.documentStatus || null;
     let renderSequence = 0;
+    let realtimeChannelName = null;
     let destroyed = false;
     let trustAuthorizationSession = trustAuthorizationConfig.currentSession || null;
     let trustAuthorizationStartInFlight = false;
@@ -759,6 +767,62 @@ function createSignViewSession(cfgEl) {
         }
 
         currentCanEditFields = Boolean(summary.can_edit_fields);
+    }
+
+    function scheduleSessionRefresh(targetUrl = null) {
+        const destination = typeof targetUrl === 'string' && targetUrl !== '' ? targetUrl : window.location.href;
+
+        window.setTimeout(() => {
+            if (destination === window.location.href) {
+                window.location.reload();
+                return;
+            }
+
+            window.location.assign(destination);
+        }, 150);
+    }
+
+    function handleRealtimeSessionUpdate(payload) {
+        if (!payload || destroyed) {
+            return;
+        }
+
+        const previousCanEditFields = currentCanEditFields;
+        const previousCanTakeAction = currentCanTakeAction;
+        const previousSignerStatus = currentSignerStatus;
+        const previousDocumentStatus = currentDocumentStatus;
+
+        if (payload.summary) {
+            updateSummary(payload.summary);
+        }
+
+        currentCanTakeAction = Boolean(payload.can_take_action ?? currentCanTakeAction);
+        currentSignerStatus = payload.signer_status || payload.summary?.signer_status || currentSignerStatus;
+        currentDocumentStatus = payload.document_status || payload.summary?.document_status || currentDocumentStatus;
+
+        const stateChanged = previousCanEditFields !== currentCanEditFields
+            || previousCanTakeAction !== currentCanTakeAction
+            || previousSignerStatus !== currentSignerStatus
+            || previousDocumentStatus !== currentDocumentStatus;
+
+        if (!stateChanged) {
+            return;
+        }
+
+        scheduleSessionRefresh(payload.redirect_url || null);
+    }
+
+    function subscribeToRealtimeUpdates() {
+        const channelName = typeof realtimeConfig?.channel === 'string' ? realtimeConfig.channel : '';
+        const eventName = typeof realtimeConfig?.event === 'string' ? realtimeConfig.event : 'signer.session.updated';
+
+        if (!channelName || !window.Echo?.channel) {
+            return;
+        }
+
+        realtimeChannelName = channelName;
+        window.Echo.channel(channelName)
+            .listen(`.${eventName}`, handleRealtimeSessionUpdate);
     }
 
     function updatePageUi() {
@@ -1725,6 +1789,7 @@ function createSignViewSession(cfgEl) {
     }
 
     async function init() {
+        subscribeToRealtimeUpdates();
         renderTrustAuthorizationSession();
 
         if (trustAuthorizationEnabled) {
@@ -1832,6 +1897,9 @@ function createSignViewSession(cfgEl) {
             drawFrameId = null;
         }
         clearTrustAuthorizationPollTimer();
+        if (realtimeChannelName && window.Echo) {
+            window.Echo.leave(realtimeChannelName);
+        }
         clearAllFieldObjects();
         fabricCanvas?.dispose();
         destroyed = true;

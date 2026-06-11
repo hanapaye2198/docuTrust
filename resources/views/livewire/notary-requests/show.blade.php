@@ -37,6 +37,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
@@ -231,6 +232,22 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
 
         $this->dispatch('reset-main-scroll');
+    }
+
+    #[On('notary-status-updated-livewire')]
+    public function syncRealtimeRequestState(): void
+    {
+        $this->refreshRequest();
+        $this->ensureActiveTabIsAvailable();
+
+        $user = Auth::user();
+        if ($user?->role === \App\Enums\UserRole::Notary && ! request()->has('tab')) {
+            $this->activeTab = $this->resolveDefaultAttorneyTab();
+        }
+
+        if ($this->activeTab === 'session') {
+            $this->syncVideoPartiesIfReady(notify: false);
+        }
     }
 
     public function openVideoSessionWorkspace(): void

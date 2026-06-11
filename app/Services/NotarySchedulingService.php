@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\NotaryRequestStatus;
+use App\Events\NotaryRequestStatusUpdated;
 use App\Events\NotarySessionScheduled;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
@@ -97,7 +98,11 @@ class NotarySchedulingService
             'recorded_at' => now(),
         ]);
 
-        return $session->fresh();
+        $session = $session->fresh();
+
+        event(new NotaryRequestStatusUpdated($session->notary_request_id));
+
+        return $session;
     }
 
     public function start(NotarySession $session): NotarySession
@@ -132,7 +137,11 @@ class NotarySchedulingService
             'recorded_at' => now(),
         ]);
 
-        return $session->fresh();
+        $session = $session->fresh();
+
+        event(new NotaryRequestStatusUpdated($session->notary_request_id));
+
+        return $session;
     }
 
     public function cancel(NotarySession $session, ?string $reason = null): NotarySession
@@ -170,7 +179,11 @@ class NotarySchedulingService
             'recorded_at' => now(),
         ]);
 
-        return $session->fresh();
+        $session = $session->fresh();
+
+        event(new NotaryRequestStatusUpdated($session->notary_request_id));
+
+        return $session;
     }
 
     /**
@@ -229,7 +242,11 @@ class NotarySchedulingService
             ])->save();
         }
 
-        return $session->fresh();
+        $session = $session->fresh();
+
+        event(new NotaryRequestStatusUpdated($session->notary_request_id));
+
+        return $session;
     }
 
     /**

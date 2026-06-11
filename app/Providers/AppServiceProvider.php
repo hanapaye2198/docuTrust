@@ -13,8 +13,11 @@ use App\Events\DocumentSignerCompleted;
 use App\Events\NotaryRequestApproved;
 use App\Events\NotaryRequestDigitalized;
 use App\Events\NotaryRequestNotarized;
+use App\Events\NotaryRequestStatusUpdated;
 use App\Events\NotaryRequestSubmitted;
 use App\Events\NotarySessionScheduled;
+use App\Events\SignerSessionUpdated;
+use App\Models\Document;
 use App\Services\DatabaseSignerKeyStore;
 use App\Services\DocumentNotificationService;
 use App\Services\FileBackedCertificateAuthorityKeyStore;
@@ -102,30 +105,60 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(DocumentSignerCompleted::class, function (DocumentSignerCompleted $event): void {
             app(DocumentNotificationService::class)->handleSignerCompleted($event);
+            $this->broadcastSignerSessions($event->document);
+
+            $requestId = $event->document->notary_request_id;
+            if ($requestId !== null) {
+                event(new NotaryRequestStatusUpdated($requestId));
+            }
         });
 
         Event::listen(DocumentCompleted::class, function (DocumentCompleted $event): void {
             app(DocumentNotificationService::class)->handleDocumentCompleted($event);
+            $this->broadcastSignerSessions($event->document);
+
+            $requestId = $event->document->notary_request_id;
+            if ($requestId !== null) {
+                event(new NotaryRequestStatusUpdated($requestId));
+            }
         });
 
         Event::listen(NotaryRequestSubmitted::class, function (NotaryRequestSubmitted $event): void {
             app(NotaryNotificationService::class)->handleRequestSubmitted($event);
+            event(new NotaryRequestStatusUpdated($event->notaryRequest->id));
         });
 
         Event::listen(NotarySessionScheduled::class, function (NotarySessionScheduled $event): void {
             app(NotaryNotificationService::class)->handleSessionScheduled($event);
+            event(new NotaryRequestStatusUpdated($event->notaryRequest->id));
         });
 
         Event::listen(NotaryRequestApproved::class, function (NotaryRequestApproved $event): void {
             app(NotaryNotificationService::class)->handleRequestApproved($event);
+            event(new NotaryRequestStatusUpdated($event->notaryRequest->id));
         });
 
         Event::listen(NotaryRequestDigitalized::class, function (NotaryRequestDigitalized $event): void {
             app(NotaryNotificationService::class)->handleRequestDigitalized($event);
+            event(new NotaryRequestStatusUpdated($event->notaryRequest->id));
         });
 
         Event::listen(NotaryRequestNotarized::class, function (NotaryRequestNotarized $event): void {
             app(NotaryNotificationService::class)->handleRequestNotarized($event);
+            event(new NotaryRequestStatusUpdated($event->notaryRequest->id));
         });
+    }
+
+    private function broadcastSignerSessions(Document $document): void
+    {
+        $document->loadMissing('documentSigners');
+
+        foreach ($document->documentSigners as $signer) {
+            if (! is_string($signer->access_token) || $signer->access_token === '') {
+                continue;
+            }
+
+            event(new SignerSessionUpdated($signer));
+        }
     }
 }

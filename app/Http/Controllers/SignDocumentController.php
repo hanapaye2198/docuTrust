@@ -316,6 +316,9 @@ class SignDocumentController extends Controller
                         'id' => $field->id,
                         ...$this->signatureFieldResponsePayload($signature, $signer),
                     ],
+                    'redirect_url' => $signer->status->isCompleted()
+                        ? route('sign.show', $this->signerRouteToken($signer))
+                        : null,
                     'summary' => [
                         'assigned' => $assignedCount,
                         'completed' => $signedCount,
@@ -1059,6 +1062,12 @@ class SignDocumentController extends Controller
             'documentAccessLocked' => $documentAccessLocked,
             'documentAccessHint' => $document->access_password_hint,
             'signingAvailabilityMessage' => $signingAvailabilityMessage,
+            'signerSessionRealtime' => ! $authenticated
+                ? [
+                    'channel' => 'signer-session.'.$this->signerRouteToken($signer),
+                    'event' => 'signer.session.updated',
+                ]
+                : null,
             'trustAuthorizationEnabled' => $trustAuthorizationEnabled,
             'trustAuthorizationSession' => $trustAuthorizationSession !== null
                 ? $this->trustAuthorizationSessionPayload($trustAuthorizationSession)
@@ -1082,6 +1091,7 @@ class SignDocumentController extends Controller
         if (
             Auth::user()?->role->value === 'notary'
             && $document->notary_request_id !== null
+            && (int) $signer->user_id === (int) Auth::id()
             && $signer->status === DocumentSignerStatus::Signed
         ) {
             return route('notary.requests.show', [

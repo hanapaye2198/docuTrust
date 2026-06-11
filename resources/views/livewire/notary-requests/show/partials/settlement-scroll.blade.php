@@ -150,8 +150,8 @@
         });
 
         window.addEventListener('notary-status-updated', () => {
-            if (typeof $wire !== 'undefined' && typeof $wire.$refresh === 'function') {
-                $wire.$refresh();
+            if (window.Livewire?.dispatch) {
+                window.Livewire.dispatch('notary-status-updated-livewire');
             }
         });
     }
