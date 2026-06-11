@@ -17,6 +17,7 @@ class DocumentCompletedMail extends Mailable implements ShouldQueue
     public function __construct(
         public Document $document,
         public ?string $completedBy = null,
+        public ?string $actionUrl = null,
     ) {
         $this->onQueue((string) config('docutrust.queues.notifications'));
     }

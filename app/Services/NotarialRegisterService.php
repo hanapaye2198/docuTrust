@@ -62,7 +62,7 @@ class NotarialRegisterService
         }
 
         $notarialActType = trim((string) ($data['notarial_act_type'] ?? ''));
-        if (! in_array($notarialActType, ['acknowledgment', 'jurat', 'affidavit', 'oath', 'other'], true)) {
+        if (! in_array($notarialActType, config('docutrust.notary.notarial_act_types', ['acknowledgment', 'jurat']), true)) {
             throw new RuntimeException(__('Invalid notarial act type.'));
         }
 

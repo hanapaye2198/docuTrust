@@ -5,6 +5,7 @@ namespace App\Services\TrustProfile;
 use App\Enums\EkycStatus;
 use App\Enums\UserRole;
 use App\Models\DocumentSigner;
+use App\Services\Notary\NotarySealProfileService;
 use App\Models\OnboardingAuditLog;
 use App\Models\SignatureAuditEvent;
 use App\Models\User;
@@ -240,7 +241,7 @@ class TrustProfileService
      */
     public function enotaryReadinessChecks(User $user): array
     {
-        return [
+        $checks = [
             [
                 'key' => 'identity',
                 'label' => __('Verified identity'),
@@ -272,6 +273,17 @@ class TrustProfileService
                 'description' => __('Biometric match confirmed'),
             ],
         ];
+
+        if ($user->role === UserRole::Notary) {
+            $checks[] = [
+                'key' => 'notary_seal',
+                'label' => __('Notary seal on file'),
+                'met' => app(NotarySealProfileService::class)->hasSealOnFile($user),
+                'description' => __('Personal seal uploaded in trust profile for digital notarization'),
+            ];
+        }
+
+        return $checks;
     }
 
     public function isEnotaryReady(User $user): bool

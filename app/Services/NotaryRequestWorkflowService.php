@@ -16,6 +16,7 @@ use App\Models\NotaryCredential;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
+use App\Services\Notary\NotarySealProfileService;
 use RuntimeException;
 
 class NotaryRequestWorkflowService
@@ -217,7 +218,7 @@ class NotaryRequestWorkflowService
             ],
             [
                 'label' => __('Attorney personal seal'),
-                'description' => __('Upload your seal in credentials before creating the official register entry.'),
+                'description' => __('Upload your seal in trust profile before creating the official register entry.'),
                 'state' => $resolveState($sealComplete, $sealCurrent, ! $attorneyHasSigned),
             ],
             [
@@ -619,11 +620,11 @@ class NotaryRequestWorkflowService
             [
                 'key' => 'seal',
                 'label' => __('Attorney personal seal'),
-                'description' => __('Upload your seal in credentials before creating the official register entry.'),
+                'description' => __('Upload your seal in trust profile before creating the official register entry.'),
                 'state' => $sealState,
                 'actor' => 'attorney',
                 'section_id' => 'section-attorney-seal',
-                'href' => route('notary.credentials'),
+                'href' => app(NotarySealProfileService::class)->trustProfileSealSectionUrl(),
                 'waiting_on' => $this->settlementStepWaitingOn(
                     $sealState,
                     ! $attorneyHasSigned ? 'attorney' : (! $hasPreparedDraft ? 'attorney' : ($paymentRequired && ! $hasSettledPayment ? 'client' : null)),
@@ -981,7 +982,7 @@ class NotaryRequestWorkflowService
     public function digitalize(NotaryRequest $request): NotaryRequest
     {
         if (! $this->canDigitalize($request)) {
-            throw new RuntimeException(__('This notarization is not ready for digital notarization. Client payment must be completed first.'));
+            throw new RuntimeException($this->digitalizeBlockingMessage($request));
         }
 
         if ($request->status !== NotaryRequestStatus::AttorneyApproved) {
@@ -1090,5 +1091,29 @@ class NotaryRequestWorkflowService
         ]);
 
         return $request->fresh();
+    }
+
+    private function digitalizeBlockingMessage(NotaryRequest $request): string
+    {
+        if (! $this->hasAttorneySignedAllDocuments($request)) {
+            return __('This notarization is not ready for digital notarization. The attorney must finish signing first.');
+        }
+
+        if (! $this->settlementClosingPrerequisitesMet($request)) {
+            if ($this->paymentRequired($request) && ! $this->hasSettledPayment($request)) {
+                return __('This notarization is not ready for digital notarization. Client payment must be completed first.');
+            }
+
+            return __('This notarization is not ready for digital notarization. Complete settlement, register entry, and seal first.');
+        }
+
+        $request->loadMissing('documents');
+
+        if ($request->documents->isEmpty()
+            || ! $request->documents->every(fn (Document $document): bool => $document->status === DocumentStatus::Completed)) {
+            return __('This notarization is not ready for digital notarization. Final document artifacts are still being prepared.');
+        }
+
+        return __('This notarization is not ready for digital notarization yet.');
     }
 }

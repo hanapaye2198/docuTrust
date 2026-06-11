@@ -98,12 +98,30 @@ class NotaryNotificationService
 
     public function handleRequestNotarized(NotaryRequestNotarized $event): void
     {
-        $request = $event->notaryRequest->loadMissing(['requester', 'notary']);
+        $request = $event->notaryRequest->loadMissing(['requester', 'notary', 'documents.documentSigners']);
 
-        // Notify the requester about completion
+        $emailedAddresses = [];
+
         if ($request->requester !== null && $request->requester->email !== '') {
             Mail::to($request->requester->email)
                 ->queue(new NotaryRequestNotarizedMail($request));
+            $emailedAddresses[] = strtolower($request->requester->email);
+        }
+
+        foreach ($request->documents as $document) {
+            foreach ($document->documentSigners as $signer) {
+                if (! $signer->requiresAction() || ! $signer->status->isCompleted()) {
+                    continue;
+                }
+
+                $email = strtolower(trim((string) $signer->email));
+                if ($email === '' || in_array($email, $emailedAddresses, true)) {
+                    continue;
+                }
+
+                Mail::to($signer->email)->queue(new NotaryRequestNotarizedMail($request));
+                $emailedAddresses[] = $email;
+            }
         }
     }
 

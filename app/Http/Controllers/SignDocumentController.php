@@ -97,7 +97,7 @@ class SignDocumentController extends Controller
         $signer = $this->resolveAuthenticatedSigner($signerId, ['document']);
 
         if (! $this->documentAccessUnlocked($signer->document)) {
-            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                 ->with('error', __('Enter the document password to continue.'));
         }
 
@@ -181,19 +181,19 @@ class SignDocumentController extends Controller
             $signer = $this->resolveAuthenticatedSigner($signerId, ['document.documentSigners']);
 
             if (! $this->documentAccessUnlocked($signer->document)) {
-                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                     ->with('error', __('Enter the document password to continue.'));
             }
 
             $document = $signer->document;
             $signingError = $this->canSignerModifyFields($document, $signer);
             if ($signingError !== null) {
-                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                     ->with('error', $signingError);
             }
 
             if ($document->signatureFields()->exists()) {
-                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                     ->with('error', __('This document must be signed using the signature fields on the document.'));
             }
 
@@ -202,7 +202,7 @@ class SignDocumentController extends Controller
                 ->exists();
 
             if ($hasFieldsForSigner) {
-                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                     ->with('error', __('Please complete each signature field on the document.'));
             }
 
@@ -221,12 +221,12 @@ class SignDocumentController extends Controller
                 ? redirect()->to($redirectUrl)->with('status', $signer->isApprover()
                     ? __('Thank you. Your approval has been recorded.')
                     : __('Thank you. Your signature has been recorded.'))
-                : redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                : redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                     ->with('status', $signer->isApprover()
                         ? __('Thank you. Your approval has been recorded.')
                         : __('Thank you. Your signature has been recorded.'));
         } catch (TrustAuthorizationRequiredException $exception) {
-            return redirect()->route('sign.account.show', ['signerId' => $signerId])
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signerId])
                 ->with('error', $exception->getMessage());
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Authenticated document signing failed', [
@@ -236,7 +236,7 @@ class SignDocumentController extends Controller
                 'ip_address' => (string) request()->ip(),
             ]);
 
-            return redirect()->route('sign.account.show', ['signerId' => $signerId])
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signerId])
                 ->with('error', __('Unable to complete signing right now. Please try again.'));
         }
     }
@@ -376,7 +376,7 @@ class SignDocumentController extends Controller
                     ], 423);
                 }
 
-                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                     ->with('error', __('Enter the document password to continue.'));
             }
 
@@ -390,7 +390,7 @@ class SignDocumentController extends Controller
                     ], 422);
                 }
 
-                return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+                return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                     ->with('error', $signingError);
             }
 
@@ -445,8 +445,12 @@ class SignDocumentController extends Controller
                 ]);
             }
 
-            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
-                ->with('status', $captureResult->message);
+            $redirectUrl = $this->completionRedirectUrl($signer);
+
+            return $redirectUrl !== null
+                ? redirect()->to($redirectUrl)->with('status', $captureResult->message)
+                : redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
+                    ->with('status', $captureResult->message);
         } catch (TrustAuthorizationRequiredException $exception) {
             if ($request->expectsJson()) {
                 return response()->json([
@@ -454,7 +458,7 @@ class SignDocumentController extends Controller
                 ], 422);
             }
 
-            return redirect()->route('sign.account.show', ['signerId' => $signerId])
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signerId])
                 ->with('error', $exception->getMessage());
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Authenticated field signature submission failed', [
@@ -471,7 +475,7 @@ class SignDocumentController extends Controller
                 ], 500);
             }
 
-            return redirect()->route('sign.account.show', ['signerId' => $signerId])
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signerId])
                 ->with('error', __('Unable to save your signature right now. Please try again.'));
         }
     }
@@ -512,12 +516,49 @@ class SignDocumentController extends Controller
         ]);
     }
 
+    public function downloadSignedDocument(string $token): StreamedResponse|Response|RedirectResponse
+    {
+        $signer = $this->resolveAccessibleSigner($token, ['document']);
+        if ($signer === null) {
+            return $this->invalidLinkResponse();
+        }
+
+        $accessResponse = $this->authorizeSigningMethodAccess($signer);
+        if ($accessResponse !== null) {
+            return $accessResponse;
+        }
+
+        if (! $this->documentAccessUnlocked($signer->document)) {
+            return redirect()->route('sign.show', $token)
+                ->with('error', __('Enter the document password to download this document.'));
+        }
+
+        $document = $signer->document;
+        if ($document->status !== DocumentStatus::Completed) {
+            abort(404);
+        }
+
+        $document = $this->completedDocumentArtifactService->ensureReady($document);
+        $diskName = $document->hasArchivedFinalDocument()
+            ? $document->archiveDisk()
+            : (string) config('filesystems.docutrust_disk', 'local');
+        $path = $document->finalDownloadPath();
+
+        abort_if(! is_string($path) || $path === '', 404);
+
+        return Storage::disk($diskName)->download(
+            $path,
+            $document->title.'-signed.pdf',
+            ['Content-Type' => 'application/pdf']
+        );
+    }
+
     public function streamAuthenticatedSignatureImage(int $signerId, SignatureField $signatureField): StreamedResponse|Response|RedirectResponse
     {
         $signer = $this->resolveAuthenticatedSigner($signerId);
 
         if (! $this->documentAccessUnlocked($signer->document)) {
-            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                 ->with('error', __('Enter the document password to continue.'));
         }
 
@@ -771,7 +812,7 @@ class SignDocumentController extends Controller
         $document = $signer->document;
 
         if (! $document->hasAccessPassword()) {
-            return redirect()->route('sign.account.show', ['signerId' => $signer->id]);
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id]);
         }
 
         $validated = $request->validate([
@@ -785,7 +826,7 @@ class SignDocumentController extends Controller
                 ], 422);
             }
 
-            return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                 ->with('error', __('The document password is incorrect.'));
         }
 
@@ -797,7 +838,7 @@ class SignDocumentController extends Controller
             ]);
         }
 
-        return redirect()->route('sign.account.show', ['signerId' => $signer->id])
+        return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
             ->with('status', __('Document unlocked.'));
     }
 

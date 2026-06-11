@@ -1802,9 +1802,9 @@ new #[Layout('components.layouts.app')] class extends Component {
             return [
                 'type' => 'link',
                 'label' => __('Upload attorney seal'),
-                'description' => __('Add your personal seal in credentials before creating the final registry entry.'),
+                'description' => __('Add your personal seal in trust profile before creating the final registry entry.'),
                 'variant' => 'primary',
-                'href' => route('notary.credentials'),
+                'href' => route('settings.trust-profile').'#notary-seal',
                 'tab' => 'closing',
             ];
         }

@@ -6,6 +6,7 @@ use App\Models\NotaryRequest;
 use App\Services\AttorneyNotarialRegistryService;
 use App\Services\NotaryRequestWorkflowService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 
@@ -127,7 +128,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $validated = $this->validate([
             'title' => ['required', 'string', 'max:255'],
-            'notarialActType' => ['required', 'in:acknowledgment,jurat,affidavit,oath,other'],
+            'notarialActType' => ['required', Rule::in(config('docutrust.notary.notarial_act_types', ['acknowledgment', 'jurat']))],
             'officialReceiptNo' => [$requiresOr ? 'required' : 'nullable', 'string', 'max:100'],
             'parties' => ['required', 'array', 'min:1'],
             'parties.*.name' => ['required', 'string', 'max:255'],

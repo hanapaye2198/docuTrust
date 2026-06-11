@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\UserRole;
+use App\Services\Notary\NotarySealProfileService;
 use App\Services\OnboardingAuditLogger;
 use App\Services\TrustProfile\TrustProfileService;
 use Illuminate\Support\Facades\Auth;
@@ -29,6 +31,8 @@ new class extends Component {
 
     public $signatureUpload = null;
 
+    public $notarySealUpload = null;
+
     public function mount(): void
     {
         $user = Auth::user();
@@ -41,10 +45,11 @@ new class extends Component {
         $this->signature_initials = (string) ($user->signature_initials ?? '');
     }
 
-    public function with(TrustProfileService $trustProfile): array
+    public function with(TrustProfileService $trustProfile, NotarySealProfileService $sealProfile): array
     {
         $user = Auth::user()->load('ekycRecord');
         $summary = $trustProfile->summary($user);
+        $notaryCredential = $sealProfile->activeCredential($user);
 
         return [
             'user' => $user,
@@ -54,6 +59,8 @@ new class extends Component {
             'activity' => $trustProfile->activityTimeline($user, 8),
             'sessions' => $trustProfile->activeSessions($user)->take(5),
             'completionFields' => $trustProfile->completionFields($user),
+            'notaryCredential' => $notaryCredential,
+            'hasNotarySeal' => $sealProfile->hasSealOnFile($user),
         ];
     }
 
@@ -104,6 +111,23 @@ new class extends Component {
         $this->drawnSignature = '';
 
         Session::flash('trust-status', __('Signature saved.'));
+    }
+
+    public function uploadNotarySeal(NotarySealProfileService $sealProfile): void
+    {
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role === UserRole::Notary, 403);
+
+        $this->validate([
+            'notarySealUpload' => ['required', 'image', 'max:2048'],
+        ]);
+
+        $sealProfile->storeSeal($user, $this->notarySealUpload);
+        $this->notarySealUpload = null;
+
+        app(OnboardingAuditLogger::class)->log($user, 'trust_profile.notary_seal_updated');
+
+        Session::flash('trust-status', __('Notary seal saved. It will be used on all cases.'));
     }
 
     public function saveUploadedSignature(): void
@@ -423,6 +447,52 @@ new class extends Component {
                     </div>
                 </div>
             </div>
+
+            @if ($user->role === UserRole::Notary)
+                <div id="notary-seal" class="scroll-mt-24 rounded-2xl border border-zinc-200/90 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
+                    <flux:heading size="lg">{{ __('Notary personal seal') }}</flux:heading>
+                    <flux:subheading class="mt-1 mb-4">
+                        {{ __('Upload once here. The same seal is applied automatically on every case you notarize.') }}
+                    </flux:subheading>
+
+                    @if ($notaryCredential)
+                        <div class="space-y-4">
+                            @if ($hasNotarySeal)
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <img
+                                        src="{{ route('settings.trust-profile.seal') }}"
+                                        alt=""
+                                        class="max-h-24 rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950"
+                                    />
+                                    <flux:badge color="emerald" size="sm">{{ __('Seal on file') }}</flux:badge>
+                                </div>
+                            @else
+                                <div class="rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                                    {{ __('Add your official notary seal before creating register entries or digitalizing documents.') }}
+                                </div>
+                            @endif
+
+                            <div>
+                                <input type="file" wire:model="notarySealUpload" accept="image/*" class="w-full text-sm" />
+                                <p class="mt-1 text-xs text-zinc-500">{{ __('PNG or JPG, max 2MB') }}</p>
+                                <flux:error name="notarySealUpload" />
+                                @if ($notarySealUpload)
+                                    <flux:button variant="primary" size="sm" type="button" class="mt-3" wire:click="uploadNotarySeal">
+                                        {{ $hasNotarySeal ? __('Replace seal') : __('Save seal') }}
+                                    </flux:button>
+                                @endif
+                            </div>
+                        </div>
+                    @else
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                            {{ __('Complete attorney application and receive approval before uploading your seal.') }}
+                        </div>
+                        <flux:button variant="primary" size="sm" class="mt-4" :href="route('settings.attorney-application')" wire:navigate>
+                            {{ __('Apply to practice as Attorney') }}
+                        </flux:button>
+                    @endif
+                </div>
+            @endif
 
             {{-- Signatures --}}
             <div class="rounded-2xl border border-zinc-200/90 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900/40">

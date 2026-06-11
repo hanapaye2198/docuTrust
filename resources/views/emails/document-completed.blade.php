@@ -20,7 +20,16 @@
                         @if ($completedBy)
                             <p style="margin:0 0 10px 0;font-size:14px;color:#4b5563;">{{ __('Completed by: :name', ['name' => $completedBy]) }}</p>
                         @endif
-                        <p style="margin:0;font-size:14px;color:#4b5563;">{{ __('Your audit-ready record is now available in DocuTrust.') }}</p>
+                        <p style="margin:0 0 16px 0;font-size:14px;color:#4b5563;">{{ __('All required signatures are complete. Your signed document is ready.') }}</p>
+                        @if (is_string($actionUrl) && $actionUrl !== '')
+                            <p style="margin:0;">
+                                <a href="{{ $actionUrl }}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:12px 20px;border-radius:10px;">
+                                    {{ __('Download signed document') }}
+                                </a>
+                            </p>
+                        @else
+                            <p style="margin:0;font-size:14px;color:#4b5563;">{{ __('Sign in to DocuTrust to view and download your completed document.') }}</p>
+                        @endif
                     </td>
                 </tr>
                 <tr>

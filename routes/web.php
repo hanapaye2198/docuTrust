@@ -61,6 +61,7 @@ Route::middleware('throttle:signing-links')->group(function () {
     Route::get('/sign/{token}', [SignDocumentController::class, 'show'])->name('sign.show');
     Route::post('/sign/{token}/unlock', [SignDocumentController::class, 'unlock'])->name('sign.unlock');
     Route::get('/sign/{token}/pdf', [SignDocumentController::class, 'streamPdf'])->name('sign.document.pdf');
+    Route::get('/sign/{token}/download', [SignDocumentController::class, 'downloadSignedDocument'])->name('sign.document.download');
     Route::get('/sign/{token}/signature-image/{signatureField}', [SignDocumentController::class, 'streamSignatureImage'])->name('sign.signature.image');
     Route::post('/sign/{token}', [SignDocumentController::class, 'sign'])->name('sign.store');
     Route::post('/sign/{token}/signature', [SignDocumentController::class, 'storeSignature'])->name('sign.signature.store');
@@ -203,6 +204,7 @@ Route::middleware(['auth'])->group(function () {
     Volt::route('settings/attorney-application', 'settings.attorney-application')->name('settings.attorney-application');
     Route::get('settings/trust-profile/photo', [TrustProfileAssetController::class, 'photo'])->name('settings.trust-profile.photo');
     Route::get('settings/trust-profile/signature', [TrustProfileAssetController::class, 'signature'])->name('settings.trust-profile.signature');
+    Route::get('settings/trust-profile/seal', [TrustProfileAssetController::class, 'seal'])->name('settings.trust-profile.seal');
     Volt::route('settings/profile', 'settings.profile')->name('settings.profile');
     Route::redirect('settings/password', '/settings/profile?tab=password')->name('settings.password');
     Route::redirect('settings/security', '/settings/profile?tab=security')->name('settings.security');

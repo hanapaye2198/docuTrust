@@ -602,7 +602,11 @@ new #[Layout('components.layouts.app')] class extends Component {
                             @else
                                 <div
                                     class="relative rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50/80 p-8 text-center transition dark:border-zinc-600 dark:bg-zinc-900/40"
-                                    x-data
+                                    x-data="{ progress: 0 }"
+                                    x-on:livewire-upload-start="progress = 0"
+                                    x-on:livewire-upload-finish="progress = 0"
+                                    x-on:livewire-upload-error="progress = 0"
+                                    x-on:livewire-upload-progress="progress = $event.detail.progress"
                                     x-on:dragover.prevent="$el.classList.add('border-teal-400', 'bg-teal-50/50', 'dark:border-teal-500')"
                                     x-on:dragleave.prevent="$el.classList.remove('border-teal-400', 'bg-teal-50/50', 'dark:border-teal-500')"
                                     x-on:drop.prevent="
@@ -616,8 +620,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     <flux:icon.document-text class="mx-auto size-10 text-zinc-400" />
                                     <p class="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Drag & drop PDF here') }}</p>
                                     <p class="mt-1 text-xs text-zinc-500">{{ __('PDF only · max 10 MB') }}</p>
-                                    <label class="mt-4 inline-flex cursor-pointer">
-                                        <span class="text-sm font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400">{{ __('Browse files') }}</span>
+                                    <label class="mt-5 inline-flex cursor-pointer">
+                                        <flux:button type="button" variant="primary" icon="arrow-up-tray">
+                                            {{ __('Upload PDF') }}
+                                        </flux:button>
                                         <input
                                             x-ref="casePdf"
                                             type="file"
@@ -626,12 +632,16 @@ new #[Layout('components.layouts.app')] class extends Component {
                                             class="sr-only"
                                         />
                                     </label>
+                                    <div wire:loading wire:target="caseDocument" class="mx-auto mt-4 max-w-sm space-y-2 text-left">
+                                        <p class="text-sm font-semibold text-teal-800 dark:text-teal-200">
+                                            <span x-text="progress > 0 ? '{{ __('Uploading') }} ' + progress + '%' : '{{ __('Uploading file…') }}'"></span>
+                                        </p>
+                                        <div class="h-2.5 overflow-hidden rounded-full bg-teal-100 dark:bg-teal-950/50">
+                                            <div class="h-full rounded-full bg-teal-600 transition-all duration-300" :style="'width: ' + Math.max(progress, 8) + '%'"></div>
+                                        </div>
+                                    </div>
                                 </div>
                             @endif
-
-                            <div wire:loading wire:target="caseDocument" class="mt-3 text-sm font-medium text-teal-700 dark:text-teal-300">
-                                {{ __('Uploading file…') }}
-                            </div>
                             <flux:error name="caseDocument" />
                         </div>
 
@@ -761,16 +771,19 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 {{ __('Back') }}
                             </flux:button>
                             <div class="flex flex-wrap items-center gap-3">
-                                <flux:button
-                                    type="button"
-                                    variant="outline"
-                                    wire:click="skipPartiesStep"
-                                    wire:loading.attr="disabled"
-                                    wire:target="save,skipPartiesStep"
-                                    :disabled="! ($practiceEligibility['allowed'] ?? true)"
-                                >
-                                    {{ __('Open case without parties') }}
-                                </flux:button>
+                                <div class="flex flex-col items-stretch gap-1 sm:items-end">
+                                    <flux:button
+                                        type="button"
+                                        variant="outline"
+                                        wire:click="skipPartiesStep"
+                                        wire:loading.attr="disabled"
+                                        wire:target="save,skipPartiesStep"
+                                        :disabled="! ($practiceEligibility['allowed'] ?? true)"
+                                    >
+                                        {{ __('Open case now') }}
+                                    </flux:button>
+                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Add parties later on the case page') }}</p>
+                                </div>
                                 <flux:button
                                     type="submit"
                                     variant="primary"

@@ -13,6 +13,7 @@ use App\Models\AppNotification;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\NotaryRequest;
+use RuntimeException;
 
 class DocumentNotificationService
 {
@@ -142,31 +143,57 @@ class DocumentNotificationService
 
     public function handleDocumentCompleted(DocumentCompleted $event): void
     {
-        $document = $event->document->loadMissing('user');
+        $document = $event->document->loadMissing(['user', 'documentSigners']);
 
-        SendDocumentEmailJob::dispatch(
-            documentId: $document->id,
-            signerId: null,
-            recipientEmail: $document->user->email,
-            type: SendDocumentEmailJob::TYPE_COMPLETED,
-        );
+        $emailedAddresses = [];
 
-        foreach ($document->loadMissing('documentSigners')->documentSigners as $participant) {
-            if (! $participant->isRecipient()) {
-                continue;
-            }
-
-            $participant->update([
-                'status' => DocumentSignerStatus::Notified,
-                'signed_at' => now(),
-            ]);
-
+        if (is_string($document->user?->email) && $document->user->email !== '') {
             SendDocumentEmailJob::dispatch(
                 documentId: $document->id,
                 signerId: null,
-                recipientEmail: $participant->email,
+                recipientEmail: $document->user->email,
                 type: SendDocumentEmailJob::TYPE_COMPLETED,
+                signUrl: route('documents.show', $document),
             );
+            $emailedAddresses[] = strtolower($document->user->email);
+        }
+
+        foreach ($document->documentSigners as $participant) {
+            $recipientEmail = trim((string) $participant->email);
+            if ($recipientEmail === '' || in_array(strtolower($recipientEmail), $emailedAddresses, true)) {
+                continue;
+            }
+
+            if ($participant->isRecipient()) {
+                $participant->update([
+                    'status' => DocumentSignerStatus::Notified,
+                    'signed_at' => now(),
+                ]);
+
+                SendDocumentEmailJob::dispatch(
+                    documentId: $document->id,
+                    signerId: $participant->id,
+                    recipientEmail: $recipientEmail,
+                    type: SendDocumentEmailJob::TYPE_COMPLETED,
+                    signUrl: $this->signingMethodService->signerCompletedDocumentUrl($participant),
+                );
+                $emailedAddresses[] = strtolower($recipientEmail);
+
+                continue;
+            }
+
+            if (! $participant->requiresAction() || ! $participant->status->isCompleted()) {
+                continue;
+            }
+
+            SendDocumentEmailJob::dispatch(
+                documentId: $document->id,
+                signerId: $participant->id,
+                recipientEmail: $recipientEmail,
+                type: SendDocumentEmailJob::TYPE_COMPLETED,
+                signUrl: $this->signingMethodService->signerCompletedDocumentUrl($participant),
+            );
+            $emailedAddresses[] = strtolower($recipientEmail);
         }
 
         $this->createInAppNotification(

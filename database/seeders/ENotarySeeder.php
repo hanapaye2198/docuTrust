@@ -446,8 +446,9 @@ class ENotarySeeder extends Seeder
             'role_name' => 'Buyer',
             'role_type' => TemplateRoleType::Signer,
             'signing_method' => SigningMethod::EmailLink,
-            'status' => DocumentSignerStatus::Pending,
+            'status' => DocumentSignerStatus::Signed,
             'signing_order' => 2,
+            'signed_at' => now()->subHours(4),
             'access_token' => Str::uuid()->toString(),
             'expires_at' => now()->addDays(7),
         ]);

@@ -59,6 +59,12 @@ return [
         'timeout' => env('GATEWAYHUB_TIMEOUT', 15),
         'api_key' => env('GATEWAYHUB_API_KEY', ''),
         'webhook_secret' => env('GATEWAYHUB_WEBHOOK_SECRET', ''),
+        'demo_mode' => (bool) env('GATEWAYHUB_DEMO_MODE', false),
+        'demo_gateways' => [
+            ['code' => 'gcash', 'name' => 'GCash'],
+            ['code' => 'maya', 'name' => 'Maya'],
+            ['code' => 'coins', 'name' => 'Coins.ph'],
+        ],
     ],
 
     'eis' => [

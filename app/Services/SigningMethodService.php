@@ -41,6 +41,20 @@ class SigningMethodService
         };
     }
 
+    public function signerCompletedDocumentUrl(DocumentSigner $signer): ?string
+    {
+        if ($signer->signingMethod() === SigningMethod::AccountVerified) {
+            return route('sign.account.show', ['signerId' => $signer->id]);
+        }
+
+        $token = $signer->access_token;
+        if (! is_string($token) || $token === '') {
+            return null;
+        }
+
+        return route('sign.document.download', ['token' => $token]);
+    }
+
     public function publicSigningToken(DocumentSigner $signer): string
     {
         $token = $signer->access_token;

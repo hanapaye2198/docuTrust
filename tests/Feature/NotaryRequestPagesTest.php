@@ -110,7 +110,7 @@ class NotaryRequestPagesTest extends TestCase
 
         LivewireVolt::test('notary-requests.create')
             ->set('title', 'Affidavit of loss')
-            ->set('requestType', 'affidavit')
+            ->set('requestType', 'acknowledgment')
             ->set('wizardStep', 3)
             ->set('signers', [
                 [
@@ -971,7 +971,7 @@ class NotaryRequestPagesTest extends TestCase
             ->set('competentEvidence', [
                 ['person_name' => 'Juan Dela Cruz', 'id_type' => 'Passport', 'id_number' => 'P12345'],
             ])
-            ->set('notarialActType', 'affidavit')
+            ->set('notarialActType', 'acknowledgment')
             ->set('officialReceiptNo', 'OR-123')
             ->call('save')
             ->assertHasNoErrors()
@@ -1015,7 +1015,7 @@ class NotaryRequestPagesTest extends TestCase
             ->set('competentEvidence', [
                 ['person_name' => 'Juan Dela Cruz', 'id_type' => 'Passport', 'id_number' => 'P12345'],
             ])
-            ->set('notarialActType', 'affidavit');
+            ->set('notarialActType', 'acknowledgment');
 
         AttorneyNotarialRegistry::factory()->create([
             'notary_request_id' => $request->id,
@@ -1097,7 +1097,7 @@ class NotaryRequestPagesTest extends TestCase
         AttorneyNotarialRegistry::factory()->create([
             'notary_request_id' => $request->id,
             'title' => 'Affidavit of loss',
-            'notarial_act_type' => 'affidavit',
+            'notarial_act_type' => 'acknowledgment',
             'fees' => 0,
             'registry_fields_completed_at' => now(),
             'parties' => [
@@ -1119,7 +1119,7 @@ class NotaryRequestPagesTest extends TestCase
         $entry = NotarialRegisterEntry::query()->where('notary_request_id', $request->id)->first();
         $this->assertNotNull($entry);
         $this->assertSame('Affidavit of loss', $entry->document_title);
-        $this->assertSame('affidavit', $entry->notarial_act_type);
+        $this->assertSame('acknowledgment', $entry->notarial_act_type);
     }
 
     public function test_client_sees_payment_required_banner_after_register_entry_is_created(): void

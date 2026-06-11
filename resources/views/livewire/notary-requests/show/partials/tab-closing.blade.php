@@ -53,10 +53,10 @@
                 </div>
             @else
                 <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                    {{ __('Upload your personal seal in credentials before creating the official register entry.') }}
+                    {{ __('Upload your personal seal in trust profile before creating the official register entry.') }}
                 </div>
                 <div class="mt-4">
-                    <flux:button variant="outline" :href="route('notary.credentials')" wire:navigate>{{ __('Open credentials') }}</flux:button>
+                    <flux:button variant="outline" :href="route('settings.trust-profile').'#notary-seal'" wire:navigate>{{ __('Open trust profile') }}</flux:button>
                 </div>
             @endif
         </div>

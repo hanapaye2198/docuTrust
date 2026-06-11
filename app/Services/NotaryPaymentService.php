@@ -52,6 +52,11 @@ class NotaryPaymentService
         }
 
         $reference = $this->generateReference($request);
+
+        if ($this->usesDemoPayments()) {
+            return $this->createDemoPayment($request, $registerEntry, $amount, $gateway, $reference, $createdByUserId);
+        }
+
         $payload = $this->gatewayHubService->createPayment($amount, 'PHP', $gateway, $reference);
 
         return Payment::query()->create([
@@ -78,6 +83,15 @@ class NotaryPaymentService
 
     public function refreshGatewayPayment(Payment $payment): Payment
     {
+        if ($payment->provider === 'demo') {
+            return $this->applyGatewayPayload($payment, [
+                'payment_id' => $payment->provider_payment_id,
+                'reference' => $payment->reference,
+                'status' => PaymentStatus::Paid->value,
+                'paid_at' => now()->toDateTimeString(),
+            ], false);
+        }
+
         $providerPaymentId = trim((string) $payment->provider_payment_id);
         if ($providerPaymentId === '') {
             throw new RuntimeException('This payment is missing the provider payment ID.');
@@ -218,5 +232,46 @@ class NotaryPaymentService
     private function stringOrFallback(mixed $value, ?string $fallback): ?string
     {
         return $this->stringOrNull($value) ?? $fallback;
+    }
+
+    private function usesDemoPayments(): bool
+    {
+        return (bool) config('services.gatewayhub.demo_mode', false)
+            && trim((string) config('services.gatewayhub.api_key', '')) === '';
+    }
+
+    private function createDemoPayment(
+        NotaryRequest $request,
+        ?NotarialRegisterEntry $registerEntry,
+        float $amount,
+        string $gateway,
+        string $reference,
+        ?int $createdByUserId,
+    ): Payment {
+        $providerPaymentId = 'demo-'.$reference;
+
+        return Payment::query()->create([
+            'organization_id' => $request->organization_id,
+            'notary_request_id' => $request->id,
+            'notarial_register_entry_id' => $registerEntry?->id,
+            'payer_user_id' => $request->user_id,
+            'created_by_user_id' => $createdByUserId,
+            'provider' => 'demo',
+            'provider_payment_id' => $providerPaymentId,
+            'provider_transaction_id' => null,
+            'gateway' => $gateway,
+            'reference' => $reference,
+            'amount' => $amount,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Pending->value,
+            'qr_data' => null,
+            'redirect_url' => route('notary.requests.show', ['notaryRequest' => $request->id, 'tab' => 'closing']),
+            'checkout_url' => route('notary.requests.show', ['notaryRequest' => $request->id, 'tab' => 'closing']),
+            'expires_at' => now()->addDay(),
+            'provider_payload' => [
+                'demo' => true,
+                'message' => 'Demo payment — use Re-check status on the case page to mark as paid.',
+            ],
+        ]);
     }
 }

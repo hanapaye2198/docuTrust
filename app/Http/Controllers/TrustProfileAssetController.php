@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Notary\NotarySealProfileService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
@@ -24,6 +25,18 @@ class TrustProfileAssetController extends Controller
     {
         $user = $request->user();
         $path = $user?->signature_image_path;
+
+        if (! is_string($path) || $path === '') {
+            abort(404);
+        }
+
+        return $this->streamPrivateAsset($path);
+    }
+
+    public function seal(Request $request, NotarySealProfileService $sealProfile): Response
+    {
+        $user = $request->user();
+        $path = $user !== null ? $sealProfile->sealImagePath($user) : null;
 
         if (! is_string($path) || $path === '') {
             abort(404);

@@ -302,21 +302,39 @@
 
                 {{-- Upload Document Form (Attorney / Admin) --}}
                 @if (($isNotary || $canManageLifecycle) && ($canUploadAnotherDocument ?? true) && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
-                    <div class="mt-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
-                        <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Upload document for this case') }}</div>
+                    <div
+                        class="mt-5 rounded-xl border border-teal-200 bg-teal-50/40 p-4 dark:border-teal-900/40 dark:bg-teal-950/20"
+                        x-data="{ progress: 0 }"
+                        x-on:livewire-upload-start="progress = 0"
+                        x-on:livewire-upload-finish="progress = 0"
+                        x-on:livewire-upload-error="progress = 0"
+                        x-on:livewire-upload-progress="progress = $event.detail.progress"
+                    >
+                        <div class="text-sm font-semibold text-teal-900 dark:text-teal-100">{{ __('Upload document for this case') }}</div>
+                        <p class="mt-1 text-xs text-teal-800/90 dark:text-teal-200/90">{{ __('Choose a PDF, then click Upload document.') }}</p>
                         <div class="mt-3 space-y-3">
                             <flux:field>
                                 <flux:label>{{ __('Document title') }} <span class="text-rose-500">*</span></flux:label>
-                                <flux:input wire:model="newDocumentTitle" type="text" placeholder="{{ __('e.g. Affidavit of support') }}" />
+                                <flux:input wire:model="newDocumentTitle" type="text" placeholder="{{ __('e.g. Contract of sale') }}" />
                                 <flux:error name="newDocumentTitle" />
                             </flux:field>
                             <flux:field>
                                 <flux:label>{{ __('PDF file') }} <span class="text-rose-500">*</span></flux:label>
-                                <input type="file" wire:model="newDocumentFile" accept="application/pdf,.pdf" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+                                <label class="inline-flex cursor-pointer">
+                                    <flux:button type="button" variant="primary" icon="arrow-up-tray">{{ __('Choose PDF') }}</flux:button>
+                                    <input type="file" wire:model="newDocumentFile" accept="application/pdf,.pdf" class="sr-only" />
+                                </label>
                                 <flux:error name="newDocumentFile" />
                             </flux:field>
-                            <div wire:loading wire:target="newDocumentFile" class="text-xs text-teal-600 dark:text-teal-400">{{ __('Uploading...') }}</div>
-                            <flux:button variant="primary" type="button" wire:click="createDocument" wire:loading.attr="disabled" wire:target="newDocumentFile,createDocument">{{ __('Upload document') }}</flux:button>
+                            <div wire:loading wire:target="newDocumentFile" class="space-y-2">
+                                <p class="text-sm font-semibold text-teal-800 dark:text-teal-200">
+                                    <span x-text="progress > 0 ? '{{ __('Uploading') }} ' + progress + '%' : '{{ __('Uploading...') }}'"></span>
+                                </p>
+                                <div class="h-2.5 overflow-hidden rounded-full bg-teal-100 dark:bg-teal-950/50">
+                                    <div class="h-full rounded-full bg-teal-600 transition-all duration-300" :style="'width: ' + Math.max(progress, 8) + '%'"></div>
+                                </div>
+                            </div>
+                            <flux:button variant="primary" type="button" icon="cloud-arrow-up" wire:click="createDocument" wire:loading.attr="disabled" wire:target="newDocumentFile,createDocument">{{ __('Upload document') }}</flux:button>
                         </div>
                     </div>
                 @elseif (($isNotary || $canManageLifecycle) && ! ($canUploadAnotherDocument ?? true) && $requestDocuments->isNotEmpty())

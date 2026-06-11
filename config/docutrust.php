@@ -60,9 +60,6 @@ return [
         'notarial_act_types' => [
             'acknowledgment',
             'jurat',
-            'affidavit',
-            'oath',
-            'other',
         ],
     ],
 

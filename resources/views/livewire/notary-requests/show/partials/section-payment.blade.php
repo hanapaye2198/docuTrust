@@ -313,7 +313,7 @@
                 @endif
             @else
                 <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                    {{ __('Online payment is not configured. Contact your administrator.') }}
+                    {{ __('Online payment is not configured. Set GATEWAYHUB_API_KEY or enable GATEWAYHUB_DEMO_MODE=true for committee demos.') }}
                 </div>
             @endif
         </div>

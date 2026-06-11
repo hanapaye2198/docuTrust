@@ -79,7 +79,11 @@ class SendDocumentEmailJob implements ShouldQueue
             }
 
             if ($this->type === self::TYPE_COMPLETED) {
-                Mail::to($this->recipientEmail)->queue(new DocumentCompletedMail($document));
+                Mail::to($this->recipientEmail)->queue(new DocumentCompletedMail(
+                    $document,
+                    null,
+                    $this->signUrl,
+                ));
             }
         } catch (Throwable $throwable) {
             Log::channel('errors')->error('Queued document email failed', [

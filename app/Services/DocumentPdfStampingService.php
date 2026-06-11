@@ -245,20 +245,36 @@ class DocumentPdfStampingService
         }
 
         $margin = 1.2;
-        $renderWidth = max(4, $width - ($margin * 2));
-        $renderHeight = max(4, $height - ($margin * 2));
-        $renderX = $x + $margin;
-
-        if ($type === SignatureFieldType::SignatureRight) {
-            $renderX = $x + $width - $renderWidth - $margin;
-        } elseif ($type === SignatureFieldType::Signature) {
-            $renderX = $x + (($width - $renderWidth) / 2);
-        }
 
         $this->documentStorageService->withTemporaryLocalPath(
             $path,
-            function (string $localImagePath) use ($pdf, $renderX, $y, $margin, $renderWidth, $renderHeight): void {
-                $pdf->Image($localImagePath, $renderX, $y + $margin, $renderWidth, $renderHeight, 'PNG');
+            function (string $localImagePath) use ($pdf, $type, $x, $y, $width, $height, $margin): void {
+                $imageSize = @getimagesize($localImagePath);
+                if ($imageSize === false) {
+                    return;
+                }
+
+                [$imageWidth, $imageHeight] = $imageSize;
+                if ($imageWidth <= 0 || $imageHeight <= 0) {
+                    return;
+                }
+
+                $maxWidth = max(4, $width - ($margin * 2));
+                $maxHeight = max(4, $height - ($margin * 2));
+                $scale = min($maxWidth / $imageWidth, $maxHeight / $imageHeight);
+                $renderWidth = $imageWidth * $scale;
+                $renderHeight = $imageHeight * $scale;
+                $renderX = $x + $margin;
+
+                if ($type === SignatureFieldType::SignatureRight) {
+                    $renderX = $x + $width - $renderWidth - $margin;
+                } elseif ($type === SignatureFieldType::Signature) {
+                    $renderX = $x + (($width - $renderWidth) / 2);
+                }
+
+                $renderY = $y + $margin + (($maxHeight - $renderHeight) / 2);
+
+                $pdf->Image($localImagePath, $renderX, $renderY, $renderWidth, $renderHeight, 'PNG');
             }
         );
     }

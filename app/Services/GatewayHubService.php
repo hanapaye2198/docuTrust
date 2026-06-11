@@ -14,6 +14,13 @@ class GatewayHubService
      */
     public function enabledGateways(): array
     {
+        $apiKey = (string) config('services.gatewayhub.api_key', '');
+        if ($apiKey === '' && (bool) config('services.gatewayhub.demo_mode', false)) {
+            $demoGateways = config('services.gatewayhub.demo_gateways', []);
+
+            return is_array($demoGateways) ? array_values(array_filter($demoGateways, 'is_array')) : [];
+        }
+
         $response = $this->request('get', '/api/gateways/enabled');
         $gateways = $response->json('data.gateways', []);
 

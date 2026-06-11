@@ -102,6 +102,15 @@ class NotarySchedulingService
 
     public function start(NotarySession $session): NotarySession
     {
+        $request = $session->notaryRequest;
+        if ($request === null) {
+            throw new RuntimeException(__('This video session is not linked to a case.'));
+        }
+
+        if (! $this->notaryRequestWorkflowService->documentsReadyForSession($request)) {
+            throw new RuntimeException(__('All parties must finish signing before starting video verification.'));
+        }
+
         $session->forceFill([
             'status' => 'in_progress',
             'started_at' => now(),
@@ -180,6 +189,15 @@ class NotarySchedulingService
      */
     public function complete(NotarySession $session, array $verificationChecklist = [], array $evidence = []): NotarySession
     {
+        $request = $session->notaryRequest;
+        if ($request === null) {
+            throw new RuntimeException(__('This video session is not linked to a case.'));
+        }
+
+        if ($session->notary_signer_id === null && ! $this->notaryRequestWorkflowService->documentsReadyForSession($request)) {
+            throw new RuntimeException(__('All parties must finish signing before completing video verification.'));
+        }
+
         $session->forceFill([
             'status' => 'completed',
             'ended_at' => now(),
@@ -200,9 +218,16 @@ class NotarySchedulingService
             'recorded_at' => now(),
         ]);
 
-        $session->notaryRequest()?->update([
-            'status' => NotaryRequestStatus::SessionCompleted,
-        ]);
+        $request = $request->fresh(['sessions', 'documents.documentSigners', 'signers']);
+        if ($this->notaryRequestWorkflowService->hasCompletedSession($request)) {
+            $request->forceFill([
+                'status' => NotaryRequestStatus::SessionCompleted,
+            ])->save();
+        } elseif ($request->status === NotaryRequestStatus::SessionInProgress) {
+            $request->forceFill([
+                'status' => NotaryRequestStatus::SessionScheduled,
+            ])->save();
+        }
 
         return $session->fresh();
     }

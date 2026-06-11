@@ -22,7 +22,7 @@ class AttorneyNotarialRegistryService
      */
     public function notarialActTypes(): array
     {
-        return ['acknowledgment', 'jurat', 'affidavit', 'oath', 'other'];
+        return config('docutrust.notary.notarial_act_types', ['acknowledgment', 'jurat']);
     }
 
     /**
