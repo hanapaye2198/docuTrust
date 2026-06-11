@@ -261,6 +261,58 @@
             transition: none;
         }
     }
+
+    .register-shell .register-accent-bar {
+        @apply from-[#2EC4B6] to-[#1B5E20];
+    }
+
+    .register-shell .register-auth-input:focus,
+    .register-shell .register-auth-input:focus-visible {
+        border-color: #2ec4b6;
+        --tw-ring-color: rgb(46 196 182 / 0.25);
+    }
+
+    .register-shell .register-remember-checkbox {
+        accent-color: #2ec4b6;
+    }
+
+    .register-shell .register-enter {
+        animation: register-enter 0.45s ease-out both;
+    }
+
+    .register-shell .register-step-pulse {
+        animation: register-step-pulse 2.5s ease-in-out infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .register-shell .register-enter,
+        .register-shell .register-step-pulse {
+            animation: none;
+        }
+    }
+}
+
+@keyframes register-enter {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes register-step-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgb(46 196 182 / 0.35);
+    }
+
+    50% {
+        box-shadow: 0 0 0 6px rgb(46 196 182 / 0);
+    }
 }
 
 [data-flux-field] {
