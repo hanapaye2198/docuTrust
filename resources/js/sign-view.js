@@ -971,7 +971,20 @@ function createSignViewSession(cfgEl) {
     }
 
     async function applySignedField(payload) {
+        if (!payload) {
+            return;
+        }
+
         if (!payload?.field?.id) {
+            updateSummary(payload.summary);
+            showFeedback(payload.message || messages.fieldSaved, 'success');
+
+            if (payload.redirect_url) {
+                window.setTimeout(() => {
+                    window.location.assign(payload.redirect_url);
+                }, 500);
+            }
+
             return;
         }
 

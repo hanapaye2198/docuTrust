@@ -269,6 +269,10 @@ class SignDocumentController extends Controller
 
             $document = $signer->document;
 
+            if ($signer->status->isCompleted() && $request->expectsJson()) {
+                return response()->json($this->completedFieldSigningPayload($signer, false));
+            }
+
             $signingError = $this->canSignerModifyFields($document, $signer);
             if ($signingError !== null) {
                 if ($request->expectsJson()) {
@@ -384,6 +388,10 @@ class SignDocumentController extends Controller
             }
 
             $document = $signer->document;
+
+            if ($signer->status->isCompleted() && $request->expectsJson()) {
+                return response()->json($this->completedFieldSigningPayload($signer, true));
+            }
 
             $signingError = $this->canSignerModifyFields($document, $signer);
             if ($signingError !== null) {
@@ -1101,6 +1109,39 @@ class SignDocumentController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function completedFieldSigningPayload(DocumentSigner $signer, bool $authenticated): array
+    {
+        $signer->loadMissing(['document.signatureFields', 'signatures' => fn ($query) => $query->whereNotNull('signature_field_id')]);
+        $document = $signer->document;
+        $assignedCount = $document->signatureFields
+            ->where('signer_id', $signer->id)
+            ->count();
+        $signedCount = $signer->signatures->count();
+
+        return [
+            'message' => $signer->isApprover()
+                ? __('You have already approved this document.')
+                : __('You have already signed this document.'),
+            'redirect_url' => $authenticated
+                ? $this->completionRedirectUrl($signer)
+                : route('sign.show', $this->signerRouteToken($signer)),
+            'summary' => [
+                'assigned' => $assignedCount,
+                'completed' => $signedCount,
+                'remaining' => max(0, $assignedCount - $signedCount),
+                'progress_percent' => $assignedCount > 0
+                    ? (int) round(($signedCount / $assignedCount) * 100)
+                    : 0,
+                'can_edit_fields' => false,
+                'signer_status' => $signer->status->value,
+                'document_status' => $document->status->value,
+            ],
+        ];
     }
 
     private function authenticatedSigningPdfPath(Document $document): ?string
