@@ -601,34 +601,43 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 </div>
                             @else
                                 <div
-                                    class="relative rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50/80 p-8 text-center transition dark:border-zinc-600 dark:bg-zinc-900/40"
+                                    class="relative overflow-hidden rounded-3xl border-2 border-dashed border-teal-300 bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-8 text-center shadow-[0_18px_48px_-28px_rgba(13,148,136,0.45)] transition dark:border-teal-700/70 dark:bg-gradient-to-br dark:from-teal-950/40 dark:via-zinc-900 dark:to-emerald-950/20"
                                     x-data="{ progress: 0 }"
                                     x-on:livewire-upload-start="progress = 0"
                                     x-on:livewire-upload-finish="progress = 0"
                                     x-on:livewire-upload-error="progress = 0"
                                     x-on:livewire-upload-progress="progress = $event.detail.progress"
-                                    x-on:dragover.prevent="$el.classList.add('border-teal-400', 'bg-teal-50/50', 'dark:border-teal-500')"
-                                    x-on:dragleave.prevent="$el.classList.remove('border-teal-400', 'bg-teal-50/50', 'dark:border-teal-500')"
+                                    x-on:dragover.prevent="$el.classList.add('border-teal-500', 'bg-teal-50/80', 'dark:border-teal-400')"
+                                    x-on:dragleave.prevent="$el.classList.remove('border-teal-500', 'bg-teal-50/80', 'dark:border-teal-400')"
                                     x-on:drop.prevent="
-                                        $el.classList.remove('border-teal-400', 'bg-teal-50/50', 'dark:border-teal-500');
+                                        $el.classList.remove('border-teal-500', 'bg-teal-50/80', 'dark:border-teal-400');
                                         if ($event.dataTransfer.files.length) {
                                             $refs.casePdf.files = $event.dataTransfer.files;
                                             $refs.casePdf.dispatchEvent(new Event('change', { bubbles: true }));
                                         }
                                     "
                                 >
-                                    <flux:icon.document-text class="mx-auto size-10 text-zinc-400" />
-                                    <p class="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Drag & drop PDF here') }}</p>
+                                    <div class="pointer-events-none absolute inset-x-6 top-4 flex justify-center">
+                                        <span class="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-teal-700 shadow-sm dark:border-teal-800/60 dark:bg-zinc-900/80 dark:text-teal-300">
+                                            <flux:icon.sparkles class="size-3.5" />
+                                            {{ __('Recommended if your PDF is ready') }}
+                                        </span>
+                                    </div>
+                                    <flux:icon.document-text class="mx-auto mt-8 size-12 text-teal-600 dark:text-teal-400" />
+                                    <p class="mt-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Upload your PDF now') }}</p>
+                                    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{{ __('Tap the button below or drag the file here. We will prepare it for signature fields next.') }}</p>
                                     <p class="mt-1 text-xs text-zinc-500">{{ __('PDF only · max 10 MB') }}</p>
                                     <div class="mt-5">
                                         <flux:button
                                             type="button"
                                             variant="primary"
                                             icon="arrow-up-tray"
+                                            class="h-12 min-w-[220px] text-base font-semibold shadow-[0_14px_28px_-16px_rgba(13,148,136,0.65)] sm:min-w-[260px]"
                                             x-on:click="$refs.casePdf.click()"
                                         >
-                                            {{ __('Upload PDF') }}
+                                            {{ __('Choose PDF File') }}
                                         </flux:button>
+                                        <p class="mt-3 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Visible upload button for first-time users') }}</p>
                                         <input
                                             x-ref="casePdf"
                                             type="file"
@@ -637,13 +646,20 @@ new #[Layout('components.layouts.app')] class extends Component {
                                             class="sr-only"
                                         />
                                     </div>
-                                    <div wire:loading wire:target="caseDocument" class="mx-auto mt-4 max-w-sm space-y-2 text-left">
-                                        <p class="text-sm font-semibold text-teal-800 dark:text-teal-200">
-                                            <span x-text="progress > 0 ? '{{ __('Uploading') }} ' + progress + '%' : '{{ __('Uploading file…') }}'"></span>
-                                        </p>
-                                        <div class="h-2.5 overflow-hidden rounded-full bg-teal-100 dark:bg-teal-950/50">
-                                            <div class="h-full rounded-full bg-teal-600 transition-all duration-300" :style="'width: ' + Math.max(progress, 8) + '%'"></div>
+                                    <div wire:loading wire:target="caseDocument" class="mx-auto mt-6 max-w-md rounded-2xl border border-teal-200 bg-white/90 p-4 text-left shadow-sm dark:border-teal-900/50 dark:bg-zinc-950/70">
+                                        <div class="flex items-end justify-between gap-4">
+                                            <div>
+                                                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700 dark:text-teal-300">{{ __('Upload progress') }}</p>
+                                                <p class="mt-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                                                    <span x-text="progress > 0 ? '{{ __('Uploading') }}' : '{{ __('Preparing upload') }}'"></span>
+                                                </p>
+                                            </div>
+                                            <div class="text-2xl font-semibold tabular-nums text-teal-700 dark:text-teal-300" x-text="(progress > 0 ? progress : 0) + '%'"></div>
                                         </div>
+                                        <div class="mt-3 h-3 overflow-hidden rounded-full bg-teal-100 dark:bg-teal-950/50">
+                                            <div class="h-full rounded-full bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-600 transition-all duration-300" :style="'width: ' + Math.max(progress, 8) + '%'"></div>
+                                        </div>
+                                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Please keep this page open until the upload finishes.') }}</p>
                                     </div>
                                 </div>
                             @endif

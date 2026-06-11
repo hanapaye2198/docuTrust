@@ -318,11 +318,12 @@ nav a:hover{color:var(--teal)}
   display:inline-flex;
   align-items:center;
   justify-content:center;
+  gap:10px;
   flex-shrink:0;
   box-sizing:border-box;
-  width:44px;
+  min-width:44px;
   height:44px;
-  padding:8px;
+  padding:8px 12px;
   margin:0;
   background:var(--chip-bg);
   border:1px solid var(--border);
@@ -344,6 +345,13 @@ nav a:hover{color:var(--teal)}
 .theme-toggle svg{
   width:20px;
   height:20px;
+  flex-shrink:0;
+}
+.theme-toggle-label{
+  font-size:.8rem;
+  font-weight:600;
+  color:var(--text);
+  white-space:nowrap;
 }
 .theme-toggle-icon--moon{display:block}
 .theme-toggle-icon--sun{display:none}
@@ -351,6 +359,13 @@ html.dark-scheme .theme-toggle-icon--moon{display:none}
 html.dark-scheme .theme-toggle-icon--sun{display:block}
 .theme-toggle-icon--moon{fill:#6d28d9}
 .theme-toggle-icon--sun{fill:#eab308}
+@media (max-width: 720px){
+  .theme-toggle{
+    width:44px;
+    padding:8px;
+  }
+  .theme-toggle-label{display:none}
+}
 body.mobile-nav-open{overflow:hidden;overscroll-behavior:none}
 
 /* ── SECTIONS ── */
@@ -1530,6 +1545,7 @@ footer{
         <svg class="theme-toggle-icon theme-toggle-icon--sun" viewBox="0 0 20 20" aria-hidden="true">
           <path fill-rule="evenodd" clip-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path>
         </svg>
+        <span id="welcomeThemeToggleLabel" class="theme-toggle-label">{{ __('Dark mode') }}</span>
       </button>
       <a href="{{ $secondaryHeaderUrl }}" class="btn-ghost">{{ $secondaryHeaderLabel }}</a>
       <a href="{{ $primaryCtaUrl }}" class="btn-primary">{{ $primaryCtaLabel }}</a>
@@ -1581,7 +1597,7 @@ footer{
           </span>
           <span class="trust-item">
             <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-            ISO 9001:2015 Certified
+            ISO-backed operations
           </span>
         </div>
       </div>
@@ -1682,8 +1698,8 @@ footer{
       </div>
       <div class="csc-stats">
         <div class="csc-stat">
-          <span class="csc-stat-num">ISO</span>
-          <div class="csc-stat-label">9001:2015<br>Certified Operations</div>
+          <span class="csc-stat-num">QMS</span>
+          <div class="csc-stat-label">ISO 9001:2015<br>Quality System</div>
         </div>
         <div class="csc-stat">
           <span class="csc-stat-num">BSP</span>
@@ -2260,6 +2276,7 @@ revealEls.forEach(el => observer.observe(el));
 // Theme toggle
 const welcomeThemeToggle = document.getElementById('welcomeThemeToggle');
 const welcomeThemeColor = document.getElementById('welcomeThemeColor');
+const welcomeThemeToggleLabel = document.getElementById('welcomeThemeToggleLabel');
 
 function syncWelcomeLogos(isDark) {
   document.querySelectorAll('.logo-img[data-logo-default]').forEach((img) => {
@@ -2270,7 +2287,12 @@ function syncWelcomeLogos(isDark) {
 }
 
 function updateWelcomeThemeUi(isDark) {
+  const nextThemeLabel = isDark ? '{{ __('Light mode') }}' : '{{ __('Dark mode') }}';
   welcomeThemeToggle?.setAttribute('title', isDark ? '{{ __('Switch to light mode') }}' : '{{ __('Switch to dark mode') }}');
+  welcomeThemeToggle?.setAttribute('aria-label', isDark ? '{{ __('Switch to light mode') }}' : '{{ __('Switch to dark mode') }}');
+  if (welcomeThemeToggleLabel) {
+    welcomeThemeToggleLabel.textContent = nextThemeLabel;
+  }
   if (welcomeThemeColor) {
     welcomeThemeColor.content = isDark ? '#060d10' : '#f0f7f5';
   }
