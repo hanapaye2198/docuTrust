@@ -141,13 +141,11 @@ jobs:
         env:
           APP_BASE_PATH: ${{ secrets.APP_BASE_PATH }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_RUN_SEEDERS: ${{ secrets.DEPLOY_RUN_SEEDERS }}
-          DEPLOY_SEEDER_CLASS: ${{ secrets.DEPLOY_SEEDER_CLASS }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           PHP_BIN: ${{ secrets.PHP_BIN }}
           RELEASE_SHA: ${{ needs.build-release.outputs.release_sha }}
           WEB_USER: ${{ secrets.WEB_USER }}
         run: |
           ssh "$DEPLOY_USER@$DEPLOY_HOST" \
-            "export APP_BASE_PATH='${APP_BASE_PATH:-/var/www/docutrust}' RELEASE_SHA='$RELEASE_SHA' PHP_BIN='${PHP_BIN:-/usr/bin/php}' WEB_USER='${WEB_USER:-www-data}' ARTIFACT_PATH='/var/tmp/docutrust-$RELEASE_SHA.tar.gz' RUN_SEEDERS='${DEPLOY_RUN_SEEDERS:-true}' SEEDER_CLASS='${DEPLOY_SEEDER_CLASS:-Database\\\\Seeders\\\\DatabaseSeeder}'; bash -s" \
+            "export APP_BASE_PATH='${APP_BASE_PATH:-/var/www/docutrust}' RELEASE_SHA='$RELEASE_SHA' PHP_BIN='${PHP_BIN:-/usr/bin/php}' WEB_USER='${WEB_USER:-www-data}' ARTIFACT_PATH='/var/tmp/docutrust-$RELEASE_SHA.tar.gz'; bash -s" \
             < scripts/deploy.sh

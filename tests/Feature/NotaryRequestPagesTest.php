@@ -409,7 +409,7 @@ class NotaryRequestPagesTest extends TestCase
     public function test_admin_can_send_linked_document_for_signature_from_notary_request_page(): void
     {
         Storage::fake('local');
-        Mail::fake();
+        Queue::fake();
 
         // Only the assigned attorney (notary) can send eNOTARY documents
         $notary = User::factory()->notary()->create();
@@ -445,8 +445,13 @@ class NotaryRequestPagesTest extends TestCase
         $this->assertNotNull($document->sent_at);
 
         $signer->refresh();
-        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($signer): bool {
-            return str_contains($mail->signUrl, (string) $signer->access_token);
+        Queue::assertPushed(\App\Jobs\SendDocumentEmailJob::class, function (\App\Jobs\SendDocumentEmailJob $job) use ($document, $signer): bool {
+            return $job->documentId === $document->id
+                && $job->signerId === $signer->id
+                && $job->recipientEmail === $signer->email
+                && $job->type === \App\Jobs\SendDocumentEmailJob::TYPE_SENT_TO_SIGNER
+                && is_string($job->signUrl)
+                && str_contains($job->signUrl, (string) $signer->access_token);
         });
     }
 
@@ -483,6 +488,60 @@ class NotaryRequestPagesTest extends TestCase
             'email' => 'late@example.test',
             'name' => 'Late Added Signer',
         ]);
+    }
+
+    public function test_attorney_wizard_rejects_duplicate_signer_emails_case_insensitively(): void
+    {
+        $attorney = User::factory()->notary()->create();
+
+        $this->actingAs($attorney);
+
+        LivewireVolt::test('notary-requests.create')
+            ->set('title', 'Affidavit with duplicate emails')
+            ->set('requestType', 'acknowledgment')
+            ->set('wizardStep', 3)
+            ->set('signers', [
+                [
+                    'full_name' => 'Juan Dela Cruz',
+                    'email' => 'party@example.test',
+                    'phone' => '',
+                    'address' => '',
+                    'role' => 'signer',
+                ],
+                [
+                    'full_name' => 'Maria Santos',
+                    'email' => 'PARTY@example.test',
+                    'phone' => '',
+                    'address' => '',
+                    'role' => 'witness',
+                ],
+            ])
+            ->call('save')
+            ->assertHasErrors(['signers.1.email']);
+    }
+
+    public function test_case_page_rejects_duplicate_signer_email_case_insensitively(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+        ]);
+
+        NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Existing Signer',
+            'email' => 'existing@example.test',
+        ]);
+
+        $this->actingAs($notary);
+
+        Livewire::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('newSignerName', 'Duplicate Signer')
+            ->set('newSignerEmail', 'Existing@example.test')
+            ->set('newSignerPhone', '')
+            ->set('newSignerAddress', '')
+            ->set('newSignerRole', 'signer')
+            ->call('addSigner')
+            ->assertHasErrors(['newSignerEmail']);
     }
 
     public function test_removing_request_signer_cleans_up_matching_draft_document_signer_and_fields(): void

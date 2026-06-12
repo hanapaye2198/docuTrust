@@ -6,8 +6,6 @@ RELEASE_PATH="${1:?release path is required}"
 PHP_BIN="${2:-/usr/bin/php}"
 WEB_USER="${WEB_USER:-www-data}"
 WEB_GROUP="${WEB_GROUP:-$WEB_USER}"
-RUN_SEEDERS="${RUN_SEEDERS:-true}"
-SEEDER_CLASS="${SEEDER_CLASS:-Database\\Seeders\\DatabaseSeeder}"
 
 cd "$RELEASE_PATH"
 
@@ -30,14 +28,7 @@ run_privileged() {
   exit 1
 }
 
-should_run_seeders() {
-  case "${RUN_SEEDERS,,}" in
-    1|true|yes|on) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-# Ensure autoloader is up-to-date (classmap must include seeders)
+# Ensure autoloader is up-to-date for the deployed release
 if [ -f composer.phar ]; then
   "$PHP_BIN" composer.phar dump-autoload --optimize --no-interaction 2>/dev/null || true
 elif command -v composer >/dev/null 2>&1; then
@@ -45,12 +36,6 @@ elif command -v composer >/dev/null 2>&1; then
 fi
 
 "$PHP_BIN" artisan migrate --force
-
-if should_run_seeders; then
-  # Normalize double-backslashes that may arrive from shell escaping
-  NORMALIZED_SEEDER="${SEEDER_CLASS//\\\\/\\}"
-  "$PHP_BIN" artisan db:seed --force --class="$NORMALIZED_SEEDER"
-fi
 
 "$PHP_BIN" artisan optimize:clear
 "$PHP_BIN" artisan storage:link || true

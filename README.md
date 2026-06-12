@@ -129,6 +129,16 @@ Lane guidance:
 - `notifications`: scale this for burst fan-out after document completion or reminder campaigns. Latency matters more than memory.
 - `einvoices`: isolate this from user-facing jobs because vendor latency and retries can stall the lane.
 
+For signer-heavy e-notary or document-signing bursts, start by scaling the `notifications` lane first. Example:
+
+```bash
+systemctl enable --now \
+  docutrust-queue@notifications-1 \
+  docutrust-queue@notifications-2
+```
+
+Both instances still consume the same Laravel `notifications` queue, so this increases email throughput without mixing work into other lanes.
+
 If you need per-lane overrides, create systemd drop-ins instead of changing the shared env file for everything:
 
 ```bash

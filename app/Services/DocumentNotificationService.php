@@ -111,7 +111,7 @@ class DocumentNotificationService
 
     public function sendSignerInvitation(Document $document, DocumentSigner $signer): void
     {
-        SendDocumentEmailJob::dispatchSync(
+        SendDocumentEmailJob::dispatch(
             documentId: $document->id,
             signerId: $signer->id,
             recipientEmail: $signer->email,

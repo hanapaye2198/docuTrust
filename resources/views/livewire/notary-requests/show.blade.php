@@ -28,6 +28,7 @@ use App\Services\NotaryRequestWorkflowService;
 use App\Services\NotarySchedulingService;
 use App\Services\EnotaryInvitationService;
 use App\Services\NotaryParticipantSyncService;
+use Illuminate\Validation\ValidationException;
 use App\Services\OtpService;
 use App\Enums\UserWorkspace;
 use App\Models\EnotaryInvitation;
@@ -943,10 +944,23 @@ new #[Layout('components.layouts.app')] class extends Component {
             'newSignerRole' => ['required', 'string', 'max:64'],
         ]);
 
+        $normalizedEmail = strtolower(trim($validated['newSignerEmail']));
+
+        $emailExists = NotarySigner::query()
+            ->where('notary_request_id', $this->notaryRequest->id)
+            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
+            ->exists();
+
+        if ($emailExists) {
+            throw ValidationException::withMessages([
+                'newSignerEmail' => __('This email is already added to the case.'),
+            ]);
+        }
+
         $signer = NotarySigner::query()->create([
             'notary_request_id' => $this->notaryRequest->id,
             'full_name' => trim($validated['newSignerName']),
-            'email' => strtolower(trim($validated['newSignerEmail'])),
+            'email' => $normalizedEmail,
             'phone' => trim((string) ($validated['newSignerPhone'] ?? '')) !== '' ? trim((string) $validated['newSignerPhone']) : null,
             'address' => trim((string) ($validated['newSignerAddress'] ?? '')) !== '' ? trim((string) $validated['newSignerAddress']) : null,
             'role' => trim($validated['newSignerRole']),

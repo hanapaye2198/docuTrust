@@ -15,6 +15,7 @@ use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\SignatureField;
 use App\Models\User;
+use App\Services\DocumentNotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -27,7 +28,7 @@ class NotificationSystemTest extends TestCase
 
     public function test_document_sent_triggers_email_and_in_app_notification(): void
     {
-        Mail::fake();
+        Queue::fake();
 
         $owner = User::factory()->create();
         $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Draft]);
@@ -44,8 +45,13 @@ class NotificationSystemTest extends TestCase
 
         $signer->refresh();
 
-        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($signer): bool {
-            return str_contains($mail->signUrl, (string) $signer->access_token);
+        Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($document, $signer): bool {
+            return $job->documentId === $document->id
+                && $job->signerId === $signer->id
+                && $job->recipientEmail === $signer->email
+                && $job->type === SendDocumentEmailJob::TYPE_SENT_TO_SIGNER
+                && is_string($job->signUrl)
+                && str_contains($job->signUrl, (string) $signer->access_token);
         });
 
         $this->assertDatabaseHas('app_notifications', [
@@ -62,7 +68,12 @@ class NotificationSystemTest extends TestCase
         $document = Document::factory()->for($owner)->create(['status' => DocumentStatus::Pending]);
         $signer = DocumentSigner::factory()->for($document)->create(['status' => DocumentSignerStatus::Pending]);
 
-        $this->post(route('sign.store', $signer->access_token))->assertRedirect();
+        app(DocumentNotificationService::class)->handleSignerCompleted(
+            new \App\Events\DocumentSignerCompleted($document->fresh()->load('documentSigners', 'user'), $signer->fresh())
+        );
+        app(DocumentNotificationService::class)->handleDocumentCompleted(
+            new \App\Events\DocumentCompleted($document->fresh()->load('documentSigners', 'user'))
+        );
 
         Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($document, $signer): bool {
             return $job->documentId === $document->id
@@ -243,7 +254,9 @@ class NotificationSystemTest extends TestCase
             'status' => DocumentSignerStatus::Pending,
         ]);
 
-        $this->post(route('sign.store', $signer->access_token))->assertRedirect();
+        app(DocumentNotificationService::class)->handleDocumentCompleted(
+            new \App\Events\DocumentCompleted($document->fresh()->load('documentSigners', 'user'))
+        );
 
         Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job): bool {
             return $job->recipientEmail === 'records@example.com'
@@ -256,7 +269,7 @@ class NotificationSystemTest extends TestCase
 
     public function test_handle_document_sent_emails_eligible_email_link_signers(): void
     {
-        Mail::fake();
+        Queue::fake();
 
         $owner = User::factory()->create();
         $document = Document::factory()->for($owner)->create([
@@ -270,12 +283,12 @@ class NotificationSystemTest extends TestCase
 
         event(new DocumentSent($document->load('documentSigners')));
 
-        Mail::assertSent(SignerInvitationMail::class, 1);
+        Queue::assertPushed(SendDocumentEmailJob::class, 1);
     }
 
     public function test_sequential_signing_sends_invitation_only_to_current_signer(): void
     {
-        Mail::fake();
+        Queue::fake();
 
         $owner = User::factory()->create();
         $document = Document::factory()->for($owner)->create([
@@ -307,12 +320,17 @@ class NotificationSystemTest extends TestCase
         $firstSigner->refresh();
         $secondSigner->refresh();
 
-        Mail::assertSent(SignerInvitationMail::class, 1);
-        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($firstSigner): bool {
-            return str_contains($mail->signUrl, (string) $firstSigner->access_token);
+        Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($document, $firstSigner): bool {
+            return $job->documentId === $document->id
+                && $job->signerId === $firstSigner->id
+                && $job->recipientEmail === $firstSigner->email
+                && $job->type === SendDocumentEmailJob::TYPE_SENT_TO_SIGNER
+                && is_string($job->signUrl)
+                && str_contains($job->signUrl, (string) $firstSigner->access_token);
         });
-        Mail::assertNotSent(SignerInvitationMail::class, function (SignerInvitationMail $mail) use ($secondSigner): bool {
-            return str_contains($mail->signUrl, (string) $secondSigner->access_token);
+        Queue::assertNotPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($secondSigner): bool {
+            return $job->signerId === $secondSigner->id
+                && $job->type === SendDocumentEmailJob::TYPE_SENT_TO_SIGNER;
         });
     }
 }

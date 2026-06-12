@@ -185,6 +185,8 @@ new #[Layout('components.layouts.app')] class extends Component {
             'signers.*.address' => ['nullable', 'string', 'max:500'],
             'signers.*.role' => ['nullable', 'string', 'max:64'],
         ]);
+
+        $this->assertUniqueSignerEmails($this->signers);
     }
 
     /**
@@ -216,7 +218,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
             $normalized[] = [
                 'full_name' => $fullName,
-                'email' => $email,
+                'email' => strtolower($email),
                 'phone' => $phone,
                 'address' => $address,
                 'role' => $role,
@@ -224,6 +226,30 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param  list<array{full_name: string, email: string, phone: string, address: string, role: string}>  $signers
+     */
+    protected function assertUniqueSignerEmails(array $signers): void
+    {
+        $seen = [];
+
+        foreach ($signers as $index => $signer) {
+            $email = strtolower(trim((string) ($signer['email'] ?? '')));
+
+            if ($email === '') {
+                continue;
+            }
+
+            if (isset($seen[$email])) {
+                throw ValidationException::withMessages([
+                    "signers.{$index}.email" => __('Each party must use a unique email address.'),
+                ]);
+            }
+
+            $seen[$email] = true;
+        }
     }
 
     /**
@@ -355,6 +381,10 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         if (isset($validated['notaryUserId'])) {
             $notaryUserId = (int) $validated['notaryUserId'];
+        }
+
+        if ($isNotary && $this->signers !== []) {
+            $this->assertUniqueSignerEmails($this->signers);
         }
 
         if ($isNotary && $notaryUserId === null) {
