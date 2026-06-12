@@ -45,6 +45,7 @@ function createStatusPoll(cfgEl) {
     const channelName = config.channel || '';
     const interval = Math.max(3000, Number(config.interval) || 5000);
     let currentStatus = config.currentStatus || '';
+    let currentPaymentFingerprint = paymentFingerprint(config.latestPayment || null);
     let timerId = null;
     let stopped = false;
     let isPageVisible = true;
@@ -159,13 +160,16 @@ function createStatusPoll(cfgEl) {
 
     function processUpdate(data) {
         const newStatus = data.status || '';
+        const nextPaymentFingerprint = paymentFingerprint(data.payment || null);
+        const paymentChanged = nextPaymentFingerprint !== currentPaymentFingerprint;
 
         // Only update DOM if something actually changed
-        if (newStatus === currentStatus && !hasSignerChanges(data)) {
+        if (newStatus === currentStatus && !hasSignerChanges(data) && !paymentChanged) {
             return;
         }
 
         currentStatus = newStatus;
+        currentPaymentFingerprint = nextPaymentFingerprint;
 
         // Update status badges
         updateStatusBadges(newStatus);
@@ -205,6 +209,23 @@ function createStatusPoll(cfgEl) {
         }
 
         return false;
+    }
+
+    function paymentFingerprint(payment) {
+        if (!payment || typeof payment !== 'object') {
+            return '';
+        }
+
+        return [
+            payment.id || '',
+            payment.status || '',
+            payment.reference || '',
+            payment.gateway || '',
+            payment.paid_at || '',
+            payment.expires_at || '',
+            payment.last_verified_at || '',
+            payment.updated_at || '',
+        ].join('|');
     }
 
     function updateStatusBadges(status) {

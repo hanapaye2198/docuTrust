@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Payment;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
 
@@ -17,6 +18,7 @@ class NotaryRequestStatusPayloadService
             'documents.documentSigners',
             'sessions',
             'identityVerifications',
+            'payments',
         ]);
 
         $signers = $notaryRequest->signers->map(fn (NotarySigner $signer): array => [
@@ -36,6 +38,9 @@ class NotaryRequestStatusPayloadService
         ])->values()->all();
 
         $latestSession = $notaryRequest->sessions->first();
+        $latestPayment = $notaryRequest->payments
+            ->sortByDesc(fn (Payment $payment) => $payment->created_at?->getTimestamp() ?? 0)
+            ->first();
 
         return [
             'request_id' => $notaryRequest->id,
@@ -49,6 +54,16 @@ class NotaryRequestStatusPayloadService
                 'id' => $latestSession->id,
                 'status' => $latestSession->status ?? null,
                 'scheduled_for' => $latestSession->scheduled_for?->toIso8601String(),
+            ] : null,
+            'payment' => $latestPayment ? [
+                'id' => $latestPayment->id,
+                'status' => $latestPayment->status->value,
+                'reference' => $latestPayment->reference,
+                'gateway' => $latestPayment->gateway,
+                'paid_at' => $latestPayment->paid_at?->toIso8601String(),
+                'expires_at' => $latestPayment->expires_at?->toIso8601String(),
+                'last_verified_at' => $latestPayment->last_verified_at?->toIso8601String(),
+                'updated_at' => $latestPayment->updated_at?->toIso8601String(),
             ] : null,
         ];
     }
