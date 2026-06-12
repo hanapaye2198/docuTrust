@@ -80,10 +80,10 @@ Install and configure:
 Then:
 
 1. Copy `deploy/nginx/docutrust.conf` into your Nginx sites config and reload Nginx.
-2. Copy `deploy/systemd/docutrust-queue@.service` and `deploy/systemd/docutrust-blockchain.service` into `/etc/systemd/system/`.
+2. Copy `deploy/systemd/docutrust-queue@.service`, `deploy/systemd/docutrust-blockchain.service`, and `deploy/systemd/docutrust-reverb.service` into `/etc/systemd/system/`.
 3. Create `/var/www/docutrust/shared/.env` from `deploy/production.env.example`.
 4. Optionally create `/etc/default/docutrust-queue` from `deploy/systemd/docutrust-queue.env.example` to override worker flags such as `QUEUE_TIMEOUT`, `QUEUE_MEMORY`, or `QUEUE_EXTRA_ARGS`.
-5. Enable queue workers by lane, then start the blockchain sidecar:
+5. Enable queue workers by lane, then start the blockchain sidecar and Reverb:
 
 ```bash
 systemctl daemon-reload
@@ -92,7 +92,8 @@ systemctl enable --now \
   docutrust-queue@documents \
   docutrust-queue@notifications \
   docutrust-queue@einvoices \
-  docutrust-blockchain
+  docutrust-blockchain \
+  docutrust-reverb
 ```
 
 Use additional instances of the same lane when one queue needs more throughput, for example `docutrust-queue@documents-1` plus `docutrust-queue@documents-2`. The template strips a trailing numeric suffix, so both instances still consume the `documents` Laravel queue.
