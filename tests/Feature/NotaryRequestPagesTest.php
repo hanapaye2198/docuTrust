@@ -945,7 +945,28 @@ class NotaryRequestPagesTest extends TestCase
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->call('setActiveTab', 'closing')
-            ->assertDispatched('scroll-to-section', id: 'section-settlement-start', reset: true);
+            ->assertDispatched('scroll-to-section', id: 'section-settlement-fee', reset: true);
+    }
+
+    public function test_sync_realtime_request_state_preserves_active_tab(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Pending,
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('activeTab', 'parties')
+            ->call('syncRealtimeRequestState')
+            ->assertSet('activeTab', 'parties');
     }
 
     public function test_attorney_closing_tab_shows_settlement_sub_nav(): void
@@ -1942,19 +1963,17 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($notary);
 
-        $paymentPageUrl = app(NotaryPublicPaymentLinkService::class)->paymentPageUrl($request);
-
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
-            ->assertSee(__('Open payment'))
-            ->assertSee(__('View payment'))
-            ->assertSeeHtml('href="'.e($paymentPageUrl).'"')
+            ->assertSee(__('Go to payment settings'))
+            ->assertSee(__('Preview payment page'))
+            ->assertSee('/notary/payment/'.$request->id, false)
             ->set('activeTab', 'closing')
             ->call('openPaymentSection')
             ->assertSet('activeTab', 'closing')
             ->assertDispatched('scroll-to-section', id: 'section-payment', reset: true);
     }
 
-    public function test_notary_request_open_payment_section_resends_payment_email_for_active_pending_payment(): void
+    public function test_notary_request_open_payment_section_does_not_auto_send_payment_email(): void
     {
         Mail::fake();
 
@@ -1973,7 +1992,7 @@ class NotaryRequestPagesTest extends TestCase
             'fees' => 1500.00,
         ]);
 
-        $payment = Payment::query()->create([
+        Payment::query()->create([
             'organization_id' => $request->organization_id,
             'notary_request_id' => $request->id,
             'payer_user_id' => $client->id,
@@ -1995,12 +2014,10 @@ class NotaryRequestPagesTest extends TestCase
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->call('openPaymentSection')
             ->assertSet('activeTab', 'closing')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            ->assertDispatched('scroll-to-section', id: 'section-payment', reset: true);
 
-        Mail::assertQueued(NotaryPaymentReadyMail::class, function (NotaryPaymentReadyMail $mail) use ($request, $payment): bool {
-            return $mail->notaryRequest->is($request)
-                && $mail->payment->is($payment);
-        });
+        Mail::assertNothingQueued();
     }
 
     public function test_create_gateway_payment_resends_payment_ready_email_when_pending_payment_exists(): void

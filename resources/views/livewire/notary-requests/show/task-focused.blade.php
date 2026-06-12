@@ -141,14 +141,24 @@
                     {{ __('A notarial fee is due. Open payment below to complete checkout.') }}
                 @endif
             </flux:callout.text>
-            <div class="mt-2">
+            <div class="mt-2 flex flex-wrap gap-2">
                 <button
                     type="button"
                     wire:click="openPaymentSection"
                     class="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                 >
-                    {{ __('Open payment') }}
+                    {{ __('Go to payment settings') }}
                 </button>
+                @if ($isNotary && $hasSettlementFeeConfigured && $paymentEmailPreviewUrl)
+                    <a
+                        href="{{ $paymentEmailPreviewUrl }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center justify-center rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-800 transition hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-900/60"
+                    >
+                        {{ __('Preview payment page') }}
+                    </a>
+                @endif
             </div>
         </flux:callout>
     @endif
@@ -310,6 +320,13 @@
                 <div class="ui-panel p-5">
                     <flux:heading size="sm" class="mb-2">{{ __('Payment due') }}</flux:heading>
                     <p class="text-lg font-bold text-zinc-900 dark:text-zinc-100">PHP {{ number_format((float) $settlementDueAmount, 2) }}</p>
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        @if ($hasSettlementFeeConfigured && $paymentEmailPreviewUrl)
+                            {{ __('Preview the no-login page your client uses to pay.') }}
+                        @else
+                            {{ __('Set the notarial fee on Settlement before sharing a payment link.') }}
+                        @endif
+                    </p>
                     @if ($hasSettlementFeeConfigured && $paymentEmailPreviewUrl)
                         <a
                             href="{{ $paymentEmailPreviewUrl }}"
@@ -317,7 +334,7 @@
                             rel="noopener noreferrer"
                             class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                         >
-                            {{ __('View payment') }}
+                            {{ __('Preview payment page') }}
                         </a>
                     @else
                         <button
@@ -325,7 +342,7 @@
                             wire:click="openPaymentSection"
                             class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                         >
-                            {{ __('View payment') }}
+                            {{ __('Go to payment settings') }}
                         </button>
                     @endif
                 </div>

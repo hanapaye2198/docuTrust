@@ -178,25 +178,20 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->scrollToSettlementOnLoad = false;
     }
 
-    private function focusSettlementSection(?string $sectionId = null): void
+    public function navigateToSettlementSection(?string $sectionId = null): void
     {
-        $this->pendingScrollSectionId = $sectionId !== null && $sectionId !== ''
-            ? $sectionId
-            : 'section-settlement-start';
-    }
-
-    private function queueSettlementScroll(?string $sectionId = null): void
-    {
-        if ($sectionId === null || $sectionId === '') {
-            $sectionId = app(NotaryRequestWorkflowService::class)
-                ->currentSettlementSectionId($this->notaryRequest);
-        }
-
-        if ($sectionId === null || $sectionId === '') {
+        if (! in_array('closing', $this->availableTabs(), true)) {
             return;
         }
 
+        if ($sectionId === null || $sectionId === '') {
+            $sectionId = app(NotaryRequestWorkflowService::class)
+                ->currentSettlementSectionId($this->notaryRequest)
+                ?? 'section-settlement-start';
+        }
+
         $this->activeTab = 'closing';
+        $this->dispatch('reset-main-scroll');
         $this->pendingScrollSectionId = $sectionId;
     }
 
@@ -209,8 +204,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
 
         if ($tab === 'closing' && $this->activeTab === 'closing') {
-            $this->dispatch('reset-main-scroll');
-            $this->focusSettlementSection('section-settlement-start');
+            $this->navigateToSettlementSection();
 
             return;
         }
@@ -226,8 +220,13 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         if ($value === 'closing') {
             $this->sendSettlementPaymentReminder();
-            $this->dispatch('reset-main-scroll');
-            $this->focusSettlementSection('section-settlement-start');
+
+            if ($this->pendingScrollSectionId === null) {
+                $this->dispatch('reset-main-scroll');
+                $this->pendingScrollSectionId = app(NotaryRequestWorkflowService::class)
+                    ->currentSettlementSectionId($this->notaryRequest)
+                    ?? 'section-settlement-start';
+            }
 
             return;
         }
@@ -240,11 +239,6 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         $this->refreshRequest();
         $this->ensureActiveTabIsAvailable();
-
-        $user = Auth::user();
-        if ($user?->role === \App\Enums\UserRole::Notary && ! request()->has('tab')) {
-            $this->activeTab = $this->resolveDefaultAttorneyTab();
-        }
 
         if ($this->activeTab === 'session') {
             $this->syncVideoPartiesIfReady(notify: false);
@@ -259,23 +253,13 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function openPaymentSection(): void
     {
-        if (! in_array('closing', $this->availableTabs(), true)) {
-            return;
-        }
-
-        $this->activeTab = 'closing';
-        $this->focusSettlementSection('section-payment');
+        $this->navigateToSettlementSection('section-payment');
         $this->sendSettlementPaymentReminder();
     }
 
     public function openSettlementSection(string $sectionId): void
     {
-        if (! in_array('closing', $this->availableTabs(), true)) {
-            return;
-        }
-
-        $this->activeTab = 'closing';
-        $this->focusSettlementSection($sectionId);
+        $this->navigateToSettlementSection($sectionId);
     }
 
     /**
@@ -1393,7 +1377,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $this->refreshRequest();
         session()->flash('status', __('Notarial fee saved. Create a payment link below if a fee applies.'));
-        $this->queueSettlementScroll('section-payment');
+        $this->navigateToSettlementSection('section-payment');
     }
 
     public function createGatewayPayment(): void
@@ -1431,7 +1415,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             session()->flash('status', $payment->wasRecentlyCreated
                 ? __('Payment link created and emailed to :email.', ['email' => $validated['paymentRecipientEmail']])
                 : __('An active pending payment already exists. Payment email was sent again to :email.', ['email' => $validated['paymentRecipientEmail']]));
-            $this->queueSettlementScroll('section-payment');
+            $this->navigateToSettlementSection('section-payment');
         } catch (\RuntimeException $exception) {
             $this->addError('createGatewayPayment', $exception->getMessage());
         }
@@ -1459,7 +1443,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             );
 
             $this->refreshRequest();
-            $this->queueSettlementScroll('section-payment');
+            $this->navigateToSettlementSection('section-payment');
 
             $paymentUrl = $payment->checkout_url ?? $payment->redirect_url;
             if (is_string($paymentUrl) && $paymentUrl !== '') {
@@ -1810,7 +1794,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($paymentRequired && ! $hasSettledPayment && $hasFeeConfigured) {
             return [
                 'type' => 'wire',
-                'label' => __('Open payment step'),
+                'label' => __('Go to payment settings'),
                 'description' => __('Generate or share the payment link using the fee amount you set.'),
                 'variant' => 'primary',
                 'action' => 'openPaymentSection',
