@@ -1892,6 +1892,10 @@ function createSignViewSession(cfgEl) {
         listen(tabType, 'click', () => showTab('type'));
         listen(tabUpload, 'click', () => showTab('upload'));
         listen(document.getElementById('modal-cancel'), 'click', closeModal);
+        listen(modalSubmitButton, 'click', (event) => {
+            event.preventDefault();
+            submitModalForm();
+        });
         listen(signForm, 'submit', (event) => {
             event.preventDefault();
             submitModalForm();

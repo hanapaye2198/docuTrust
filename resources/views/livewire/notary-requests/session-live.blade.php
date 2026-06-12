@@ -25,6 +25,8 @@ new #[Layout('components.layouts.app')] class extends Component
 
     public ?string $partyName = null;
 
+    public ?string $autoStartWarning = null;
+
     public function mount(NotaryRequest $notaryRequest, NotarySession $session): void
     {
         $user = Auth::user();
@@ -53,7 +55,19 @@ new #[Layout('components.layouts.app')] class extends Component
         }
 
         if ($this->isAssignedNotary && $session->status === 'scheduled') {
-            $this->session = app(NotarySchedulingService::class)->start($session);
+            try {
+                $this->session = app(NotarySchedulingService::class)->start($session);
+                $this->notaryRequest = $this->notaryRequest->fresh() ?? $this->notaryRequest;
+            } catch (\Throwable $exception) {
+                report($exception);
+
+                $this->session = $session->fresh() ?? $session;
+                $this->notaryRequest = $this->notaryRequest->fresh() ?? $this->notaryRequest;
+
+                if ($this->session->status === 'scheduled') {
+                    $this->autoStartWarning = __('We opened the session, but could not mark it as started automatically. Refresh if the session status looks stale.');
+                }
+            }
         }
     }
 
@@ -137,6 +151,12 @@ new #[Layout('components.layouts.app')] class extends Component
             <flux:button variant="ghost" :href="route('notary.requests.show', $notaryRequest)" wire:navigate>{{ __('Back to notarization') }}</flux:button>
         </div>
     </div>
+
+    @if ($autoStartWarning)
+        <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+            {{ $autoStartWarning }}
+        </div>
+    @endif
 
     @if ($isAssignedNotary && ! in_array($session->status, ['completed', 'cancelled'], true))
         <div class="rounded-xl border border-indigo-200 bg-indigo-50/80 px-4 py-3 text-sm text-indigo-950 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-100">
