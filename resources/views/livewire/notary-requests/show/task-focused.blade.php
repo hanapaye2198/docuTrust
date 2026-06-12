@@ -310,13 +310,24 @@
                 <div class="ui-panel p-5">
                     <flux:heading size="sm" class="mb-2">{{ __('Payment due') }}</flux:heading>
                     <p class="text-lg font-bold text-zinc-900 dark:text-zinc-100">PHP {{ number_format((float) $settlementDueAmount, 2) }}</p>
-                    <button
-                        type="button"
-                        wire:click="openPaymentSection"
-                        class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                    >
-                        {{ __('View payment') }}
-                    </button>
+                    @if ($hasSettlementFeeConfigured && $paymentEmailPreviewUrl)
+                        <a
+                            href="{{ $paymentEmailPreviewUrl }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                            {{ __('View payment') }}
+                        </a>
+                    @else
+                        <button
+                            type="button"
+                            wire:click="openPaymentSection"
+                            class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                            {{ __('View payment') }}
+                        </button>
+                    @endif
                 </div>
             @endif
         </aside>

@@ -1942,9 +1942,12 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($notary);
 
+        $paymentPageUrl = app(NotaryPublicPaymentLinkService::class)->paymentPageUrl($request);
+
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->assertSee(__('Open payment'))
             ->assertSee(__('View payment'))
+            ->assertSeeHtml('href="'.e($paymentPageUrl).'"')
             ->set('activeTab', 'closing')
             ->call('openPaymentSection')
             ->assertSet('activeTab', 'closing')
