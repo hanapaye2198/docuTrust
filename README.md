@@ -65,6 +65,10 @@ Set these repository or environment secrets before enabling production deploys:
 - `APP_BASE_PATH` with a value like `/var/www/docutrust`
 - `PHP_BIN` with a value like `/usr/bin/php`
 - `WEB_USER` optionally, with the PHP-FPM user. Defaults to `www-data`.
+- `VITE_REVERB_APP_KEY`
+- `VITE_REVERB_HOST`
+- `VITE_REVERB_PORT`
+- `VITE_REVERB_SCHEME`
 
 ## Host Setup
 
