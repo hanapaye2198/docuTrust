@@ -1,7 +1,14 @@
-<div class="ui-panel max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-y-contain p-5 sm:p-6 [scrollbar-gutter:stable]">
-    <flux:heading size="lg" class="mb-3">{{ __('Case workflow') }}</flux:heading>
+@php
+    $progress = $this->notaryCaseProgress;
+@endphp
+
+<div class="ui-panel p-5 sm:p-6">
+    <flux:heading size="lg" class="mb-1">{{ __('Case progress') }}</flux:heading>
+    <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+        {{ __('Step :current of :total', ['current' => $progress['step_number'], 'total' => $progress['total']]) }}
+    </p>
     <ol class="space-y-3">
-        @foreach ($workflowSteps as $step)
+        @foreach ($workflowSteps as $index => $step)
             @php
                 $state = (string) ($step['state'] ?? 'upcoming');
                 $isCurrent = $state === 'current';
@@ -9,29 +16,28 @@
             @endphp
             <li class="flex gap-3">
                 <span @class([
-                    'mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full',
-                    'bg-emerald-500' => $isComplete,
-                    'bg-sky-500 ring-2 ring-sky-200 dark:ring-sky-900' => $isCurrent,
-                    'bg-zinc-300 dark:bg-zinc-600' => ! $isComplete && ! $isCurrent,
-                ])></span>
+                    'mt-2 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                    'bg-emerald-500 text-white' => $isComplete,
+                    'bg-sky-500 text-white ring-2 ring-sky-200 dark:ring-sky-900' => $isCurrent,
+                    'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300' => ! $isComplete && ! $isCurrent,
+                ])>
+                    @if ($isComplete)
+                        <flux:icon.check class="size-3.5" />
+                    @else
+                        {{ $index + 1 }}
+                    @endif
+                </span>
                 <div class="min-w-0">
                     <p @class([
-                        'text-sm font-medium',
-                        'text-sky-700 dark:text-sky-300' => $isCurrent,
-                        'text-emerald-700 dark:text-emerald-400' => $isComplete && ! $isCurrent,
+                        'text-sm font-medium leading-snug',
+                        'text-sky-800 dark:text-sky-200' => $isCurrent,
+                        'text-emerald-800 dark:text-emerald-300' => $isComplete && ! $isCurrent,
                         'text-zinc-600 dark:text-zinc-400' => ! $isComplete && ! $isCurrent,
                     ])>
                         {{ $step['label'] }}
-                        @if ($isCurrent)
-                            <span class="ms-1 text-[10px] font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">{{ __('Current') }}</span>
-                        @endif
                     </p>
-                    @if (! empty($step['description']))
-                        <p @class([
-                            'text-xs leading-relaxed',
-                            'text-sky-600/90 dark:text-sky-400/90' => $isCurrent,
-                            'text-zinc-500 dark:text-zinc-500' => ! $isCurrent,
-                        ])>{{ $step['description'] }}</p>
+                    @if ($isCurrent && ! empty($step['description']))
+                        <p class="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">{{ $step['description'] }}</p>
                     @endif
                 </div>
             </li>

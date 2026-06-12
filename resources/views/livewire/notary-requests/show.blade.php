@@ -1714,6 +1714,37 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     /**
      * @return array{
+     *     total: int,
+     *     completed: int,
+     *     step_number: int,
+     *     current_label: string
+     * }
+     */
+    #[Computed]
+    public function notaryCaseProgress(): array
+    {
+        $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($this->notaryRequest);
+        $completed = collect($steps)->where('state', 'complete')->count();
+        $current = collect($steps)->first(fn (array $step): bool => ($step['state'] ?? '') === 'current');
+
+        return [
+            'total' => count($steps),
+            'completed' => $completed,
+            'step_number' => min($completed + 1, max(count($steps), 1)),
+            'current_label' => is_array($current) ? (string) ($current['label'] ?? '') : '',
+        ];
+    }
+
+    #[Computed]
+    public function waitingOnClient(): bool
+    {
+        return collect(app(NotaryRequestWorkflowService::class)->settlementSteps($this->notaryRequest))
+            ->contains(fn (array $step): bool => ($step['state'] ?? '') === 'current'
+                && ($step['waiting_on'] ?? null) === 'client');
+    }
+
+    /**
+     * @return array{
      *   type: 'link'|'wire'|'tab',
      *   label: string,
      *   description: string,
@@ -1764,8 +1795,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($workflow->canDigitalize($request)) {
             return [
                 'type' => 'wire',
-                'label' => __('Apply digital notarization'),
-                'description' => __('Seal the notarized instrument after register entry and payment.'),
+                'label' => __('Apply seal and certificate'),
+                'description' => __('Add your seal, QR code, and certificate to finish this case.'),
                 'variant' => 'primary',
                 'action' => 'digitalizeRequest',
                 'tab' => 'closing',
@@ -1782,8 +1813,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($workflow->hasAttorneySignedAllDocuments($request) && ! $hasFeeConfigured) {
             return [
                 'type' => 'wire',
-                'label' => __('Open fee step'),
-                'description' => __('Enter the fee amount on Settlement before creating a payment link.'),
+                'label' => __('Set the fee amount'),
+                'description' => __('Enter how much the client should pay before you share a payment link.'),
                 'variant' => 'primary',
                 'action' => 'openSettlementSection',
                 'params' => ['section-settlement-fee'],
@@ -1794,8 +1825,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($paymentRequired && ! $hasSettledPayment && $hasFeeConfigured) {
             return [
                 'type' => 'wire',
-                'label' => __('Go to payment settings'),
-                'description' => __('Generate or share the payment link using the fee amount you set.'),
+                'label' => __('Set up client payment'),
+                'description' => __('Email or share the payment link so your client can pay.'),
                 'variant' => 'primary',
                 'action' => 'openPaymentSection',
                 'tab' => 'closing',
@@ -1805,8 +1836,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($canAccessRegistry && ! $hasPreparedRegistry) {
             return [
                 'type' => 'link',
-                'label' => __('Complete register entry'),
-                'description' => __('Fill the 9-field register row, O.R. number, and confirm signer signatures.'),
+                'label' => __('Fill notarial book'),
+                'description' => __('Complete the 9-field register row and O.R. number.'),
                 'variant' => 'primary',
                 'href' => route('notary.attorney-registry', $request),
                 'tab' => 'closing',
@@ -1816,8 +1847,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         if (($hasSettledPayment || ! $paymentRequired) && ! $hasAttorneySealOnFile && $workflow->hasAttorneySignedAllDocuments($request)) {
             return [
                 'type' => 'link',
-                'label' => __('Upload attorney seal'),
-                'description' => __('Add your personal seal in trust profile before creating the final registry entry.'),
+                'label' => __('Upload your notary seal'),
+                'description' => __('Add your personal seal in your trust profile.'),
                 'variant' => 'primary',
                 'href' => route('settings.trust-profile').'#notary-seal',
                 'tab' => 'closing',
@@ -1827,8 +1858,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($workflow->canCreateRegisterEntry($request)) {
             return [
                 'type' => 'link',
-                'label' => __('Create register entry'),
-                'description' => __('Finalize the register entry after payment and attorney seal completion.'),
+                'label' => __('Complete notarial book'),
+                'description' => __('Finalize the notarial book entry after payment and seal upload.'),
                 'variant' => 'primary',
                 'href' => route('notary.register-entry', $request),
                 'tab' => 'closing',
@@ -1893,10 +1924,10 @@ new #[Layout('components.layouts.app')] class extends Component {
 
             return [
                 'type' => 'link',
-                'label' => __('Join video call'),
+                'label' => __('Start video verification'),
                 'description' => $partyName !== null && $partyName !== ''
-                    ? __('Enter the live verification room with :name.', ['name' => $partyName])
-                    : __('Enter the live verification room with the signer.'),
+                    ? __('Meet :name on a live video call to verify their identity.', ['name' => $partyName])
+                    : __('Meet the signer on a live video call to verify their identity.'),
                 'variant' => 'primary',
                 'href' => route('notary.requests.session.live', [$request, $joinableSession]),
                 'tab' => 'session',

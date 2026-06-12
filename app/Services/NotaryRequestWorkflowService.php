@@ -155,8 +155,8 @@ class NotaryRequestWorkflowService
 
         return [
             [
-                'label' => __('Upload & send'),
-                'description' => __('Attorney uploads documents, assigns signers, and sends for signing.'),
+                'label' => __('Prepare the document'),
+                'description' => __('Upload the PDF, add signers, and send it out for signing.'),
                 'state' => match (true) {
                     $allSignersSigned || $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
                     $hasDocuments => 'current',
@@ -166,8 +166,8 @@ class NotaryRequestWorkflowService
                 },
             ],
             [
-                'label' => __('Signers sign'),
-                'description' => __('All assigned signers complete their signatures on the document.'),
+                'label' => __('Wait for signers'),
+                'description' => __('Each signer completes their signature on the document.'),
                 'state' => match (true) {
                     $allSignersSigned || $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
                     $hasDocuments && $request->documents->contains(fn (Document $document) => $document->status->value === 'pending') => 'current',
@@ -175,8 +175,8 @@ class NotaryRequestWorkflowService
                 },
             ],
             [
-                'label' => __('Video conference'),
-                'description' => __('Attorney verifies signer identity via live video session.'),
+                'label' => __('Verify client on video'),
+                'description' => __('Meet the signer on a live video call and confirm their identity.'),
                 'state' => match (true) {
                     $hasCompletedSession || $attorneyHasSigned || $isNotarized => 'complete',
                     in_array($request->status, [
@@ -189,8 +189,8 @@ class NotaryRequestWorkflowService
                 },
             ],
             [
-                'label' => __('Attorney signed'),
-                'description' => __('After identity verification, the attorney signs their part of the document.'),
+                'label' => __('Sign as attorney'),
+                'description' => __('After video verification, add your signature to the document.'),
                 'state' => match (true) {
                     $attorneyHasSigned || $isNotarized => 'complete',
                     in_array($request->status, [
@@ -202,38 +202,38 @@ class NotaryRequestWorkflowService
                 },
             ],
             [
-                'label' => __('Set notarial fee'),
-                'description' => __('Enter the fee amount on Settlement before creating a payment link.'),
+                'label' => __('Set the fee amount'),
+                'description' => __('Enter how much the client should pay before you finish the register.'),
                 'state' => $resolveState($feeComplete, $feeCurrent, ! $attorneyHasSigned),
             ],
             [
-                'label' => __('Pay notarial fee'),
-                'description' => __('Client completes payment using the fee amount you set.'),
+                'label' => __('Client pays the fee'),
+                'description' => __('The client pays using the amount you set.'),
                 'state' => $resolveState($paymentComplete, $paymentCurrent, ! $hasFeeConfigured || ! $paymentRequired),
             ],
             [
-                'label' => __('Notarial register entry'),
-                'description' => __('Complete the 9-field register row after payment, including the O.R. number.'),
+                'label' => __('Fill notarial book'),
+                'description' => __('Complete the 9-field register row and O.R. number after payment.'),
                 'state' => $resolveState($registryDraftComplete, $registryDraftCurrent, ! $canAccessRegistry),
             ],
             [
-                'label' => __('Attorney personal seal'),
-                'description' => __('Upload your seal in trust profile before creating the official register entry.'),
+                'label' => __('Upload your notary seal'),
+                'description' => __('Add your personal seal in your trust profile.'),
                 'state' => $resolveState($sealComplete, $sealCurrent, ! $attorneyHasSigned),
             ],
             [
-                'label' => __('Official register entry'),
+                'label' => __('Complete notarial book'),
                 'description' => __('Create the final notarial book entry from your saved draft.'),
                 'state' => $resolveState($registerComplete, $registerCurrent, ! $attorneyHasSigned),
             ],
             [
-                'label' => __('Attorney review'),
-                'description' => __('Confirm identity, consent, and jurisdiction after payment and register entry.'),
+                'label' => __('Review and approve'),
+                'description' => __('Confirm identity, consent, and jurisdiction before finishing.'),
                 'state' => $resolveState($reviewComplete, $reviewCurrent, ! $hasRegisterEntry),
             ],
             [
-                'label' => __('Digital notarization'),
-                'description' => __('Apply seal, QR verification, certificate, and document timestamp.'),
+                'label' => __('Apply seal and certificate'),
+                'description' => __('Add your seal, QR code, certificate, and timestamp to finish.'),
                 'state' => $resolveState($digitalComplete, $digitalCurrent, ! $hasRegisterEntry),
             ],
         ];
@@ -583,8 +583,8 @@ class NotaryRequestWorkflowService
         return [
             [
                 'key' => 'settlement_fee',
-                'label' => __('Set notarial fee'),
-                'description' => __('Enter the fee amount on Settlement before creating a payment link.'),
+                'label' => __('Set the fee amount'),
+                'description' => __('Enter how much the client should pay before you finish the register.'),
                 'state' => $feeState,
                 'actor' => 'attorney',
                 'section_id' => 'section-settlement-fee',
@@ -593,8 +593,8 @@ class NotaryRequestWorkflowService
             ],
             [
                 'key' => 'payment',
-                'label' => __('Pay notarial fee'),
-                'description' => __('Client completes payment using the fee amount you set.'),
+                'label' => __('Client pays the fee'),
+                'description' => __('The client pays using the amount you set.'),
                 'state' => $paymentState,
                 'actor' => 'client',
                 'section_id' => 'section-payment',
@@ -606,8 +606,8 @@ class NotaryRequestWorkflowService
             ],
             [
                 'key' => 'registry_draft',
-                'label' => __('Notarial register entry'),
-                'description' => __('Complete the 9-field register row after payment, including the O.R. number.'),
+                'label' => __('Fill notarial book'),
+                'description' => __('Complete the 9-field register row and O.R. number after payment.'),
                 'state' => $registryDraftState,
                 'actor' => 'attorney',
                 'section_id' => 'section-attorney-registry',
@@ -619,8 +619,8 @@ class NotaryRequestWorkflowService
             ],
             [
                 'key' => 'seal',
-                'label' => __('Attorney personal seal'),
-                'description' => __('Upload your seal in trust profile before creating the official register entry.'),
+                'label' => __('Upload your notary seal'),
+                'description' => __('Add your personal seal in your trust profile.'),
                 'state' => $sealState,
                 'actor' => 'attorney',
                 'section_id' => 'section-attorney-seal',
@@ -632,7 +632,7 @@ class NotaryRequestWorkflowService
             ],
             [
                 'key' => 'register_entry',
-                'label' => __('Official register entry'),
+                'label' => __('Complete notarial book'),
                 'description' => __('Create the final notarial book entry from your saved draft.'),
                 'state' => $registerState,
                 'actor' => 'attorney',
@@ -642,8 +642,8 @@ class NotaryRequestWorkflowService
             ],
             [
                 'key' => 'attorney_review',
-                'label' => __('Attorney review'),
-                'description' => __('Confirm identity, consent, and jurisdiction after payment and register entry.'),
+                'label' => __('Review and approve'),
+                'description' => __('Confirm identity, consent, and jurisdiction before finishing.'),
                 'state' => $reviewState,
                 'actor' => 'attorney',
                 'section_id' => 'section-review',
@@ -652,8 +652,8 @@ class NotaryRequestWorkflowService
             ],
             [
                 'key' => 'digital_notarization',
-                'label' => __('Digital notarization'),
-                'description' => __('Apply seal, QR verification, certificate, and document timestamp.'),
+                'label' => __('Apply seal and certificate'),
+                'description' => __('Add your seal, QR code, certificate, and timestamp to finish.'),
                 'state' => $digitalState,
                 'actor' => 'attorney',
                 'section_id' => 'section-digital-notarization',

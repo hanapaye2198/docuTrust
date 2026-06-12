@@ -309,7 +309,7 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
             ->call('openVideoSessionWorkspace')
             ->assertHasNoErrors()
-            ->assertSee('Parties')
+            ->assertSee('Signers')
             ->assertSee('Jane Signer')
             ->assertSee('Join video call')
             ->assertSee('Show personal video link')

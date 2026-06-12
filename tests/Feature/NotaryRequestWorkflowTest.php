@@ -321,7 +321,7 @@ class NotaryRequestWorkflowTest extends TestCase
 
         $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($request);
 
-        $this->assertSame('Upload & send', $steps[0]['label']);
+        $this->assertSame('Prepare the document', $steps[0]['label']);
         $this->assertSame('upcoming', $steps[0]['state']);
         $this->assertSame('upcoming', $steps[1]['state']);
     }
@@ -336,7 +336,7 @@ class NotaryRequestWorkflowTest extends TestCase
         $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($request);
 
         $this->assertCount(11, $steps);
-        $this->assertSame('Digital notarization', $steps[10]['label']);
+        $this->assertSame('Apply seal and certificate', $steps[10]['label']);
         $this->assertSame('complete', $steps[10]['state']);
     }
 

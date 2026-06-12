@@ -30,7 +30,7 @@
 @if ($navSteps->isNotEmpty())
     <nav
         class="sticky top-0 z-20 -mx-1 mb-1 border-b border-zinc-200/90 bg-white/95 px-1 py-2 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/95"
-        aria-label="{{ __('Settlement sections') }}"
+        aria-label="{{ __('Fees and register sections') }}"
         data-settlement-sub-nav
         data-settlement-section-ids="{{ $navSteps->pluck('section_id')->implode(',') }}"
     >

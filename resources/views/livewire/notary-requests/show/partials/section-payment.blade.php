@@ -82,7 +82,7 @@
                    target="_blank"
                    rel="noopener noreferrer"
                    class="inline-flex items-center justify-center rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900">
-                    {{ __('Preview payment page') }}
+                    {{ __('See what the client will pay') }}
                 </a>
             </div>
             <div class="mt-3 break-all rounded-lg border border-violet-200/80 bg-white/70 px-3 py-2 text-[11px] text-violet-800/80 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-200/80">

@@ -669,21 +669,21 @@ class NotaryRequestPagesTest extends TestCase
         ]);
 
         $this->actingAs($notary)
-            ->get(route('notary.requests.show', $request))
+            ->get(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing']))
             ->assertOk()
-            ->assertSee('Case workflow')
-            ->assertSee('Documents')
-            ->assertSee('Parties')
-            ->assertSee('Settlement')
-            ->assertSee('Signers sign')
-            ->assertSee('Video conference')
-            ->assertSee('Attorney signed')
-            ->assertSee('Set notarial fee')
-            ->assertSee('Pay notarial fee')
-            ->assertSee('Attorney personal seal')
-            ->assertSee('Notarial register entry')
-            ->assertSee('Official register entry')
-            ->assertSee('Attorney review')
+            ->assertSee('Case progress')
+            ->assertSee('Document')
+            ->assertSee('Signers')
+            ->assertSee('Fees & register')
+            ->assertSee('Wait for signers')
+            ->assertSee('Verify client on video')
+            ->assertSee('Sign as attorney')
+            ->assertSee('Set the fee amount')
+            ->assertSee('Client pays the fee')
+            ->assertSee('Upload your notary seal')
+            ->assertSee('Fill notarial book')
+            ->assertSee('Complete notarial book')
+            ->assertSee('Review and approve')
             ->assertSee('Available after the video session, attorney signing, register entry, and client payment (if required) are complete.')
             ->assertDontSee('Complete attorney review')
             ->assertSee('Official notarial register')
@@ -826,7 +826,7 @@ class NotaryRequestPagesTest extends TestCase
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->assertSee(__('Your next step'))
-            ->assertSee(__('Session in progress'))
+            ->assertSee(__('Video call in progress'))
             ->assertSee(__('Your progress'))
             ->assertSee(__('Video verification'))
             ->assertDontSee(__('Workflow progress'));
@@ -879,8 +879,8 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($notary);
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
-            ->assertSee(__('Settlement checklist'))
-            ->assertSee(__('Set notarial fee'));
+            ->assertSee(__('Fees & register steps'))
+            ->assertSee(__('Set the fee amount'));
     }
 
     public function test_saving_settlement_fee_scrolls_to_payment_section(): void
@@ -995,7 +995,7 @@ class NotaryRequestPagesTest extends TestCase
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->set('activeTab', 'closing')
-            ->assertSee(__('Settlement sections'))
+            ->assertSee(__('Fees and register sections'))
             ->assertSee(__('Fee'))
             ->assertSee(__('Pay'))
             ->assertSee(__('Register'));
@@ -1315,8 +1315,8 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($client)
             ->get(route('notary-requests.show', $request))
             ->assertOk()
-            ->assertSee('This payment link has expired. Generate a new payment to continue.')
-            ->assertSee('Generate new payment');
+            ->assertSee(__('This payment link has expired.'))
+            ->assertSee(__('Continue to payment'));
     }
 
     public function test_client_sees_einvoice_status_after_payment_is_recorded(): void
@@ -1964,8 +1964,8 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($notary);
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
-            ->assertSee(__('Go to payment settings'))
-            ->assertSee(__('Preview payment page'))
+            ->assertSee(__('Set up client payment'))
+            ->assertSee(__('See what the client will pay'))
             ->assertSee('/notary/payment/'.$request->id, false)
             ->set('activeTab', 'closing')
             ->call('openPaymentSection')
@@ -2330,6 +2330,17 @@ class NotaryRequestPagesTest extends TestCase
 
     public function test_public_payment_page_is_accessible_without_login(): void
     {
+        config()->set('services.gatewayhub.api_key', 'test-key');
+        Http::fake([
+            'https://gatewayhub.io/api/gateways/enabled' => Http::response([
+                'data' => [
+                    'gateways' => [
+                        ['code' => 'gcash', 'name' => 'Gcash'],
+                    ],
+                ],
+            ], 200),
+        ]);
+
         $client = User::factory()->enotarySigner()->create();
         $notary = User::factory()->for($client->organization)->notary()->create();
 
