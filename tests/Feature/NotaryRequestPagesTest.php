@@ -10,9 +10,9 @@ use App\Enums\PaymentStatus;
 use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
 use App\Jobs\RefreshEInvoiceStatusJob;
+use App\Jobs\SendDocumentEmailJob;
 use App\Jobs\SubmitEInvoiceJob;
 use App\Mail\NotaryPaymentReadyMail;
-use App\Mail\SignerInvitationMail;
 use App\Models\AttorneyNotarialRegistry;
 use App\Models\BillingProfile;
 use App\Models\Document;
@@ -445,11 +445,11 @@ class NotaryRequestPagesTest extends TestCase
         $this->assertNotNull($document->sent_at);
 
         $signer->refresh();
-        Queue::assertPushed(\App\Jobs\SendDocumentEmailJob::class, function (\App\Jobs\SendDocumentEmailJob $job) use ($document, $signer): bool {
+        Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($document, $signer): bool {
             return $job->documentId === $document->id
                 && $job->signerId === $signer->id
                 && $job->recipientEmail === $signer->email
-                && $job->type === \App\Jobs\SendDocumentEmailJob::TYPE_SENT_TO_SIGNER
+                && $job->type === SendDocumentEmailJob::TYPE_SENT_TO_SIGNER
                 && is_string($job->signUrl)
                 && str_contains($job->signUrl, (string) $signer->access_token);
         });
@@ -1921,16 +1921,34 @@ class NotaryRequestPagesTest extends TestCase
             'status' => NotaryRequestStatus::AttorneySigning,
         ]);
 
-        Document::factory()->for($notary)->create([
+        $document = Document::factory()->for($notary)->create([
             'notary_request_id' => $request->id,
-            'status' => DocumentStatus::Pending,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500.00,
         ]);
 
         $this->actingAs($notary);
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->assertSee(__('Open payment'))
+            ->assertSee(__('View payment'))
+            ->set('activeTab', 'closing')
             ->call('openPaymentSection')
-            ->assertSet('activeTab', 'closing');
+            ->assertSet('activeTab', 'closing')
+            ->assertDispatched('scroll-to-section', id: 'section-payment', reset: true);
     }
 
     public function test_notary_request_open_payment_section_resends_payment_email_for_active_pending_payment(): void

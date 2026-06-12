@@ -144,7 +144,7 @@
             <div class="mt-2">
                 <button
                     type="button"
-                    wire:click="setActiveTab('closing')"
+                    wire:click="openPaymentSection"
                     class="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                 >
                     {{ __('Open payment') }}
@@ -312,7 +312,7 @@
                     <p class="text-lg font-bold text-zinc-900 dark:text-zinc-100">PHP {{ number_format((float) $settlementDueAmount, 2) }}</p>
                     <button
                         type="button"
-                        wire:click="setActiveTab('closing')"
+                        wire:click="openPaymentSection"
                         class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                     >
                         {{ __('View payment') }}
