@@ -1,7 +1,5 @@
 <div id="section-settlement-start" class="space-y-4">
     @if ($isNotary)
-        @include('livewire.notary-requests.show.partials.settlement-checklist')
-
         @include('livewire.notary-requests.show.partials.settlement-sub-nav')
 
         @include('livewire.notary-requests.show.partials.section-settlement-fee')
@@ -155,12 +153,14 @@
                                         <div class="text-[11px] text-zinc-500 dark:text-zinc-400">OR: {{ $entry->official_receipt_number ?: '-' }}</div>
                                     </td>
                                     <td class="border-t border-zinc-200 px-3 py-3 dark:border-zinc-700">
-                                        @if ($entry->notary_signature_path)
+                                        @if ($entry->notary_signature_path && $entry->notary_credential_id)
                                             <img
-                                                src="{{ \Illuminate\Support\Facades\Storage::disk((string) config('filesystems.docutrust_disk', 'local'))->url($entry->notary_signature_path) }}"
+                                                src="{{ route('notary.credentials.document', ['credential' => $entry->notary_credential_id, 'document' => 'signature']) }}"
                                                 alt="{{ __('Notary signature') }}"
                                                 class="h-10 w-auto max-w-28 object-contain"
                                             >
+                                        @elseif ($entry->notary_signature_path)
+                                            <span class="text-zinc-400">-</span>
                                         @else
                                             <span class="text-zinc-400">-</span>
                                         @endif
@@ -221,8 +221,13 @@
                     {{ __('Digital notarization is complete. A Notary Admin will finalize this case.') }}
                 </div>
             @else
-                <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                    {{ __('Complete payment, register entry, and attorney review before applying digital notarization.') }}
+                <div class="mt-4 space-y-4">
+                    @include('livewire.notary-requests.show.partials.digitalize-prerequisites', [
+                        'prerequisites' => $digitalizePrerequisites,
+                    ])
+                    <div class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                        {{ __('Complete payment, register entry, and attorney review before applying digital notarization.') }}
+                    </div>
                 </div>
             @endif
         </div>

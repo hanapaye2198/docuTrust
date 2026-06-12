@@ -7,7 +7,10 @@
     $isVerified = $sessionStatus === 'completed';
     $isCurrent = ! $isVerified && is_array($videoVerificationQueue['next_party'] ?? null)
         && (int) ($videoVerificationQueue['next_party']['session_id'] ?? 0) === (int) $sessionId;
-    $statusLabel = $videoService->sessionStatusLabel($sessionStatus);
+    $statusLabel = $videoService->sessionStatusLabel(
+        $sessionStatus,
+        (bool) ($party['signer_waiting'] ?? false),
+    );
     $statusColor = match ($sessionStatus) {
         'completed' => 'emerald',
         'in_progress' => 'sky',

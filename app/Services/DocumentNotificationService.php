@@ -145,6 +145,19 @@ class DocumentNotificationService
     {
         $document = $event->document->loadMissing(['user', 'documentSigners']);
 
+        if ($document->notary_request_id !== null) {
+            $this->handleNotaryDocumentSigningCompleted($document);
+
+            return;
+        }
+
+        $this->handleStandardDocumentCompleted($document);
+
+        $this->notarySignerVideoInvitationService->handleDocumentCompleted($document);
+    }
+
+    private function handleStandardDocumentCompleted(Document $document): void
+    {
         $emailedAddresses = [];
 
         if (is_string($document->user?->email) && $document->user->email !== '') {
@@ -200,6 +213,38 @@ class DocumentNotificationService
             $document->user_id,
             'document.completed',
             __('Document ":title" is fully completed.', ['title' => $document->title])
+        );
+    }
+
+    private function handleNotaryDocumentSigningCompleted(Document $document): void
+    {
+        $emailedAddresses = [];
+
+        foreach ($document->documentSigners as $participant) {
+            if (! $participant->requiresAction() || ! $participant->status->isCompleted()) {
+                continue;
+            }
+
+            $recipientEmail = trim((string) $participant->email);
+            if ($recipientEmail === '' || in_array(strtolower($recipientEmail), $emailedAddresses, true)) {
+                continue;
+            }
+
+            SendDocumentEmailJob::dispatch(
+                documentId: $document->id,
+                signerId: $participant->id,
+                recipientEmail: $recipientEmail,
+                type: SendDocumentEmailJob::TYPE_NOTARY_SIGNING_RECORDED,
+            );
+            $emailedAddresses[] = strtolower($recipientEmail);
+        }
+
+        $this->createInAppNotification(
+            $document->user_id,
+            'document.notary_signing_complete',
+            __('All parties signed ":title". Send video verification links to continue.', [
+                'title' => $document->title,
+            ])
         );
 
         $this->notarySignerVideoInvitationService->handleDocumentCompleted($document);

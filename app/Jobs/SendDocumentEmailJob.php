@@ -4,9 +4,11 @@ namespace App\Jobs;
 
 use App\Mail\DocumentCompletedMail;
 use App\Mail\DocumentSignedMail;
+use App\Mail\NotaryDocumentSignerSignedMail;
 use App\Mail\SignerInvitationMail;
 use App\Models\Document;
 use App\Models\DocumentSigner;
+use App\Models\NotaryRequest;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -22,6 +24,8 @@ class SendDocumentEmailJob implements ShouldQueue
     public const TYPE_SIGNED = 'signed';
 
     public const TYPE_COMPLETED = 'completed';
+
+    public const TYPE_NOTARY_SIGNING_RECORDED = 'notary_signing_recorded';
 
     public function __construct(
         public int $documentId,
@@ -83,6 +87,26 @@ class SendDocumentEmailJob implements ShouldQueue
                     $document,
                     null,
                     $this->signUrl,
+                ));
+
+                return;
+            }
+
+            if ($this->type === self::TYPE_NOTARY_SIGNING_RECORDED) {
+                $signer = $this->signerId !== null ? DocumentSigner::query()->find($this->signerId) : null;
+                if ($signer === null || $document->notary_request_id === null) {
+                    return;
+                }
+
+                $notaryRequest = NotaryRequest::query()->find($document->notary_request_id);
+                if ($notaryRequest === null) {
+                    return;
+                }
+
+                Mail::to($this->recipientEmail)->queue(new NotaryDocumentSignerSignedMail(
+                    $notaryRequest,
+                    $document,
+                    $signer,
                 ));
             }
         } catch (Throwable $throwable) {

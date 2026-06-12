@@ -7,8 +7,10 @@ use App\Enums\DocumentStatus;
 use App\Enums\EInvoiceStatus;
 use App\Enums\NotaryRequestStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\SignatureFieldType;
 use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
+use App\Http\Controllers\NotaryDocumentSignerSignatureImageController;
 use App\Jobs\RefreshEInvoiceStatusJob;
 use App\Jobs\SendDocumentEmailJob;
 use App\Jobs\SubmitEInvoiceJob;
@@ -25,6 +27,7 @@ use App\Models\NotaryCredential;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
 use App\Models\Payment;
+use App\Models\Signature;
 use App\Models\SignatureField;
 use App\Models\User;
 use App\Services\NotarialCertificateService;
@@ -135,6 +138,22 @@ class NotaryRequestPagesTest extends TestCase
             'title' => 'Deed of sale — Lot 5',
             'status' => DocumentStatus::Draft->value,
         ]);
+    }
+
+    public function test_party_panel_stays_open_while_editing_second_signer_name(): void
+    {
+        $attorney = User::factory()->notary()->create();
+
+        $this->actingAs($attorney);
+
+        LivewireVolt::test('notary-requests.create')
+            ->set('title', 'Affidavit of loss')
+            ->set('requestType', 'acknowledgment')
+            ->set('wizardStep', 3)
+            ->call('addSignerRow')
+            ->call('addSignerRow')
+            ->set('signers.1.full_name', 'Maria Santos')
+            ->assertSet('openSignerPanels.1', true);
     }
 
     public function test_attorney_wizard_rejects_partial_signer_row(): void
@@ -879,8 +898,9 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($notary);
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
-            ->assertSee(__('Fees & register steps'))
-            ->assertSee(__('Set the fee amount'));
+            ->assertSee(__('Your next step'))
+            ->assertSee(__('Save fee'))
+            ->assertSee('do-this-now-settlement-fee', false);
     }
 
     public function test_saving_settlement_fee_scrolls_to_payment_section(): void
@@ -2549,6 +2569,329 @@ class NotaryRequestPagesTest extends TestCase
             ->set('paymentGateway', 'gcash')
             ->call('createGatewayPayment')
             ->assertForbidden();
+    }
+
+    public function test_closing_tab_shows_digitalize_prerequisites_checklist(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionCompleted,
+        ]);
+
+        Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
+            ->set('activeTab', 'closing')
+            ->assertSee(__('Before you can apply the seal'))
+            ->assertSee(__('Attorney signed the instrument'))
+            ->assertSee(__('Notarial fee configured'));
+    }
+
+    public function test_do_this_now_shows_signer_waiting_in_video_room_banner(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $party = NotarySigner::factory()->for($request)->create([
+            'full_name' => 'Alice Waiting',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $party->email,
+            'name' => $party->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'scheduled',
+            'signer_confirmed' => true,
+            'signer_confirmed_at' => now(),
+            'room_name' => 'alice-wait-room',
+            'meeting_url' => 'https://meet.jit.si/alice-wait-room',
+            'access_token' => 'alice-wait-token',
+            'scheduled_for' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
+            ->assertSee(__('waiting in the video room'))
+            ->assertSee('Alice Waiting');
+    }
+
+    public function test_register_entry_page_streams_signer_signature_image(): void
+    {
+        config(['filesystems.docutrust_disk' => 'local']);
+
+        $signaturePath = 'signatures/register-preview-test.png';
+        Storage::disk('local')->put($signaturePath, base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+        ));
+
+        $notary = User::factory()->notary()->create();
+        $client = User::factory()->enotarySigner()->create();
+        $request = NotaryRequest::factory()->for($client)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $clientSigner = DocumentSigner::factory()->for($document)->create([
+            'email' => $client->email,
+            'name' => 'Client Signer',
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $field = SignatureField::factory()->for($document)->create([
+            'signer_id' => $clientSigner->id,
+            'type' => SignatureFieldType::Signature,
+        ]);
+
+        NotaryCredential::factory()->for($notary)->create();
+
+        $signature = Signature::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $clientSigner->id,
+            'signature_field_id' => $field->id,
+            'signature_path' => $signaturePath,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 0,
+        ]);
+
+        Payment::query()->create([
+            'organization_id' => $notary->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $client->id,
+            'created_by_user_id' => $notary->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-registry-sig-1',
+            'gateway' => 'gcash',
+            'reference' => 'REF-REG-SIG-1',
+            'amount' => 0,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid,
+            'paid_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        $expectedUrl = route('notary.document-signers.signature-image', [
+            'notaryRequest' => $request,
+            'document' => $document->id,
+            'documentSigner' => $clientSigner->id,
+            'signature' => $signature->id,
+        ]);
+
+        $this->assertTrue(Storage::disk('local')->exists($signaturePath));
+
+        LivewireVolt::test('notary.attorney-registry', ['notaryRequest' => $request])
+            ->assertSee($expectedUrl, false);
+
+        $this->actingAs($notary);
+
+        $response = app(NotaryDocumentSignerSignatureImageController::class)(
+            request(),
+            $request->fresh(),
+            $document->fresh(),
+            $clientSigner->fresh(),
+            $signature->fresh(),
+        );
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('image/png', $response->headers->get('content-type'));
+    }
+
+    public function test_register_entry_save_preserves_identity_verification_metadata(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500,
+        ]);
+
+        Payment::query()->create([
+            'organization_id' => $notary->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $request->user_id,
+            'created_by_user_id' => $notary->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-registry-meta-1',
+            'gateway' => 'gcash',
+            'reference' => 'REF-REG-META-1',
+            'amount' => 500,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid,
+            'paid_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary.attorney-registry', ['notaryRequest' => $request])
+            ->set('title', 'Registry With ID Photo')
+            ->set('parties', [
+                ['name' => 'Juan Dela Cruz', 'address' => 'Davao City'],
+            ])
+            ->set('competentEvidence', [
+                [
+                    'person_name' => 'Juan Dela Cruz',
+                    'id_type' => 'Passport',
+                    'id_number' => 'P12345',
+                    'verification_id' => 99,
+                    'id_image_path' => 'identity/juan-passport.jpg',
+                ],
+            ])
+            ->set('notarialActType', 'acknowledgment')
+            ->set('officialReceiptNo', 'OR-456')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $draft = AttorneyNotarialRegistry::query()->where('notary_request_id', $request->id)->first();
+        $this->assertNotNull($draft);
+        $this->assertSame(99, $draft->competent_evidence[0]['verification_id'] ?? null);
+        $this->assertSame('identity/juan-passport.jpg', $draft->competent_evidence[0]['id_image_path'] ?? null);
+    }
+
+    public function test_attorney_can_upload_register_evidence_image(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.docutrust_disk' => 'local']);
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::AttorneySigning,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $notary->name,
+            'email' => $notary->email,
+            'user_id' => $notary->id,
+            'role_type' => TemplateRoleType::Signer,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        AttorneyNotarialRegistry::factory()->create([
+            'notary_request_id' => $request->id,
+            'fees' => 500,
+        ]);
+
+        Payment::query()->create([
+            'organization_id' => $notary->organization_id,
+            'notary_request_id' => $request->id,
+            'payer_user_id' => $request->user_id,
+            'created_by_user_id' => $notary->id,
+            'provider' => 'gatewayhub',
+            'provider_payment_id' => 'payment-registry-upload-1',
+            'gateway' => 'gcash',
+            'reference' => 'REF-REG-UP-1',
+            'amount' => 500,
+            'currency' => 'PHP',
+            'status' => PaymentStatus::Paid,
+            'paid_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary.attorney-registry', ['notaryRequest' => $request])
+            ->set('competentEvidence', [
+                [
+                    'person_name' => 'Maria Santos',
+                    'id_type' => 'PhilID',
+                    'id_number' => 'PH-001',
+                    'verification_id' => null,
+                    'id_image_path' => null,
+                ],
+            ])
+            ->set('evidenceUploads.0', UploadedFile::fake()->image('maria-id.jpg'))
+            ->assertSet('competentEvidence.0.id_image_path', fn (?string $path): bool => is_string($path)
+                && str_starts_with($path, 'notary/register-evidence/'.$request->id.'/'))
+            ->assertSee(__('Remove ID photo'));
+    }
+
+    public function test_register_evidence_path_image_streams_uploaded_file(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.docutrust_disk' => 'local']);
+
+        $notary = User::factory()->notary()->create();
+        NotaryCredential::factory()->for($notary)->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+        ]);
+
+        $path = 'notary/register-evidence/'.$request->id.'/sample-id.jpg';
+        Storage::disk('local')->put($path, base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+        ));
+
+        $encodedPath = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($path));
+
+        $this->actingAs($notary)
+            ->get(route('notary.register-evidence.path', [
+                'notaryRequest' => $request,
+                'encodedPath' => $encodedPath,
+            ]))
+            ->assertOk();
     }
 
     private function ensureEisSigningPrivateKeyPath(): string

@@ -15,6 +15,8 @@ use App\Http\Controllers\NotaryCredentialDocumentController;
 use App\Http\Controllers\NotaryDocumentSignerSignatureImageController;
 use App\Http\Controllers\NotaryIdentityVerificationImageController;
 use App\Http\Controllers\NotaryPaymentLinkController;
+use App\Http\Controllers\NotaryRegisterEvidenceImageController;
+use App\Http\Controllers\NotaryRegisterEvidencePathImageController;
 use App\Http\Controllers\NotarySettlementFeeController;
 use App\Http\Controllers\PublicNotaryPaymentController;
 use App\Http\Controllers\SignDocumentController;
@@ -142,6 +144,11 @@ Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function 
 
     Route::get('notary/requests/{notaryRequest}/identity-verifications/{verification}/image', NotaryIdentityVerificationImageController::class)
         ->name('notary.identity-verifications.image');
+    Route::get('notary/requests/{notaryRequest}/register-evidence/{evidenceIndex}/image', NotaryRegisterEvidenceImageController::class)
+        ->whereNumber('evidenceIndex')
+        ->name('notary.register-evidence.image');
+    Route::get('notary/requests/{notaryRequest}/register-evidence-file/{encodedPath}', NotaryRegisterEvidencePathImageController::class)
+        ->name('notary.register-evidence.path');
     Route::get('notary/requests/{notaryRequest}/documents/{document}/signers/{documentSigner}/signatures/{signature}/image', NotaryDocumentSignerSignatureImageController::class)
         ->name('notary.document-signers.signature-image');
     Route::get('notary/credentials/{credential}/document/{document}', NotaryCredentialDocumentController::class)

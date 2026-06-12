@@ -46,6 +46,7 @@ function createStatusPoll(cfgEl) {
     const interval = Math.max(3000, Number(config.interval) || 5000);
     let currentStatus = config.currentStatus || '';
     let currentPaymentFingerprint = paymentFingerprint(config.latestPayment || null);
+    let currentVideoFingerprint = videoFingerprint(config);
     let timerId = null;
     let stopped = false;
     let isPageVisible = true;
@@ -162,14 +163,17 @@ function createStatusPoll(cfgEl) {
         const newStatus = data.status || '';
         const nextPaymentFingerprint = paymentFingerprint(data.payment || null);
         const paymentChanged = nextPaymentFingerprint !== currentPaymentFingerprint;
+        const nextVideoFingerprint = videoFingerprint(data);
+        const videoChanged = nextVideoFingerprint !== currentVideoFingerprint;
 
         // Only update DOM if something actually changed
-        if (newStatus === currentStatus && !hasSignerChanges(data) && !paymentChanged) {
+        if (newStatus === currentStatus && !hasSignerChanges(data) && !paymentChanged && !videoChanged) {
             return;
         }
 
         currentStatus = newStatus;
         currentPaymentFingerprint = nextPaymentFingerprint;
+        currentVideoFingerprint = nextVideoFingerprint;
 
         // Update status badges
         updateStatusBadges(newStatus);
@@ -182,6 +186,8 @@ function createStatusPoll(cfgEl) {
 
         // Update session info
         updateSessionInfo(data.session);
+
+        updateWaitingVideoParties(data.waiting_video_parties || []);
 
         // Dispatch a custom event for Livewire components to listen to
         window.dispatchEvent(new CustomEvent('notary-status-updated', {
@@ -226,6 +232,33 @@ function createStatusPoll(cfgEl) {
             payment.last_verified_at || '',
             payment.updated_at || '',
         ].join('|');
+    }
+
+    function videoFingerprint(data) {
+        if (!data || typeof data !== 'object') {
+            return '';
+        }
+
+        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+        const sessionParts = sessions.map((session) => [
+            session.id || '',
+            session.status || '',
+            session.signer_confirmed ? '1' : '0',
+            session.signer_waiting ? '1' : '0',
+            session.updated_at || '',
+        ].join(':'));
+
+        const waiting = Array.isArray(data.waiting_video_parties) ? data.waiting_video_parties : [];
+        const waitingIds = waiting.map((session) => session.id || '').join(',');
+
+        const highlighted = data.session || {};
+        const highlightPart = [
+            highlighted.id || '',
+            highlighted.status || '',
+            highlighted.signer_waiting ? '1' : '0',
+        ].join(':');
+
+        return [highlightPart, waitingIds, sessionParts.join('|')].join('||');
     }
 
     function updateStatusBadges(status) {
@@ -286,6 +319,30 @@ function createStatusPoll(cfgEl) {
         }
 
         sessionEl.textContent = session.status || 'scheduled';
+    }
+
+    function updateWaitingVideoParties(waitingParties) {
+        const banner = document.querySelector('[data-video-waiting-banner]');
+        if (!banner) {
+            return;
+        }
+
+        const count = waitingParties.length;
+        banner.hidden = count === 0;
+
+        const countEl = banner.querySelector('[data-video-waiting-count]');
+        if (countEl) {
+            countEl.textContent = String(count);
+        }
+
+        const namesEl = banner.querySelector('[data-video-waiting-names]');
+        if (namesEl) {
+            const names = waitingParties
+                .map((session) => session.party_name || '')
+                .filter((name) => name !== '');
+
+            namesEl.textContent = names.join(', ');
+        }
     }
 
     function formatSigningStatus(status) {

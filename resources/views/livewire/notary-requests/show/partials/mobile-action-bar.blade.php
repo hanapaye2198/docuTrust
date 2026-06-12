@@ -8,11 +8,17 @@
             <p class="text-center text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 {{ __('Next') }}: {{ $primaryAction['label'] }}
             </p>
-            @include('livewire.notary-requests.show.partials.primary-action-button', [
-                'action' => $primaryAction,
-                'size' => 'base',
-                'class' => 'w-full min-h-12 text-base',
-            ])
+            @if (($primaryAction['inline_form'] ?? null) === 'settlement_fee')
+                <p class="text-center text-xs text-zinc-500 dark:text-zinc-400">
+                    {{ __('Enter the fee in the card above.') }}
+                </p>
+            @else
+                @include('livewire.notary-requests.show.partials.primary-action-button', [
+                    'action' => $primaryAction,
+                    'size' => 'base',
+                    'class' => 'w-full min-h-12 text-base',
+                ])
+            @endif
         </div>
     </div>
 @endif

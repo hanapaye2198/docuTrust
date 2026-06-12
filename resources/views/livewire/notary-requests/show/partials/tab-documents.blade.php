@@ -128,6 +128,18 @@
                                 @if ($canManageLifecycle || $isNotary)
                                     <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
                                         @if ($document->status->value === 'draft' && $isNotary)
+                                            @php
+                                                $missingFieldSigners = $document->signersMissingFields();
+                                            @endphp
+                                            @if ($missingFieldSigners->isNotEmpty())
+                                                <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                                                    {{ trans_choice(':count signer still needs signature fields.|:count signers still need signature fields.', $missingFieldSigners->count(), ['count' => $missingFieldSigners->count()]) }}
+                                                </div>
+                                            @elseif ($document->canSendForSigning())
+                                                <div class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+                                                    {{ __('All signature fields are placed. Ready to send to signers.') }}
+                                                </div>
+                                            @endif
                                             <flux:button class="w-full sm:w-auto" variant="outline" :href="route('notary.documents.prepare', $document)" wire:navigate>{{ __('Prepare fields') }}</flux:button>
                                             @if (is_array($workflowState) && $workflowState['can_send'])
                                                 <flux:button class="w-full sm:w-auto" variant="primary" type="button" wire:click="sendLinkedDocument({{ $document->id }})" wire:confirm="{{ __('Send this document to signers for signing?') }}">{{ __('Send to signers') }}</flux:button>

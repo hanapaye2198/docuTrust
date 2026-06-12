@@ -363,6 +363,12 @@ new #[Layout('components.layouts.app')] class extends Component {
             'canAttorneySign' => $this->canAttorneySign(),
             'attorneyHasSigned' => $workflow->hasAttorneySignedAllDocuments($this->notaryRequest),
             'canDigitalizeRequest' => $workflow->canDigitalize($this->notaryRequest),
+            'digitalizePrerequisites' => $workflow->digitalizePrerequisites($this->notaryRequest),
+            'videoWaitingParties' => collect(
+                (bool) config('docutrust.notary.require_video_session', true)
+                    ? app(\App\Services\NotarySignerVideoInvitationService::class)->partiesForVideoVerification($this->notaryRequest)
+                    : []
+            )->filter(fn (array $party): bool => (bool) ($party['signer_waiting'] ?? false))->values()->all(),
             'paymentRequired' => $workflow->paymentRequired($this->notaryRequest),
             'hasSettledPayment' => $workflow->hasSettledPayment($this->notaryRequest),
             'workflowSteps' => $workflow->workflowSteps($this->notaryRequest),
@@ -1819,6 +1825,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 'action' => 'openSettlementSection',
                 'params' => ['section-settlement-fee'],
                 'tab' => 'closing',
+                'inline_form' => 'settlement_fee',
             ];
         }
 
@@ -1875,13 +1882,31 @@ new #[Layout('components.layouts.app')] class extends Component {
             );
 
             if ($unsignedDocument !== null) {
+                $attorneySigner = $unsignedDocument->documentSigners->first(
+                    fn (DocumentSigner $signer): bool => (int) $signer->user_id === (int) $user->id
+                );
+                $hasAttorneyFields = $attorneySigner !== null
+                    && $unsignedDocument->signatureFields
+                        ->where('signer_id', $attorneySigner->id)
+                        ->isNotEmpty();
+
+                if (! $hasAttorneyFields) {
+                    return [
+                        'type' => 'link',
+                        'label' => __('Prepare attorney signature fields'),
+                        'description' => __('Video verification is complete. Place your signature fields on the PDF before signing.'),
+                        'variant' => 'primary',
+                        'href' => route('notary.documents.prepare', $unsignedDocument),
+                        'tab' => 'documents',
+                    ];
+                }
+
                 return [
-                    'type' => 'wire',
+                    'type' => 'link',
                     'label' => __('Sign as attorney'),
-                    'description' => __('Video verification is complete. Place your signature on the instrument.'),
+                    'description' => __('Your signature fields are ready. Open the document and sign as attorney.'),
                     'variant' => 'primary',
-                    'action' => 'signAsAttorney',
-                    'params' => [$unsignedDocument->id],
+                    'href' => route('notary.sign.account.show', $attorneySigner),
                     'tab' => 'documents',
                 ];
             }
@@ -1924,7 +1949,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
             return [
                 'type' => 'link',
-                'label' => __('Start video verification'),
+                'label' => __('Join video call'),
                 'description' => $partyName !== null && $partyName !== ''
                     ? __('Meet :name on a live video call to verify their identity.', ['name' => $partyName])
                     : __('Meet the signer on a live video call to verify their identity.'),

@@ -48,6 +48,7 @@ class AttorneyNotarialRegistryService
      *     document_signer_id: int,
      *     document_id: int,
      *     signature_id: int,
+     *     signature_field_id: int|null,
      *     name: string,
      *     signature_path: string|null
      *   }>,
@@ -189,6 +190,7 @@ class AttorneyNotarialRegistryService
      *   document_signer_id: int,
      *   document_id: int,
      *   signature_id: int,
+     *   signature_field_id: int|null,
      *   name: string,
      *   signature_path: string|null
      * }>
@@ -223,6 +225,9 @@ class AttorneyNotarialRegistryService
                     'document_signer_id' => (int) $signer->id,
                     'document_id' => (int) $signer->document_id,
                     'signature_id' => (int) $signature->id,
+                    'signature_field_id' => $signature->signature_field_id !== null
+                        ? (int) $signature->signature_field_id
+                        : null,
                     'name' => (string) $signer->name,
                     'signature_path' => $signature->signature_path,
                 ];
@@ -293,6 +298,90 @@ class AttorneyNotarialRegistryService
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 
         return in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true);
+    }
+
+    /**
+     * @param  array{
+     *   verification_id?: int|null,
+     *   id_image_path?: string|null
+     * }  $evidence
+     */
+    public function evidenceImageUrl(NotaryRequest $request, array $evidence, int $index): ?string
+    {
+        if (($evidence['verification_id'] ?? null) && $this->isImagePath($evidence['id_image_path'] ?? null)) {
+            return route('notary.identity-verifications.image', [$request, $evidence['verification_id']]);
+        }
+
+        $path = is_string($evidence['id_image_path'] ?? null) ? $evidence['id_image_path'] : '';
+        if (! $this->isImagePath($path)) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'notary/register-evidence/'.$request->id.'/')) {
+            return route('notary.register-evidence.path', [
+                'notaryRequest' => $request,
+                'encodedPath' => str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($path)),
+            ]);
+        }
+
+        return route('notary.register-evidence.image', [
+            'notaryRequest' => $request,
+            'evidenceIndex' => $index,
+        ]);
+    }
+
+    public function evidenceImagePathForIndex(NotaryRequest $request, int $index): ?string
+    {
+        $request->loadMissing('attorneyNotarialRegistry');
+        $evidence = is_array($request->attorneyNotarialRegistry?->competent_evidence)
+            ? $request->attorneyNotarialRegistry->competent_evidence
+            : [];
+
+        $row = $evidence[$index] ?? null;
+        if (! is_array($row)) {
+            return null;
+        }
+
+        if (($row['verification_id'] ?? null) !== null) {
+            return null;
+        }
+
+        $path = isset($row['id_image_path']) ? (string) $row['id_image_path'] : '';
+
+        return $this->isImagePath($path) ? $path : null;
+    }
+
+    /**
+     * @param  array{
+     *   document_signer_id: int,
+     *   document_id: int,
+     *   signature_id: int,
+     *   signature_field_id?: int|null,
+     *   signature_path?: string|null
+     * }  $signerSignature
+     */
+    public function signerSignatureImageUrl(NotaryRequest $request, array $signerSignature): ?string
+    {
+        if (! $this->isImagePath($signerSignature['signature_path'] ?? null)) {
+            return null;
+        }
+
+        return route('notary.document-signers.signature-image', [
+            'notaryRequest' => $request,
+            'document' => $signerSignature['document_id'],
+            'documentSigner' => $signerSignature['document_signer_id'],
+            'signature' => $signerSignature['signature_id'],
+        ]);
+    }
+
+    public function storeEvidenceImage(NotaryRequest $request, User $attorney, int $index, mixed $file): string
+    {
+        abort_unless((int) $request->notary_user_id === (int) $attorney->id, 403);
+
+        return $file->store(
+            'notary/register-evidence/'.$request->id,
+            (string) config('filesystems.docutrust_disk', 'local'),
+        );
     }
 
     /**

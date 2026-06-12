@@ -5,7 +5,7 @@
 <div class="ui-panel p-5 sm:p-6">
     <flux:heading size="lg" class="mb-1">{{ __('Case progress') }}</flux:heading>
     <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-        {{ __('Step :current of :total', ['current' => $progress['step_number'], 'total' => $progress['total']]) }}
+        {{ __('Follow the highlighted step. Details for each phase are in the main tabs.') }}
     </p>
     <ol class="space-y-3">
         @foreach ($workflowSteps as $index => $step)

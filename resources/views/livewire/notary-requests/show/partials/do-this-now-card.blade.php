@@ -32,14 +32,48 @@
                         </p>
                     </div>
                 @endif
+
+                @if ($isNotary && $videoWaitingParties !== [])
+                    <div
+                        data-video-waiting-banner
+                        class="rounded-xl border-2 border-sky-400 bg-sky-100 px-4 py-3 text-sm text-sky-950 dark:border-sky-600 dark:bg-sky-950/50 dark:text-sky-50"
+                    >
+                        <div class="font-semibold">
+                            {{ trans_choice(':count signer is|:count signers are', count($videoWaitingParties), ['count' => count($videoWaitingParties)]) }}
+                            {{ __('waiting in the video room') }}
+                        </div>
+                        <p class="mt-1">
+                            <span data-video-waiting-names>{{ collect($videoWaitingParties)->pluck('full_name')->join(', ') }}</span>
+                        </p>
+                        <p class="mt-1 text-sky-900/90 dark:text-sky-100/90">
+                            {{ __('Join the video workspace to start identity verification.') }}
+                        </p>
+                        <span data-video-waiting-count class="sr-only">{{ count($videoWaitingParties) }}</span>
+                    </div>
+                @endif
+
+                @if (($primaryAction['inline_form'] ?? null) === 'settlement_fee' && $isNotary)
+                    @include('livewire.notary-requests.show.partials.do-this-now-inline-fee')
+                @endif
             </div>
 
             <div class="flex w-full shrink-0 flex-col gap-2 sm:min-w-[220px] lg:max-w-xs">
-                @include('livewire.notary-requests.show.partials.primary-action-button', [
-                    'action' => $primaryAction,
-                    'size' => 'base',
-                    'class' => 'w-full min-h-11 text-base',
-                ])
+                @if (($primaryAction['inline_form'] ?? null) !== 'settlement_fee')
+                    @include('livewire.notary-requests.show.partials.primary-action-button', [
+                        'action' => $primaryAction,
+                        'size' => 'base',
+                        'class' => 'w-full min-h-11 text-base',
+                    ])
+                @else
+                    <flux:button
+                        variant="outline"
+                        type="button"
+                        wire:click="openSettlementSection('section-settlement-fee')"
+                        class="w-full min-h-11 text-base"
+                    >
+                        {{ __('More payment options') }}
+                    </flux:button>
+                @endif
 
                 @if ($isNotary && $hasSettlementFeeConfigured && $paymentEmailPreviewUrl && ($paymentRequired && ! $hasSettledPayment))
                     <a

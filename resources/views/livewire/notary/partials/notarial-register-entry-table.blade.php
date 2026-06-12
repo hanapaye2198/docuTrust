@@ -102,13 +102,38 @@
                     <td class="border border-zinc-200 px-3 py-4 dark:border-zinc-700">
                         <div class="space-y-3">
                             @foreach ($competentEvidence as $index => $evidence)
+                                @php
+                                    $evidenceImageUrl = $registryService->evidenceImageUrl($notaryRequest, $evidence, $index);
+                                @endphp
                                 <div class="flex gap-2">
-                                    @if (($evidence['verification_id'] ?? null) && $registryService->isImagePath($evidence['id_image_path'] ?? null))
+                                    @if ($evidenceImageUrl)
                                         <img
-                                            src="{{ route('notary.identity-verifications.image', [$notaryRequest, $evidence['verification_id']]) }}"
+                                            src="{{ $evidenceImageUrl }}"
                                             alt="{{ __('ID') }}"
                                             class="h-14 w-20 shrink-0 rounded border border-zinc-200 object-cover dark:border-zinc-600"
                                         >
+                                    @elseif (! $readOnly)
+                                        <label
+                                            @class([
+                                                'relative flex h-14 w-20 shrink-0 cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-zinc-300 bg-zinc-50 text-center transition hover:border-violet-400 hover:bg-violet-50/40 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:border-violet-500',
+                                            ])
+                                            wire:key="evidence-upload-{{ $index }}"
+                                            wire:loading.remove
+                                            wire:target="evidenceUploads.{{ $index }}"
+                                        >
+                                            <span class="px-1 text-[8px] font-medium leading-tight text-zinc-500 dark:text-zinc-400">
+                                                {{ __('Upload ID') }}
+                                            </span>
+                                            <input
+                                                type="file"
+                                                wire:model="evidenceUploads.{{ $index }}"
+                                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                                class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                            />
+                                        </label>
+                                        <div wire:loading wire:target="evidenceUploads.{{ $index }}" class="flex h-14 w-20 shrink-0 items-center justify-center rounded border border-zinc-200 bg-zinc-50 text-[9px] text-zinc-500 dark:border-zinc-600 dark:bg-zinc-800">
+                                            {{ __('Uploading…') }}
+                                        </div>
                                     @else
                                         <div class="flex h-14 w-20 shrink-0 items-center justify-center rounded border border-dashed border-zinc-300 bg-zinc-50 text-[9px] text-zinc-400 dark:border-zinc-600 dark:bg-zinc-800">
                                             {{ __('No image') }}
@@ -124,11 +149,27 @@
                                             <flux:input wire:model="competentEvidence.{{ $index }}.id_type" type="text" placeholder="{{ __('ID type') }}" class="!text-xs" />
                                             <flux:input wire:model="competentEvidence.{{ $index }}.id_number" type="text" placeholder="{{ __('ID number') }}" class="!text-xs" />
                                         @endif
+                                        @unless ($readOnly)
+                                            @if ($evidenceImageUrl)
+                                                <button
+                                                    type="button"
+                                                    wire:click="removeEvidenceImage({{ $index }})"
+                                                    class="text-[10px] font-medium text-red-600 hover:underline dark:text-red-400"
+                                                >
+                                                    {{ __('Remove ID photo') }}
+                                                </button>
+                                            @else
+                                                <p class="text-[10px] text-zinc-500 dark:text-zinc-400">
+                                                    {{ __('Click or drag an ID photo here (PNG/JPG, max 5 MB).') }}
+                                                </p>
+                                            @endif
+                                        @endunless
                                     </div>
                                 </div>
                                 @unless ($readOnly)
                                     <flux:error name="competentEvidence.{{ $index }}.id_type" />
                                     <flux:error name="competentEvidence.{{ $index }}.id_number" />
+                                    <flux:error name="evidenceUploads.{{ $index }}" />
                                 @endunless
                             @endforeach
                         </div>
@@ -195,19 +236,19 @@
                             </p>
                             <div class="mt-2 space-y-2">
                                 @foreach ($signerSignatures as $signerSignature)
+                                    @php
+                                        $signerSignatureUrl = $registryService->signerSignatureImageUrl($notaryRequest, $signerSignature);
+                                    @endphp
                                     <div>
                                         <div class="text-[10px] font-semibold uppercase text-zinc-700 dark:text-zinc-200">{{ $signerSignature['name'] }}</div>
-                                        @if ($signerSignature['signature_path'])
+                                        @if ($signerSignatureUrl)
                                             <img
-                                                src="{{ route('notary.document-signers.signature-image', [
-                                                    'notaryRequest' => $notaryRequest,
-                                                    'document' => $signerSignature['document_id'],
-                                                    'documentSigner' => $signerSignature['document_signer_id'],
-                                                    'signature' => $signerSignature['signature_id'],
-                                                ]) }}"
+                                                src="{{ $signerSignatureUrl }}"
                                                 alt="{{ $signerSignature['name'] }}"
                                                 class="mt-1 h-10 w-auto max-w-full object-contain"
                                             >
+                                        @else
+                                            <p class="mt-1 text-[10px] text-amber-700 dark:text-amber-300">{{ __('Signature image unavailable') }}</p>
                                         @endif
                                     </div>
                                 @endforeach

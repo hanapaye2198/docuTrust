@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Payment;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
+use App\Models\Payment;
 
 class NotaryRequestStatusPayloadService
 {
@@ -16,7 +16,7 @@ class NotaryRequestStatusPayloadService
         $notaryRequest->loadMissing([
             'signers',
             'documents.documentSigners',
-            'sessions',
+            'sessions.notarySigner',
             'identityVerifications',
             'payments',
         ]);
@@ -37,7 +37,29 @@ class NotaryRequestStatusPayloadService
             'signers_total' => $doc->documentSigners->filter(fn ($s) => $s->isSigner())->count(),
         ])->values()->all();
 
-        $latestSession = $notaryRequest->sessions->first();
+        $sessions = $notaryRequest->sessions
+            ->sortByDesc(fn ($session) => $session->updated_at?->getTimestamp() ?? 0)
+            ->values()
+            ->map(fn ($session): array => [
+                'id' => $session->id,
+                'status' => $session->status ?? null,
+                'notary_signer_id' => $session->notary_signer_id,
+                'party_name' => $session->notarySigner?->full_name,
+                'signer_confirmed' => (bool) $session->signer_confirmed,
+                'signer_waiting' => $session->status === 'scheduled' && (bool) $session->signer_confirmed,
+                'scheduled_for' => $session->scheduled_for?->toIso8601String(),
+                'started_at' => $session->started_at?->toIso8601String(),
+                'updated_at' => $session->updated_at?->toIso8601String(),
+            ])
+            ->all();
+
+        $highlightedSession = collect($sessions)
+            ->sortBy(fn (array $session): int => match ($session['status'] ?? '') {
+                'in_progress' => 0,
+                default => ($session['signer_waiting'] ?? false) ? 1 : 2,
+            })
+            ->first();
+
         $latestPayment = $notaryRequest->payments
             ->sortByDesc(fn (Payment $payment) => $payment->created_at?->getTimestamp() ?? 0)
             ->first();
@@ -50,11 +72,12 @@ class NotaryRequestStatusPayloadService
             'location_verified_at' => $notaryRequest->location_verified_at?->toIso8601String(),
             'signers' => $signers,
             'documents' => $documents,
-            'session' => $latestSession ? [
-                'id' => $latestSession->id,
-                'status' => $latestSession->status ?? null,
-                'scheduled_for' => $latestSession->scheduled_for?->toIso8601String(),
-            ] : null,
+            'sessions' => $sessions,
+            'waiting_video_parties' => collect($sessions)
+                ->filter(fn (array $session): bool => (bool) ($session['signer_waiting'] ?? false))
+                ->values()
+                ->all(),
+            'session' => $highlightedSession,
             'payment' => $latestPayment ? [
                 'id' => $latestPayment->id,
                 'status' => $latestPayment->status->value,

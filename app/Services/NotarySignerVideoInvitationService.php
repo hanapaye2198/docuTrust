@@ -167,6 +167,10 @@ class NotarySignerVideoInvitationService
                     )?->format('M j, Y g:i A'),
                     'session_id' => $session?->id,
                     'session_status' => $session?->status,
+                    'signer_confirmed' => (bool) ($session?->signer_confirmed ?? false),
+                    'signer_waiting' => $session instanceof NotarySession
+                        && $session->status === 'scheduled'
+                        && (bool) $session->signer_confirmed,
                     'join_url' => $session instanceof NotarySession ? $this->signerVideoJoinUrl($session) : null,
                     'meeting_url' => $session?->meeting_url,
                     'room_name' => $session?->room_name,
@@ -424,8 +428,12 @@ class NotarySignerVideoInvitationService
         return null;
     }
 
-    public function sessionStatusLabel(?string $status): string
+    public function sessionStatusLabel(?string $status, bool $signerWaiting = false): string
     {
+        if ($signerWaiting) {
+            return __('Waiting for attorney');
+        }
+
         return match ($status) {
             'completed' => __('Verified'),
             'in_progress' => __('In progress'),

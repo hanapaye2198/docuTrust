@@ -719,6 +719,62 @@ class NotaryRequestWorkflowService
             && $request->documents->every(fn (Document $document): bool => $document->status === DocumentStatus::Completed);
     }
 
+    /**
+     * @return list<array{key: string, label: string, complete: bool}>
+     */
+    public function digitalizePrerequisites(NotaryRequest $request): array
+    {
+        $request->loadMissing(['documents', 'registerEntries', 'attorneyNotarialRegistry', 'payments']);
+        $paymentRequired = $this->paymentRequired($request);
+
+        $prerequisites = [
+            [
+                'key' => 'attorney_signed',
+                'label' => __('Attorney signed the instrument'),
+                'complete' => $this->hasAttorneySignedAllDocuments($request),
+            ],
+            [
+                'key' => 'fee',
+                'label' => __('Notarial fee configured'),
+                'complete' => $this->hasSettlementFeeConfigured($request),
+            ],
+        ];
+
+        if ($paymentRequired) {
+            $prerequisites[] = [
+                'key' => 'payment',
+                'label' => __('Client payment received'),
+                'complete' => $this->hasSettledPayment($request),
+            ];
+        }
+
+        $prerequisites[] = [
+            'key' => 'registry_draft',
+            'label' => __('Notarial register draft complete'),
+            'complete' => $this->hasPreparedRegistryDraft($request),
+        ];
+        $prerequisites[] = [
+            'key' => 'seal',
+            'label' => __('Attorney seal uploaded'),
+            'complete' => $this->hasAttorneySealOnFile($request),
+        ];
+        $prerequisites[] = [
+            'key' => 'register_entry',
+            'label' => __('Official register entry created'),
+            'complete' => $request->registerEntries->isNotEmpty(),
+        ];
+        $prerequisites[] = [
+            'key' => 'final_document',
+            'label' => __('Final document artifacts ready'),
+            'complete' => $request->documents->isNotEmpty()
+                && $request->documents->every(
+                    fn (Document $document): bool => $document->status === DocumentStatus::Completed
+                ),
+        ];
+
+        return $prerequisites;
+    }
+
     public function paymentRequired(NotaryRequest $request): bool
     {
         $request->loadMissing(['registerEntries', 'attorneyNotarialRegistry']);
@@ -1093,7 +1149,7 @@ class NotaryRequestWorkflowService
         return $request->fresh();
     }
 
-    private function digitalizeBlockingMessage(NotaryRequest $request): string
+    public function digitalizeBlockingMessage(NotaryRequest $request): string
     {
         if (! $this->hasAttorneySignedAllDocuments($request)) {
             return __('This notarization is not ready for digital notarization. The attorney must finish signing first.');

@@ -6,11 +6,14 @@ use App\Models\NotaryRequest;
 use App\Services\AttorneyNotarialRegistryService;
 use App\Services\NotaryRequestWorkflowService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 
 new #[Layout('components.layouts.app')] class extends Component {
+    use WithFileUploads;
     public NotaryRequest $notaryRequest;
 
     public string $title = '';
@@ -40,8 +43,11 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public int $verifiedIdentityCount = 0;
 
-    /** @var list<array{document_signer_id: int, document_id: int, signature_id: int, name: string, signature_path: string|null}> */
+    /** @var list<array{document_signer_id: int, document_id: int, signature_id: int, signature_field_id: int|null, name: string, signature_path: string|null}> */
     public array $signerSignatures = [];
+
+    /** @var array<int, mixed> */
+    public array $evidenceUploads = [];
 
     public bool $orEditable = false;
 
@@ -103,6 +109,62 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->witnesses = array_values($this->witnesses);
     }
 
+    public function updatedEvidenceUploads(mixed $value, string $key): void
+    {
+        $index = (int) $key;
+        $file = $this->evidenceUploads[$index] ?? null;
+        if ($file === null) {
+            return;
+        }
+
+        $this->validate([
+            "evidenceUploads.{$index}" => ['required', 'image', 'max:5120'],
+        ]);
+
+        $user = Auth::user();
+        abort_unless($user !== null && $user->role === UserRole::Notary, 403);
+
+        $registryService = app(AttorneyNotarialRegistryService::class);
+        $previousPath = is_string($this->competentEvidence[$index]['id_image_path'] ?? null)
+            ? $this->competentEvidence[$index]['id_image_path']
+            : null;
+
+        $path = $registryService->storeEvidenceImage($this->notaryRequest, $user, $index, $file);
+
+        if (isset($this->competentEvidence[$index])) {
+            $this->competentEvidence[$index]['id_image_path'] = $path;
+            $this->competentEvidence[$index]['verification_id'] = null;
+        }
+
+        if ($previousPath !== null && $previousPath !== $path) {
+            $disk = Storage::disk((string) config('filesystems.docutrust_disk', 'local'));
+            if ($disk->exists($previousPath)) {
+                $disk->delete($previousPath);
+            }
+        }
+
+        unset($this->evidenceUploads[$index]);
+    }
+
+    public function removeEvidenceImage(int $index): void
+    {
+        $path = is_string($this->competentEvidence[$index]['id_image_path'] ?? null)
+            ? $this->competentEvidence[$index]['id_image_path']
+            : null;
+
+        if ($path !== null) {
+            $disk = Storage::disk((string) config('filesystems.docutrust_disk', 'local'));
+            if ($disk->exists($path)) {
+                $disk->delete($path);
+            }
+        }
+
+        if (isset($this->competentEvidence[$index])) {
+            $this->competentEvidence[$index]['id_image_path'] = null;
+            $this->competentEvidence[$index]['verification_id'] = null;
+        }
+    }
+
     public function save(): void
     {
         $user = Auth::user();
@@ -142,6 +204,23 @@ new #[Layout('components.layouts.app')] class extends Component {
             'competentEvidence.*.id_number' => ['required', 'string', 'max:100'],
         ]);
 
+        $competentEvidence = collect($this->competentEvidence)
+            ->values()
+            ->map(function (array $row, int $index) use ($validated): array {
+                $fields = $validated['competentEvidence'][$index] ?? [];
+
+                return [
+                    'person_name' => trim((string) ($fields['person_name'] ?? $row['person_name'] ?? '')),
+                    'id_type' => trim((string) ($fields['id_type'] ?? $row['id_type'] ?? '')),
+                    'id_number' => trim((string) ($fields['id_number'] ?? $row['id_number'] ?? '')),
+                    'verification_id' => isset($row['verification_id']) ? (int) $row['verification_id'] : null,
+                    'id_image_path' => isset($row['id_image_path']) && is_string($row['id_image_path'])
+                        ? $row['id_image_path']
+                        : null,
+                ];
+            })
+            ->all();
+
         $registryService->saveDraft($this->notaryRequest, $user, [
             'title' => $validated['title'],
             'notarial_act_type' => $validated['notarialActType'],
@@ -149,7 +228,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'official_receipt_no' => $this->orEditable ? ($validated['officialReceiptNo'] ?? null) : null,
             'parties' => $validated['parties'],
             'witnesses' => $validated['witnesses'] ?? [],
-            'competent_evidence' => $validated['competentEvidence'],
+            'competent_evidence' => $competentEvidence,
         ]);
 
         session()->flash('status', __('Register entry saved. Upload your seal and create the official book entry when ready.'));

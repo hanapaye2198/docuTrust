@@ -36,6 +36,11 @@ new #[Layout('components.layouts.app')] class extends Component {
      */
     public array $signers = [];
 
+    /**
+     * @var array<int, bool>
+     */
+    public array $openSignerPanels = [];
+
     public function mount(): void
     {
         $this->signers = [];
@@ -62,6 +67,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function addSignerRow(): void
     {
+        $index = count($this->signers);
         $this->signers[] = [
             'full_name' => '',
             'email' => '',
@@ -69,12 +75,35 @@ new #[Layout('components.layouts.app')] class extends Component {
             'address' => '',
             'role' => 'signer',
         ];
+        $this->openSignerPanels[$index] = true;
     }
 
     public function removeSignerRow(int $index): void
     {
+        $remainingOpenStates = [];
+        foreach ($this->signers as $rowIndex => $signer) {
+            if ($rowIndex === $index) {
+                continue;
+            }
+
+            $remainingOpenStates[] = (bool) ($this->openSignerPanels[$rowIndex] ?? false);
+        }
+
         unset($this->signers[$index]);
         $this->signers = array_values($this->signers);
+        $this->openSignerPanels = array_combine(
+            range(0, max(count($this->signers) - 1, 0)),
+            $remainingOpenStates,
+        ) ?: [];
+    }
+
+    public function updatedSigners(mixed $value, string $key): void
+    {
+        if (preg_match('/^(\d+)\./', $key, $matches) !== 1) {
+            return;
+        }
+
+        $this->openSignerPanels[(int) $matches[1]] = true;
     }
 
     public function removeCaseDocument(): void
@@ -753,7 +782,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 <details
                                     class="group rounded-xl border border-zinc-200/80 bg-zinc-50/50 dark:border-zinc-700/60 dark:bg-zinc-800/30"
                                     wire:key="signer-{{ $index }}"
-                                    @if ($loop->first) open @endif
+                                    @if ($openSignerPanels[$index] ?? $loop->first) open @endif
                                 >
                                     <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 marker:content-none">
                                         <div class="flex min-w-0 items-center gap-2">
@@ -778,7 +807,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     <div class="grid gap-4 border-t border-zinc-200/80 px-5 pb-5 pt-4 md:grid-cols-2 xl:grid-cols-3 dark:border-zinc-700/60">
                                         <flux:field class="md:col-span-2 xl:col-span-1">
                                             <flux:label>{{ __('Full name') }}</flux:label>
-                                            <flux:input type="text" wire:model.live="signers.{{ $index }}.full_name" placeholder="{{ __('Juan Dela Cruz') }}" />
+                                            <flux:input type="text" wire:model.blur="signers.{{ $index }}.full_name" placeholder="{{ __('Juan Dela Cruz') }}" />
                                             <flux:error name="signers.{{ $index }}.full_name" />
                                         </flux:field>
                                         <flux:field>

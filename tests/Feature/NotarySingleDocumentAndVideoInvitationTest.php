@@ -7,6 +7,10 @@ use App\Enums\DocumentStatus;
 use App\Enums\NotaryRequestStatus;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSignerCompleted;
+use App\Events\NotaryRequestDigitalized;
+use App\Jobs\SendDocumentEmailJob;
+use App\Mail\NotaryRequestDigitalizedPartyMail;
+use App\Mail\NotarySessionVerificationCompleteMail;
 use App\Mail\NotarySignerVideoInvitationMail;
 use App\Models\Document;
 use App\Models\DocumentSigner;
@@ -15,9 +19,11 @@ use App\Models\NotarySigner;
 use App\Models\SignatureField;
 use App\Models\User;
 use App\Services\NotaryRequestWorkflowService;
+use App\Services\NotarySchedulingService;
 use App\Services\NotarySignerVideoInvitationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Volt\Volt as LivewireVolt;
 use Tests\TestCase;
 
@@ -125,6 +131,92 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
         $response = $this->get(route('enotary.video.join', ['token' => $session->access_token]));
 
         $response->assertRedirect('https://meet.jit.si/docutrust-test-room');
+        $this->assertTrue($session->fresh()->signer_confirmed);
+    }
+
+    public function test_status_payload_reports_signer_waiting_after_video_join(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Waiting Signer',
+        ]);
+
+        $session = $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'scheduled',
+            'room_name' => 'docutrust-wait-room',
+            'meeting_url' => 'https://meet.jit.si/docutrust-wait-room',
+            'access_token' => 'wait-token-456',
+            'scheduled_for' => now()->addDay(),
+        ]);
+
+        $this->get(route('enotary.video.join', ['token' => $session->access_token]));
+
+        $this->actingAs($notary);
+
+        $response = $this->getJson(route('api.notary-requests.status', $request));
+
+        $response->assertOk();
+        $response->assertJsonPath('waiting_video_parties.0.id', $session->id);
+        $response->assertJsonPath('waiting_video_parties.0.party_name', 'Waiting Signer');
+        $response->assertJsonPath('waiting_video_parties.0.signer_waiting', true);
+    }
+
+    public function test_session_complete_emails_signer_video_verification_confirmation(): void
+    {
+        Mail::fake();
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionInProgress,
+        ]);
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'verified-signer@example.test',
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $party->email,
+            'name' => $party->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $session = $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'in_progress',
+            'room_name' => 'docutrust-verify-room',
+            'meeting_url' => 'https://meet.jit.si/docutrust-verify-room',
+            'access_token' => 'verify-token-789',
+            'scheduled_for' => now(),
+            'started_at' => now(),
+        ]);
+
+        app(NotarySchedulingService::class)->complete($session, [
+            'face_matches_id' => true,
+            'id_valid_not_expired' => true,
+            'signer_conscious_aware' => true,
+            'signer_agrees_voluntarily' => true,
+            'signer_in_philippines' => true,
+            'id_shown_on_camera' => true,
+        ]);
+
+        Mail::assertQueued(NotarySessionVerificationCompleteMail::class, function (NotarySessionVerificationCompleteMail $mail) use ($party): bool {
+            return $mail->hasTo($party->email);
+        });
     }
 
     public function test_send_linked_document_submits_draft_request(): void
@@ -554,5 +646,91 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
             ->assertSee('Alice Signer')
             ->assertSee(__('Join your video call'))
             ->assertDontSee(__('Sessions'));
+    }
+
+    public function test_enotary_document_completed_sends_signing_recorded_email_not_completed_email(): void
+    {
+        Queue::fake();
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::Submitted,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $partyA = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'alice@example.test',
+        ]);
+        $partyB = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'bob@example.test',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $partyA->email,
+            'name' => $partyA->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $partyB->email,
+            'name' => $partyB->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        event(new DocumentCompleted($document->fresh()->load('documentSigners', 'user')));
+
+        Queue::assertNotPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job): bool {
+            return $job->type === SendDocumentEmailJob::TYPE_COMPLETED;
+        });
+
+        Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($partyA): bool {
+            return $job->type === SendDocumentEmailJob::TYPE_NOTARY_SIGNING_RECORDED
+                && $job->recipientEmail === $partyA->email;
+        });
+
+        Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($partyB): bool {
+            return $job->type === SendDocumentEmailJob::TYPE_NOTARY_SIGNING_RECORDED
+                && $job->recipientEmail === $partyB->email;
+        });
+
+        $this->assertDatabaseHas('app_notifications', [
+            'user_id' => $notary->id,
+            'type' => 'document.notary_signing_complete',
+        ]);
+    }
+
+    public function test_digitalized_notary_request_emails_parties_their_notarized_copy(): void
+    {
+        Mail::fake();
+
+        $requester = User::factory()->create(['email' => 'requester@example.test']);
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::Digitalized,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $party = DocumentSigner::factory()->for($document)->create([
+            'email' => 'party@example.test',
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        event(new NotaryRequestDigitalized($request->fresh()->load(['requester', 'notary', 'documents.documentSigners'])));
+
+        Mail::assertQueued(NotaryRequestDigitalizedPartyMail::class, function (NotaryRequestDigitalizedPartyMail $mail) use ($party): bool {
+            return $mail->hasTo($party->email);
+        });
     }
 }

@@ -11,11 +11,14 @@ use App\Events\NotarySessionScheduled;
 use App\Mail\NotaryPaymentReadyMail;
 use App\Mail\NotaryRequestApprovedMail;
 use App\Mail\NotaryRequestDigitalizedMail;
+use App\Mail\NotaryRequestDigitalizedPartyMail;
 use App\Mail\NotaryRequestNotarizedMail;
 use App\Mail\NotaryRequestSubmittedMail;
 use App\Mail\NotarySessionScheduledMail;
+use App\Mail\NotarySessionVerificationCompleteMail;
 use App\Models\AppNotification;
 use App\Models\NotaryRequest;
+use App\Models\NotarySession;
 use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
@@ -66,6 +69,34 @@ class NotaryNotificationService
         }
     }
 
+    public function notifyVideoVerificationCompleted(NotarySession $session): void
+    {
+        $session->loadMissing(['notaryRequest.notary', 'notarySigner']);
+        $request = $session->notaryRequest;
+        $signer = $session->notarySigner;
+
+        if ($request === null || $signer === null) {
+            return;
+        }
+
+        $email = trim((string) $signer->email);
+        if ($email === '') {
+            return;
+        }
+
+        Mail::to($email)->queue(new NotarySessionVerificationCompleteMail($request, $session, $signer));
+
+        if ($signer->user_id !== null) {
+            $this->createInAppNotification(
+                $signer->user_id,
+                'notary.video_verified',
+                __('Your identity was verified on video for ":title".', [
+                    'title' => $request->title,
+                ]),
+            );
+        }
+    }
+
     public function handleRequestApproved(NotaryRequestApproved $event): void
     {
         $request = $event->notaryRequest->loadMissing(['requester', 'notary']);
@@ -79,11 +110,14 @@ class NotaryNotificationService
 
     public function handleRequestDigitalized(NotaryRequestDigitalized $event): void
     {
-        $request = $event->notaryRequest->loadMissing(['requester', 'notary']);
+        $request = $event->notaryRequest->loadMissing(['requester', 'notary', 'documents.documentSigners']);
+
+        $emailedAddresses = [];
 
         if ($request->requester !== null && $request->requester->email !== '') {
             Mail::to($request->requester->email)
                 ->queue(new NotaryRequestDigitalizedMail($request));
+            $emailedAddresses[] = strtolower($request->requester->email);
         }
 
         User::query()
@@ -94,6 +128,22 @@ class NotaryNotificationService
             ->each(function (string $email) use ($request): void {
                 Mail::to($email)->queue(new NotaryRequestDigitalizedMail($request));
             });
+
+        foreach ($request->documents as $document) {
+            foreach ($document->documentSigners as $signer) {
+                if (! $signer->requiresAction() || ! $signer->status->isCompleted()) {
+                    continue;
+                }
+
+                $email = strtolower(trim((string) $signer->email));
+                if ($email === '' || in_array($email, $emailedAddresses, true)) {
+                    continue;
+                }
+
+                Mail::to($signer->email)->queue(new NotaryRequestDigitalizedPartyMail($request, $signer));
+                $emailedAddresses[] = $email;
+            }
+        }
     }
 
     public function handleRequestNotarized(NotaryRequestNotarized $event): void

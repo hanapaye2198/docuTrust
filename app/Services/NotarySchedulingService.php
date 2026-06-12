@@ -244,6 +244,10 @@ class NotarySchedulingService
 
         $session = $session->fresh();
 
+        app(NotaryNotificationService::class)->notifyVideoVerificationCompleted(
+            $session->loadMissing(['notaryRequest', 'notarySigner']),
+        );
+
         event(new NotaryRequestStatusUpdated($session->notary_request_id));
 
         return $session;
