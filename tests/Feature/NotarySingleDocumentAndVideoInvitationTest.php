@@ -505,6 +505,46 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
             ->assertSee(route('notary.requests.session.live', [$request, $session]), false);
     }
 
+    public function test_case_page_renders_case_progress_and_video_workspace_once(): void
+    {
+        Mail::fake();
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Single Render Signer',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $party->email,
+            'name' => $party->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        app(NotarySignerVideoInvitationService::class)
+            ->inviteAllSignersWhenReady($request->fresh(['signers', 'sessions', 'notary', 'documents.documentSigners']));
+
+        $response = $this->actingAs($notary)
+            ->get(route('notary.requests.show', ['notaryRequest' => $request->fresh(), 'tab' => 'session']));
+
+        $response->assertOk();
+        $this->assertSame(1, substr_count($response->getContent(), 'Case progress'));
+        $this->assertSame(1, substr_count($response->getContent(), 'Video verification'));
+        $response->assertSee('Prepare the document')
+            ->assertSee('Wait for signers')
+            ->assertSee('Set the fee amount');
+    }
+
     public function test_primary_action_links_to_live_session_when_video_room_is_ready(): void
     {
         $notary = User::factory()->notary()->create();

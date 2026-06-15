@@ -148,12 +148,6 @@
             window.docutrustScrollToSectionWithRetry(targetId, 96, shouldReset);
             window.docutrustHighlightSettlementNavTarget(targetId);
         });
-
-        window.addEventListener('notary-status-updated', () => {
-            if (window.Livewire?.dispatch) {
-                window.Livewire.dispatch('notary-status-updated-livewire');
-            }
-        });
     }
 
     window.docutrustInitSettlementScrollSpy();

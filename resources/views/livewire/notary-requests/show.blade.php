@@ -371,9 +371,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             )->filter(fn (array $party): bool => (bool) ($party['signer_waiting'] ?? false))->values()->all(),
             'paymentRequired' => $workflow->paymentRequired($this->notaryRequest),
             'hasSettledPayment' => $workflow->hasSettledPayment($this->notaryRequest),
-            'workflowSteps' => $user->role->value === 'notary'
-                ? $workflow->attorneyMilestoneSteps($this->notaryRequest)
-                : $workflow->workflowSteps($this->notaryRequest),
+            'workflowSteps' => $workflow->workflowSteps($this->notaryRequest),
             'requestDocuments' => $requestDocuments,
             'recentSessions' => $this->notaryRequest->sessions,
             'partiesForVideo' => (bool) config('docutrust.notary.require_video_session', true)
@@ -1731,11 +1729,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function notaryCaseProgress(): array
     {
-        $workflow = app(NotaryRequestWorkflowService::class);
-        $user = Auth::user();
-        $steps = $user !== null && $user->role->value === 'notary'
-            ? $workflow->attorneyMilestoneSteps($this->notaryRequest)
-            : $workflow->workflowSteps($this->notaryRequest);
+        $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($this->notaryRequest);
         $completed = collect($steps)->where('state', 'complete')->count();
         $currentIndex = collect($steps)->search(fn (array $step): bool => ($step['state'] ?? '') === 'current');
 
@@ -2277,8 +2271,10 @@ new #[Layout('components.layouts.app')] class extends Component {
 @php
     $renderTaskFocusedLayout = Auth::user()?->role === \App\Enums\UserRole::Notary;
 @endphp
+<div wire:key="notary-case-shell-{{ $notaryRequest->id }}">
 @if ($renderTaskFocusedLayout)
     @include('livewire.notary-requests.show.task-focused')
 @else
     @include('livewire.notary-requests.show.legacy-layout')
 @endif
+</div>

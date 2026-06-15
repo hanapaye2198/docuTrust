@@ -175,26 +175,23 @@ function createStatusPoll(cfgEl) {
         currentPaymentFingerprint = nextPaymentFingerprint;
         currentVideoFingerprint = nextVideoFingerprint;
 
-        // Update status badges
+        const needsLivewireRefresh = videoChanged || paymentChanged || hasSignerChanges(data);
+
+        if (needsLivewireRefresh) {
+            if (window.Livewire?.dispatch) {
+                window.Livewire.dispatch('notary-status-updated-livewire');
+            }
+
+            if (['notarized', 'rejected', 'failed', 'cancelled'].includes(newStatus)) {
+                stop();
+            }
+
+            return;
+        }
+
+        // Lightweight DOM-only updates for status-only changes.
         updateStatusBadges(newStatus);
 
-        // Update signer statuses
-        updateSignerStatuses(data.signers || []);
-
-        // Update document progress
-        updateDocumentProgress(data.documents || []);
-
-        // Update session info
-        updateSessionInfo(data.session);
-
-        updateWaitingVideoParties(data.waiting_video_parties || []);
-
-        // Dispatch a custom event for Livewire components to listen to
-        window.dispatchEvent(new CustomEvent('notary-status-updated', {
-            detail: data,
-        }));
-
-        // If status reached a terminal state, slow down polling
         if (['notarized', 'rejected', 'failed', 'cancelled'].includes(newStatus)) {
             stop();
         }

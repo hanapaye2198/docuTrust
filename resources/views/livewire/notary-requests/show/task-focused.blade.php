@@ -3,7 +3,7 @@
     $primaryAction = $this->primaryCaseAction;
 @endphp
 
-<x-admin.page class="h-full flex-1 pb-24 xl:pb-0" gap="gap-6" wide>
+<x-admin.page class="h-full flex-1 pb-24 xl:pb-0" gap="gap-6" wide wire:key="notary-case-page-{{ $notaryRequest->id }}">
     @if (session('status'))
         <div class="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-base font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200">
             <flux:icon.check class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -65,7 +65,7 @@
     @include('livewire.notary-requests.show.partials.do-this-now-card', ['primaryAction' => $primaryAction])
 
     <div class="grid items-start gap-6 xl:grid-cols-12 xl:gap-8" wire:key="case-workspace-{{ $notaryRequest->id }}">
-        <aside class="hidden xl:col-span-3 xl:block xl:sticky xl:top-4 xl:self-start">
+        <aside class="order-first xl:col-span-3 xl:sticky xl:top-4 xl:self-start">
             @include('livewire.notary-requests.show.partials.case-workflow-sidebar')
         </aside>
 
