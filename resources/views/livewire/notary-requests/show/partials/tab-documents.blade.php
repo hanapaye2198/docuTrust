@@ -29,16 +29,9 @@
                             @endif
                         </p>
                         @if ($joinableVideoParties->isNotEmpty())
-                            <div class="mt-3 flex flex-wrap items-center gap-2">
-                                @foreach ($joinableVideoParties as $party)
-                                    @include('livewire.notary-requests.show.partials.video-join-link', [
-                                        'notaryRequest' => $notaryRequest,
-                                        'sessionId' => $party['session_id'],
-                                        'label' => __('Join call with :name', ['name' => $party['full_name']]),
-                                    ])
-                                @endforeach
+                            <div class="mt-3">
                                 <flux:button
-                                    variant="outline"
+                                    variant="primary"
                                     size="sm"
                                     type="button"
                                     wire:click="setActiveTab('session')"

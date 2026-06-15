@@ -357,6 +357,47 @@ class NotaryRequestWorkflowTest extends TestCase
         $this->assertSame($settlementLabels, $closingWorkflowLabels);
     }
 
+    public function test_attorney_milestone_steps_condense_sidebar_to_match_tabs(): void
+    {
+        $requester = User::factory()->create();
+        $request = NotaryRequest::factory()->for($requester)->create([
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $milestones = app(NotaryRequestWorkflowService::class)->attorneyMilestoneSteps($request);
+
+        $this->assertCount(4, $milestones);
+        $this->assertSame('Prepare & collect signatures', $milestones[0]['label']);
+        $this->assertSame('Verify client on video', $milestones[1]['label']);
+        $this->assertSame('Sign as attorney', $milestones[2]['label']);
+        $this->assertSame('Fees & register', $milestones[3]['label']);
+        $this->assertSame('current', $milestones[1]['state']);
+    }
+
+    public function test_payment_step_stays_upcoming_during_video_when_fee_not_required(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $paymentStep = collect(app(NotaryRequestWorkflowService::class)->workflowSteps($request))
+            ->firstWhere('label', 'Client pays the fee');
+
+        $this->assertSame('upcoming', $paymentStep['state']);
+    }
+
     public function test_settlement_fee_step_is_current_after_attorney_signing_without_fee(): void
     {
         $notary = User::factory()->notary()->create();

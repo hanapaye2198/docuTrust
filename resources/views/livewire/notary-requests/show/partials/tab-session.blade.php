@@ -14,6 +14,21 @@
                     @endif
                 </p>
 
+                @if ($isNotary && ($videoWaitingParties ?? []) !== [])
+                    <div
+                        data-video-waiting-banner
+                        class="mb-4 rounded-xl border-2 border-sky-400 bg-sky-100 px-4 py-3 text-sm text-sky-950 dark:border-sky-600 dark:bg-sky-950/50 dark:text-sky-50"
+                    >
+                        <div class="font-semibold">
+                            {{ trans_choice(':count signer is|:count signers are', count($videoWaitingParties), ['count' => count($videoWaitingParties)]) }}
+                            {{ __('waiting in the video room') }}
+                        </div>
+                        <p class="mt-1">
+                            <span data-video-waiting-names>{{ collect($videoWaitingParties)->pluck('full_name')->join(', ') }}</span>
+                        </p>
+                    </div>
+                @endif
+
                 @if (($usesPerSignerVideo ?? false) && $isNotary && ! $videoVerificationComplete)
                     <div class="mb-4 flex flex-wrap items-center gap-2">
                         <button

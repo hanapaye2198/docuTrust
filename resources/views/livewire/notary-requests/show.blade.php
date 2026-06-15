@@ -371,7 +371,9 @@ new #[Layout('components.layouts.app')] class extends Component {
             )->filter(fn (array $party): bool => (bool) ($party['signer_waiting'] ?? false))->values()->all(),
             'paymentRequired' => $workflow->paymentRequired($this->notaryRequest),
             'hasSettledPayment' => $workflow->hasSettledPayment($this->notaryRequest),
-            'workflowSteps' => $workflow->workflowSteps($this->notaryRequest),
+            'workflowSteps' => $user->role->value === 'notary'
+                ? $workflow->attorneyMilestoneSteps($this->notaryRequest)
+                : $workflow->workflowSteps($this->notaryRequest),
             'requestDocuments' => $requestDocuments,
             'recentSessions' => $this->notaryRequest->sessions,
             'partiesForVideo' => (bool) config('docutrust.notary.require_video_session', true)
@@ -1729,16 +1731,42 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function notaryCaseProgress(): array
     {
-        $steps = app(NotaryRequestWorkflowService::class)->workflowSteps($this->notaryRequest);
+        $workflow = app(NotaryRequestWorkflowService::class);
+        $user = Auth::user();
+        $steps = $user !== null && $user->role->value === 'notary'
+            ? $workflow->attorneyMilestoneSteps($this->notaryRequest)
+            : $workflow->workflowSteps($this->notaryRequest);
         $completed = collect($steps)->where('state', 'complete')->count();
-        $current = collect($steps)->first(fn (array $step): bool => ($step['state'] ?? '') === 'current');
+        $currentIndex = collect($steps)->search(fn (array $step): bool => ($step['state'] ?? '') === 'current');
+
+        if ($currentIndex === false) {
+            $currentIndex = collect($steps)->search(fn (array $step): bool => ($step['state'] ?? '') !== 'complete');
+        }
+
+        $current = $currentIndex !== false ? $steps[$currentIndex] : null;
 
         return [
             'total' => count($steps),
             'completed' => $completed,
-            'step_number' => min($completed + 1, max(count($steps), 1)),
+            'step_number' => $currentIndex !== false ? $currentIndex + 1 : max(count($steps), 1),
             'current_label' => is_array($current) ? (string) ($current['label'] ?? '') : '',
         ];
+    }
+
+    #[Computed]
+    public function suppressPrimaryActionProminence(): bool
+    {
+        $action = $this->primaryCaseAction;
+        if ($action === null || $this->activeTab !== 'session') {
+            return false;
+        }
+
+        if (($action['type'] ?? '') === 'link' && ($action['tab'] ?? '') === 'session') {
+            return true;
+        }
+
+        return ($action['type'] ?? '') === 'wire'
+            && ($action['action'] ?? '') === 'openVideoSessionWorkspace';
     }
 
     #[Computed]

@@ -3,7 +3,7 @@
     $progress = $this->notaryCaseProgress;
 @endphp
 
-@if ($primaryAction)
+@if ($primaryAction && ! $this->suppressPrimaryActionProminence)
     <div class="ui-panel border-sky-300/80 bg-sky-50/80 p-5 sm:p-6 dark:border-sky-800/60 dark:bg-sky-950/30">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="min-w-0 flex-1 space-y-2">
@@ -33,7 +33,7 @@
                     </div>
                 @endif
 
-                @if ($isNotary && $videoWaitingParties !== [])
+                @if ($isNotary && $videoWaitingParties !== [] && $activeTab !== 'session')
                     <div
                         data-video-waiting-banner
                         class="rounded-xl border-2 border-sky-400 bg-sky-100 px-4 py-3 text-sm text-sky-950 dark:border-sky-600 dark:bg-sky-950/50 dark:text-sky-50"

@@ -138,9 +138,11 @@ class NotaryRequestWorkflowService
             return $current ? 'current' : 'upcoming';
         };
 
-        $feeComplete = $hasFeeConfigured;
-        $feeCurrent = $attorneyHasSigned && ! $hasFeeConfigured;
-        $paymentComplete = ! $paymentRequired || $hasSettledPayment;
+        $feeComplete = $hasFeeConfigured || (! $paymentRequired && $attorneyHasSigned);
+        $feeCurrent = $paymentRequired && $attorneyHasSigned && ! $hasFeeConfigured;
+        $paymentComplete = $paymentRequired
+            ? $hasSettledPayment
+            : ($attorneyHasSigned || $isNotarized || $isDigitalized);
         $paymentCurrent = $paymentRequired && $hasFeeConfigured && ! $hasSettledPayment && $attorneyHasSigned;
         $registryDraftComplete = $hasPreparedDraft;
         $registryDraftCurrent = $canAccessRegistry && ! $hasPreparedDraft;
@@ -209,7 +211,11 @@ class NotaryRequestWorkflowService
             [
                 'label' => __('Client pays the fee'),
                 'description' => __('The client pays using the amount you set.'),
-                'state' => $resolveState($paymentComplete, $paymentCurrent, ! $hasFeeConfigured || ! $paymentRequired),
+                'state' => $resolveState(
+                    $paymentComplete,
+                    $paymentCurrent,
+                    $paymentRequired && (! $hasFeeConfigured || ! $attorneyHasSigned),
+                ),
             ],
             [
                 'label' => __('Fill notarial book'),
@@ -236,6 +242,63 @@ class NotaryRequestWorkflowService
                 'description' => __('Add your seal, QR code, certificate, and timestamp to finish.'),
                 'state' => $resolveState($digitalComplete, $digitalCurrent, ! $hasRegisterEntry),
             ],
+        ];
+    }
+
+    /**
+     * Condensed attorney-facing milestones aligned with the case workspace tabs.
+     *
+     * @return list<array{label: string, description: string, state: string}>
+     */
+    public function attorneyMilestoneSteps(NotaryRequest $request): array
+    {
+        $steps = $this->workflowSteps($request);
+
+        return [
+            $this->combineWorkflowSteps(
+                $steps,
+                [0, 1],
+                __('Prepare & collect signatures'),
+                __('Upload the document, add signers, and collect signatures.'),
+            ),
+            $steps[2],
+            $steps[3],
+            $this->combineWorkflowSteps(
+                $steps,
+                range(4, 10),
+                __('Fees & register'),
+                __('Set the fee, collect payment, complete the notarial book, and apply your seal and certificate.'),
+            ),
+        ];
+    }
+
+    /**
+     * @param  list<array{label: string, description: string, state: string}>  $steps
+     * @param  list<int>  $indices
+     * @return array{label: string, description: string, state: string}
+     */
+    private function combineWorkflowSteps(array $steps, array $indices, string $label, string $description): array
+    {
+        $subset = collect($indices)
+            ->map(fn (int $index): ?array => $steps[$index] ?? null)
+            ->filter()
+            ->values();
+
+        $states = $subset->pluck('state');
+
+        $state = match (true) {
+            $subset->isEmpty() => 'upcoming',
+            $states->every(fn (string $stepState): bool => $stepState === 'complete') => 'complete',
+            $states->contains('current') => 'current',
+            $states->contains('blocked') => 'blocked',
+            $states->contains('complete') => 'current',
+            default => 'upcoming',
+        };
+
+        return [
+            'label' => $label,
+            'description' => $description,
+            'state' => $state,
         ];
     }
 
@@ -557,9 +620,11 @@ class NotaryRequestWorkflowService
             return $current ? 'current' : 'upcoming';
         };
 
-        $feeComplete = $hasFeeConfigured;
-        $feeCurrent = $attorneyHasSigned && ! $hasFeeConfigured;
-        $paymentComplete = ! $paymentRequired || $hasSettledPayment;
+        $feeComplete = $hasFeeConfigured || (! $paymentRequired && $attorneyHasSigned);
+        $feeCurrent = $paymentRequired && $attorneyHasSigned && ! $hasFeeConfigured;
+        $paymentComplete = $paymentRequired
+            ? $hasSettledPayment
+            : ($attorneyHasSigned || $isDigitalized);
         $paymentCurrent = $paymentRequired && $hasFeeConfigured && ! $hasSettledPayment && $attorneyHasSigned;
         $registryDraftComplete = $hasPreparedDraft;
         $registryDraftCurrent = $canAccessRegistry && ! $hasPreparedDraft;
@@ -573,7 +638,11 @@ class NotaryRequestWorkflowService
         $digitalCurrent = $canDigitalize && ! $isDigitalized;
 
         $feeState = $resolveState($feeComplete, $feeCurrent, ! $attorneyHasSigned);
-        $paymentState = $resolveState($paymentComplete, $paymentCurrent, ! $hasFeeConfigured || ! $paymentRequired);
+        $paymentState = $resolveState(
+            $paymentComplete,
+            $paymentCurrent,
+            $paymentRequired && (! $hasFeeConfigured || ! $attorneyHasSigned),
+        );
         $registryDraftState = $resolveState($registryDraftComplete, $registryDraftCurrent, ! $canAccessRegistry);
         $sealState = $resolveState($sealComplete, $sealCurrent, ! $attorneyHasSigned);
         $registerState = $resolveState($registerComplete, $registerCurrent, ! $attorneyHasSigned);

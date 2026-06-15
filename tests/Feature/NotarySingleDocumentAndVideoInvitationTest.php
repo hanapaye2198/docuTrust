@@ -453,9 +453,56 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
             ->call('setActiveTab', 'documents')
-            ->assertSee('Join call with Waiting Signer')
+            ->assertSee('Open video workspace')
             ->assertSee('Join video call')
+            ->assertDontSee('Join call with Waiting Signer')
             ->assertSee(route('notary.requests.session.live', [$request, $request->sessions()->first()]), false);
+    }
+
+    public function test_session_tab_hides_duplicate_primary_action_banner(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'full_name' => 'Queue Signer',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $party->email,
+            'name' => $party->full_name,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $session = $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'scheduled',
+            'room_name' => 'docutrust-queue-room',
+            'meeting_url' => 'https://meet.jit.si/docutrust-queue-room',
+            'access_token' => 'queue-video-token',
+            'scheduled_for' => now()->addHour(),
+            'invitation_sent_at' => now(),
+        ]);
+
+        $this->actingAs($notary);
+
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
+            ->set('activeTab', 'session')
+            ->assertDontSee(__('Your next step'))
+            ->assertDontSee(__('Next up'))
+            ->assertSee('Queue Signer')
+            ->assertSee(route('notary.requests.session.live', [$request, $session]), false);
     }
 
     public function test_primary_action_links_to_live_session_when_video_room_is_ready(): void
@@ -484,7 +531,8 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
         $this->actingAs($notary);
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
-            ->assertSee('Join video call')
+            ->set('activeTab', 'session')
+            ->assertSee('Ready Signer')
             ->assertSee(route('notary.requests.session.live', [$request, $session]), false);
     }
 
