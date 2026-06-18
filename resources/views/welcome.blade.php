@@ -1720,7 +1720,7 @@ footer{
     </div>
     <div style="max-width:1100px;margin:0 auto;border-radius:20px;overflow:hidden;border:1px solid rgba(46,196,182,0.35);box-shadow:0 20px 60px rgba(0,0,0,0.4);background:#000">
       <video class="showcase-video" controls preload="metadata" playsinline poster="{{ asset('images/about-us.jpg') }}">
-        <source src="{{ asset('images/DocuTrust.mp4') }}" type="video/mp4">
+        <source src="{{ asset('images/DocuTrust_adv.mp4') }}" type="video/mp4">
         Your browser does not support the video tag.
       </video>
     </div>
