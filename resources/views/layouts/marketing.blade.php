@@ -5,6 +5,7 @@
   $primaryCtaLabel = $authenticatedUser ? __('Open workspace') : __('Start Free Trial');
   $secondaryHeaderUrl = $authenticatedUser ? route('settings.profile') : route('login');
   $secondaryHeaderLabel = $authenticatedUser ? __('Settings') : __('Login');
+  $marketingNavPrefix = route('home');
 @endphp
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="docutrust-smooth-scroll">
 <head>
@@ -12,9 +13,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#060d10" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f0f7f5" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f0f7f5" id="docutrustThemeColor">
 <title>@yield('title') | {{ config('app.name') }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -26,26 +26,7 @@
 <div class="orb orb1"></div>
 <div class="orb orb2"></div>
 
-<header>
-  <div class="header-inner">
-    <a href="{{ route('home') }}" class="logo">
-      <span class="logo-mark">
-        <img src="{{ asset('images/docutrust-logo.png') }}" alt="" class="logo-img" width="40" height="40" loading="eager" decoding="async">
-      </span>
-      <span class="logo-text">{{ config('app.name') }}</span>
-    </a>
-    <nav>
-      <a href="{{ route('home') }}#features">{{ __('Features') }}</a>
-      <a href="{{ route('home') }}#blockchain">{{ __('Security') }}</a>
-      <a href="{{ route('home') }}#about">{{ __('About') }}</a>
-      <a href="{{ route('verify.index') }}">{{ __('Verify') }}</a>
-    </nav>
-    <div class="header-actions">
-      <a href="{{ $secondaryHeaderUrl }}" class="btn-ghost">{{ $secondaryHeaderLabel }}</a>
-      <a href="{{ $primaryCtaUrl }}" class="btn-primary">{{ $primaryCtaLabel }}</a>
-    </div>
-  </div>
-</header>
+@include('layouts.partials.marketing-header')
 
 <main>
   @yield('content')
@@ -57,6 +38,8 @@
     <a href="{{ $primaryCtaUrl }}" class="btn-primary">{{ $primaryCtaLabel }}</a>
   </div>
 </footer>
+
+@include('layouts.partials.marketing-header-scripts')
 
 <x-marketing-chatbot />
 </body>

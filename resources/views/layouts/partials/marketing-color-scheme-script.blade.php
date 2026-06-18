@@ -1,15 +1,11 @@
 <script>
 (function () {
-  function docuTrustSyncColorScheme () {
-    var m = window.matchMedia('(prefers-color-scheme: light)');
-    document.documentElement.classList.toggle('light-scheme', m.matches);
-  }
-  docuTrustSyncColorScheme();
-  var mq = window.matchMedia('(prefers-color-scheme: light)');
-  if (typeof mq.addEventListener === 'function') {
-    mq.addEventListener('change', docuTrustSyncColorScheme);
-  } else if (typeof mq.addListener === 'function') {
-    mq.addListener(docuTrustSyncColorScheme);
+  var isDark = localStorage.getItem('theme') === 'dark';
+  document.documentElement.classList.toggle('dark-scheme', isDark);
+  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+  var themeColor = document.getElementById('docutrustThemeColor');
+  if (themeColor) {
+    themeColor.content = isDark ? '#0d1117' : '#f0f7f5';
   }
 })();
 </script>

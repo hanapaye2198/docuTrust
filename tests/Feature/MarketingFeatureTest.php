@@ -30,7 +30,11 @@ class MarketingFeatureTest extends TestCase
                 ->assertSee($feature['title'], false)
                 ->assertSee($feature['description'], false)
                 ->assertSee($feature['highlights'][0], false)
-                ->assertSee($feature['use_cases'][0], false);
+                ->assertSee($feature['use_cases'][0], false)
+                ->assertSee('id="docutrustThemeToggle"', false)
+                ->assertSee('id="mobileNavToggle"', false)
+                ->assertSee(route('home').'#features', false)
+                ->assertSee(route('home').'#ai', false);
         }
     }
 

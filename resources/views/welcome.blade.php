@@ -12,22 +12,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f0f7f5" id="welcomeThemeColor">
-<script>
-(function () {
-  var isDark = localStorage.getItem('theme') === 'dark';
-  document.documentElement.classList.toggle('dark-scheme', isDark);
-  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
-  var themeColor = document.getElementById('welcomeThemeColor');
-  if (themeColor) {
-    themeColor.content = isDark ? '#060d10' : '#f0f7f5';
-  }
-})();
-</script>
+<meta name="theme-color" content="#f0f7f5" id="docutrustThemeColor">
+@include('layouts.partials.marketing-color-scheme-script')
 <title>DocuTrust | Secure & Tamper-Proof Digital Signatures</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="{{ asset('images/docutrust-logo.png') }}" type="image/png">
+@include('layouts.partials.marketing-header-styles')
 <style>
 :root {
   --font-body: 'Source Sans 3', system-ui, sans-serif;
@@ -63,26 +54,26 @@
 }
 
 html.dark-scheme{
-  --teal: #2EC4B6;
-  --teal-dark: #1a9e92;
-  --teal-light: #7ce8dc;
+  --teal: #5ea2ff;
+  --teal-dark: #4f8ef0;
+  --teal-light: #9bbdff;
   --green: #1B5E20;
   --green-mid: #2d7a35;
   --gold: #FFD166;
-  --bg: #060d10;
-  --surface: #0d1a1f;
-  --surface2: #112028;
-  --border: rgba(46,196,182,0.15);
-  --border2: rgba(46,196,182,0.08);
-  --text: #e8f4f2;
-  --text-muted: #7a9e9b;
-  --text-dim: #4a706d;
+  --bg: #0d1117;
+  --surface: #131a23;
+  --surface2: #1a2230;
+  --border: rgba(94,162,255,0.24);
+  --border2: rgba(159,176,195,0.18);
+  --text: #e6edf6;
+  --text-muted: #9fb0c3;
+  --text-dim: #7b8ea4;
   --headline: #ffffff;
-  --header-bg: rgba(6,13,16,0.88);
-  --mobile-nav-bg: rgba(6,13,16,0.98);
-  --trust-bar-bg: rgba(13,26,31,0.7);
-  --badge-float2-bg: rgba(6,13,16,0.92);
-  --footer-bg: rgba(6,13,16,0.9);
+  --header-bg: rgba(13,17,23,0.9);
+  --mobile-nav-bg: rgba(13,17,23,0.98);
+  --trust-bar-bg: rgba(19,26,35,0.74);
+  --badge-float2-bg: rgba(13,17,23,0.92);
+  --footer-bg: rgba(13,17,23,0.9);
   --overlay-dark: rgba(0,0,0,0.3);
   --overlay-signer: rgba(0,0,0,0.25);
   --overlay-kpi: rgba(0,0,0,0.3);
@@ -158,78 +149,11 @@ html.dark-scheme .orb{opacity:.18}
 .orb3{animation-name:orbFloat3}
 @keyframes orbFloat3{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.2)}}
 
-/* ── HEADER ── */
-header{
-  position:sticky;
-  top:0;
-  z-index:100;
-  border-bottom:1px solid var(--border);
-  background:var(--header-bg);
-  backdrop-filter:blur(20px);
-}
-.header-inner{
-  max-width:1280px;
-  margin:0 auto;
-  padding:0 24px;
-  height:72px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-}
-.logo{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  text-decoration:none;
-  flex-shrink:0;
-}
-/* Square tile + equal padding so the mark is centered with even inset (width:auto PNGs no longer widen the box). */
-.logo-mark{
-  display:grid;
-  justify-items:stretch;
-  align-items:stretch;
-  line-height:0;
-  background:var(--logo-tile-bg);
-  border-radius:10px;
-  padding:6px;
-  box-sizing:border-box;
-  width:52px;
-  height:52px;
-  box-shadow:var(--logo-tile-shadow);
-}
 .logo-mark picture{
   display:contents;
 }
-.logo-img{
-  width:100%;
-  height:100%;
-  max-width:100%;
-  max-height:100%;
-  object-fit:contain;
-  display:block;
-  border-radius:8px;
-}
-.logo-mark .logo-img{
-  filter:brightness(1.12) contrast(1.05);
-}
 .logo-mark:has(picture) .logo-img{
   filter:none;
-}
-html.dark-scheme .logo-mark{
-  background:#0a0a0a;
-}
-html.dark-scheme .logo-mark .logo-img{
-  filter:none;
-}
-.logo-text{
-  font-family:var(--font-display);
-  font-weight:800;
-  font-size:1.2rem;
-  color:var(--teal-dark);
-  background:none;
-  -webkit-text-fill-color:currentColor;
-  background-clip:border-box;
 }
 .footer-logo > .logo-text{
   color:var(--teal-dark);
@@ -237,7 +161,6 @@ html.dark-scheme .logo-mark .logo-img{
   -webkit-text-fill-color:currentColor;
   background-clip:border-box;
 }
-html.dark-scheme .logo-text,
 html.dark-scheme .footer-logo > .logo-text{
   color:var(--text);
 }
@@ -247,126 +170,6 @@ html.dark-scheme .footer-logo > .logo-text{
   height:46px;
   padding:5px;
 }
-
-nav{display:flex;align-items:center;gap:28px}
-nav a{
-  font-size:1rem;
-  font-weight:500;
-  color:var(--text-muted);
-  text-decoration:none;
-  transition:color .2s;
-}
-nav a:hover{color:var(--teal)}
-
-.header-actions{display:flex;align-items:center;gap:10px;flex-shrink:1;min-width:0;justify-content:flex-end}
-.btn-ghost{
-  font-size:1rem;font-weight:500;
-  color:var(--text-muted);
-  text-decoration:none;
-  padding:10px 18px;
-  border-radius:8px;
-  transition:color .2s;
-}
-.btn-ghost:hover{color:var(--teal)}
-.btn-primary{
-  font-size:1rem;font-weight:600;
-  background:linear-gradient(135deg,var(--teal),var(--green-mid));
-  color:#fff;
-  text-decoration:none;
-  padding:12px 22px;
-  border-radius:10px;
-  box-shadow:0 0 20px rgba(46,196,182,0.3);
-  transition:all .25s;
-  white-space:nowrap;
-}
-.btn-primary:hover{
-  box-shadow:0 0 32px rgba(46,196,182,0.55);
-  transform:translateY(-1px);
-}
-
-.nav-mobile-toggle{
-  display:none;
-  align-items:center;
-  justify-content:center;
-  flex-shrink:0;
-  box-sizing:border-box;
-  width:44px;
-  height:44px;
-  padding:0;
-  margin:0;
-  background:var(--chip-bg);
-  border:1px solid var(--border);
-  color:var(--text-muted);
-  border-radius:12px;
-  cursor:pointer;
-  -webkit-tap-highlight-color:rgba(46,196,182,0.15);
-  touch-action:manipulation;
-  transition:background .15s,color .15s,border-color .15s,transform .1s;
-  position:relative;
-  z-index:5;
-}
-.nav-mobile-toggle:hover{
-  border-color:rgba(46,196,182,0.35);
-  color:var(--teal);
-}
-.nav-mobile-toggle:active{transform:scale(0.96)}
-.nav-mobile-toggle:focus-visible{
-  outline:2px solid var(--teal);
-  outline-offset:2px;
-}
-.theme-toggle{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  flex-shrink:0;
-  box-sizing:border-box;
-  min-width:44px;
-  height:44px;
-  padding:8px 12px;
-  margin:0;
-  background:var(--chip-bg);
-  border:1px solid var(--border);
-  border-radius:12px;
-  cursor:pointer;
-  -webkit-tap-highlight-color:rgba(46,196,182,0.15);
-  touch-action:manipulation;
-  transition:background .15s,border-color .15s,transform .1s;
-}
-.theme-toggle:hover{
-  background:rgba(46,196,182,0.08);
-  border-color:rgba(46,196,182,0.35);
-}
-.theme-toggle:active{transform:scale(0.96)}
-.theme-toggle:focus-visible{
-  outline:2px solid var(--teal);
-  outline-offset:2px;
-}
-.theme-toggle svg{
-  width:20px;
-  height:20px;
-  flex-shrink:0;
-}
-.theme-toggle-label{
-  font-size:.8rem;
-  font-weight:600;
-  color:var(--text);
-  white-space:nowrap;
-}
-.theme-toggle-icon--moon{display:block}
-.theme-toggle-icon--sun{display:none}
-html.dark-scheme .theme-toggle-icon--moon{display:none}
-html.dark-scheme .theme-toggle-icon--sun{display:block}
-.theme-toggle-icon--moon{fill:#6d28d9}
-.theme-toggle-icon--sun{fill:#eab308}
-@media (max-width: 720px){
-  .theme-toggle{
-    width:44px;
-    padding:8px;
-  }
-  .theme-toggle-label{display:none}
-}
-body.mobile-nav-open{overflow:hidden;overscroll-behavior:none}
 
 /* ── SECTIONS ── */
 section{position:relative;z-index:1}
@@ -738,12 +541,24 @@ html.dark-scheme .badge-float-icon svg{color:var(--teal)}
   margin:20px 0 24px;
   line-height:0;
 }
+.csc-logo-shell{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px 18px;
+  border-radius:16px;
+}
 .csc-logo-img{
   width:100%;
   max-width:min(100%,380px);
   height:auto;
   display:block;
   object-fit:contain;
+}
+html.dark-scheme .csc-logo-shell{
+  background:rgba(248,250,252,0.1);
+  border:1px solid rgba(124,156,255,0.35);
+  box-shadow:0 0 24px rgba(124,156,255,0.22);
 }
 
 /* ── FEATURES ── */
@@ -1381,13 +1196,6 @@ footer{
   .features-grid{grid-template-columns:1fr 1fr}
   .industries-grid{grid-template-columns:1fr 1fr}
   .footer-grid{grid-template-columns:1fr 1fr}
-  nav{display:none}
-  .nav-mobile-toggle{display:inline-flex}
-  .header-inner{padding:0 16px}
-  .logo-text{font-size:1.05rem}
-  .header-actions{gap:8px}
-  .btn-ghost{display:none}
-  .btn-primary{padding:9px 14px;font-size:.8125rem}
 }
 @media(max-width:768px){
   .hero-grid{grid-template-columns:1fr;gap:40px}
@@ -1427,55 +1235,11 @@ footer{
   .btn-cta,.btn-secondary{text-align:center;justify-content:center}
   .showcase-video-wrap{width:min(100%,165px)}
 }
-@media(max-width:420px){
-  .logo-text{font-size:.95rem}
-  .btn-primary{padding:9px 12px}
-}
-
-/* mobile nav */
-.mobile-nav{
-  display:none;
-  position:fixed;inset:0;z-index:200;
-  background:var(--mobile-nav-bg);
-  backdrop-filter:blur(20px);
-  flex-direction:column;
-  align-items:center;justify-content:center;
-  gap:24px;
-  padding:max(24px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));
-  -webkit-overflow-scrolling:touch;
-  overflow-y:auto;
-  overscroll-behavior:contain;
-}
-.mobile-nav.open{display:flex}
-.mobile-nav a{
-  font-family:var(--font-display);font-size:1.5rem;font-weight:700;
-  color:var(--text-muted);text-decoration:none;transition:color .2s;
-}
-.mobile-nav a:hover{color:var(--teal)}
-.mobile-nav-close{
-  position:absolute;
-  top:max(24px,env(safe-area-inset-top));
-  right:max(24px,env(safe-area-inset-right));
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  width:44px;height:44px;padding:0;
-  background:var(--chip-bg);
-  border:1px solid var(--border);
-  color:var(--text-muted);
-  border-radius:12px;
-  cursor:pointer;
-  -webkit-tap-highlight-color:rgba(46,196,182,0.15);
-  touch-action:manipulation;
-  transition:background .15s,color .15s,border-color .15s;
-  z-index:1;
-}
-.mobile-nav-close:active{transform:scale(0.96)}
-.mobile-nav-close:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 </style>
 </head>
 <body>
 @php
+    $marketingNavPrefix = '';
     $docutrustLogoDefault = asset('images/docutrust-logo.png');
     $docutrustLogoLight = file_exists(public_path('images/docutrust-logo-light.png'))
         ? asset('images/docutrust-logo-light.png')
@@ -1487,74 +1251,7 @@ footer{
 <div class="orb orb2"></div>
 <div class="orb orb3"></div>
 
-<!-- Mobile Nav -->
-<div class="mobile-nav" id="mobileNav" role="dialog" aria-modal="true" aria-label="{{ __('Site menu') }}" hidden>
-  <button type="button" class="mobile-nav-close" id="mobileNavClose" aria-label="{{ __('Close menu') }}">
-    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
-  </button>
-  <a href="#features" onclick="closeMobileNav()">Features</a>
-  <a href="#blockchain" onclick="closeMobileNav()">Security</a>
-  <a href="#ai" onclick="closeMobileNav()">AI Engine</a>
-  <a href="#about" onclick="closeMobileNav()">About</a>
-  <a href="#showcase" onclick="closeMobileNav()">Advertisement</a>
-  <a href="#industries" onclick="closeMobileNav()">Industries</a>
-  <a href="#faq" onclick="closeMobileNav()">FAQ</a>
-  <a href="{{ $secondaryHeaderUrl }}" onclick="closeMobileNav()">{{ $secondaryHeaderLabel }}</a>
-  <a href="{{ route('register') }}" class="btn-cta" style="font-size:.9rem">Get Started Free</a>
-</div>
-
-<!-- HEADER -->
-<header>
-  <div class="header-inner">
-    <a href="{{ route('home') }}" class="logo">
-      <span class="logo-mark">
-        <img
-          src="{{ $docutrustLogoLight ?? $docutrustLogoDefault }}"
-          alt=""
-          class="logo-img"
-          data-logo-default="{{ $docutrustLogoDefault }}"
-          @if ($docutrustLogoLight) data-logo-light="{{ $docutrustLogoLight }}" @endif
-          width="40"
-          height="40"
-          loading="eager"
-          decoding="async"
-        >
-      </span>
-      <span class="logo-text">{{ config('app.name') }}</span>
-    </a>
-    <nav>
-      <a href="#features">Features</a>
-      <a href="#blockchain">Security</a>
-      <a href="#ai">AI Engine</a>
-      <a href="#about">About</a>
-      <a href="#showcase">Advertisement</a>
-      <a href="#industries">Industries</a>
-      <a href="#faq">FAQ</a>
-    </nav>
-    <div class="header-actions">
-      <button
-        type="button"
-        id="welcomeThemeToggle"
-        class="theme-toggle"
-        aria-label="{{ __('Toggle theme') }}"
-        title="{{ __('Switch to dark mode') }}"
-      >
-        <svg class="theme-toggle-icon theme-toggle-icon--moon" viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
-        </svg>
-        <svg class="theme-toggle-icon theme-toggle-icon--sun" viewBox="0 0 20 20" aria-hidden="true">
-          <path fill-rule="evenodd" clip-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path>
-        </svg>
-        <span id="welcomeThemeToggleLabel" class="theme-toggle-label">{{ __('Dark mode') }}</span>
-      </button>
-      <a href="{{ $secondaryHeaderUrl }}" class="btn-ghost">{{ $secondaryHeaderLabel }}</a>
-      <a href="{{ $primaryCtaUrl }}" class="btn-primary">{{ $primaryCtaLabel }}</a>
-      <button type="button" class="nav-mobile-toggle" id="mobileNavToggle" aria-label="{{ __('Open menu') }}" aria-expanded="false" aria-controls="mobileNav">
-        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-    </div>
-  </div>
-</header>
+@include('layouts.partials.marketing-header')
 
 <!-- HERO -->
 <section class="hero">
@@ -1679,15 +1376,17 @@ footer{
         </div>
         <h2>Cloud Signature Consortium Member</h2>
         <div class="csc-logo">
-          <img
-            src="{{ $cscLogo }}"
-            alt="Cloud Signature Consortium"
-            class="csc-logo-img"
-            width="380"
-            height="95"
-            loading="lazy"
-            decoding="async"
-          >
+          <div class="csc-logo-shell">
+            <img
+              src="{{ $cscLogo }}"
+              alt="Cloud Signature Consortium"
+              class="csc-logo-img"
+              width="380"
+              height="95"
+              loading="lazy"
+              decoding="async"
+            >
+          </div>
         </div>
         <p>DocuTrust is a proud member of the <strong style="color:var(--teal-light)">Cloud Signature Consortium (CSC)</strong> — the global standards body for cloud-based digital signatures trusted by enterprises, governments, and regulators worldwide.</p>
         <p style="margin-top:12px;color:var(--text-muted);font-size:.875rem;line-height:1.7">CSC membership means our digital signature infrastructure is built on internationally recognized open standards — including the CSC API, PAdES, and XAdES — ensuring interoperability, legal compliance, and verifiable trust across borders.</p>
@@ -2021,7 +1720,7 @@ footer{
     </div>
     <div style="max-width:1100px;margin:0 auto;border-radius:20px;overflow:hidden;border:1px solid rgba(46,196,182,0.35);box-shadow:0 20px 60px rgba(0,0,0,0.4);background:#000">
       <video class="showcase-video" controls preload="metadata" playsinline poster="{{ asset('images/about-us.jpg') }}">
-        <source src="{{ asset('images/docutrust.mp4') }}" type="video/mp4">
+        <source src="{{ asset('images/DocuTrust.mp4') }}" type="video/mp4">
         Your browser does not support the video tag.
       </video>
     </div>
@@ -2211,56 +1910,9 @@ footer{
   </div>
 </footer>
 
+@include('layouts.partials.marketing-header-scripts')
+
 <script>
-// Mobile nav
-const mobileNavToggle = document.getElementById('mobileNavToggle');
-const mobileNavClose = document.getElementById('mobileNavClose');
-const mobileNav = document.getElementById('mobileNav');
-
-function openMobileNav() {
-  if (!mobileNav) {
-    return;
-  }
-  mobileNav.hidden = false;
-  mobileNav.classList.add('open');
-  document.body.classList.add('mobile-nav-open');
-  mobileNavToggle?.setAttribute('aria-expanded', 'true');
-  requestAnimationFrame(() => mobileNavClose?.focus());
-}
-
-function closeMobileNav() {
-  if (!mobileNav) {
-    return;
-  }
-  mobileNav.classList.remove('open');
-  mobileNav.hidden = true;
-  document.body.classList.remove('mobile-nav-open');
-  mobileNavToggle?.setAttribute('aria-expanded', 'false');
-  mobileNavToggle?.focus();
-}
-
-mobileNavToggle?.addEventListener('click', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  if (mobileNav?.classList.contains('open')) {
-    closeMobileNav();
-  } else {
-    openMobileNav();
-  }
-});
-mobileNavClose?.addEventListener('click', () => closeMobileNav());
-mobileNav?.addEventListener('click', (e) => {
-  if (e.target === mobileNav) {
-    closeMobileNav();
-  }
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && mobileNav?.classList.contains('open')) {
-    closeMobileNav();
-  }
-});
-
-// Scroll reveal
 const revealEls = document.querySelectorAll('.reveal');
 const observer = new IntersectionObserver((entries) => {
   entries.forEach((entry, i) => {
@@ -2272,41 +1924,6 @@ const observer = new IntersectionObserver((entries) => {
   });
 }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
 revealEls.forEach(el => observer.observe(el));
-
-// Theme toggle
-const welcomeThemeToggle = document.getElementById('welcomeThemeToggle');
-const welcomeThemeColor = document.getElementById('welcomeThemeColor');
-const welcomeThemeToggleLabel = document.getElementById('welcomeThemeToggleLabel');
-
-function syncWelcomeLogos(isDark) {
-  document.querySelectorAll('.logo-img[data-logo-default]').forEach((img) => {
-    const defaultSrc = img.dataset.logoDefault;
-    const lightSrc = img.dataset.logoLight;
-    img.src = isDark ? defaultSrc : (lightSrc || defaultSrc);
-  });
-}
-
-function updateWelcomeThemeUi(isDark) {
-  const nextThemeLabel = isDark ? '{{ __('Light mode') }}' : '{{ __('Dark mode') }}';
-  welcomeThemeToggle?.setAttribute('title', isDark ? '{{ __('Switch to light mode') }}' : '{{ __('Switch to dark mode') }}');
-  welcomeThemeToggle?.setAttribute('aria-label', isDark ? '{{ __('Switch to light mode') }}' : '{{ __('Switch to dark mode') }}');
-  if (welcomeThemeToggleLabel) {
-    welcomeThemeToggleLabel.textContent = nextThemeLabel;
-  }
-  if (welcomeThemeColor) {
-    welcomeThemeColor.content = isDark ? '#060d10' : '#f0f7f5';
-  }
-  syncWelcomeLogos(isDark);
-}
-
-updateWelcomeThemeUi(document.documentElement.classList.contains('dark-scheme'));
-
-welcomeThemeToggle?.addEventListener('click', function () {
-  const isDark = document.documentElement.classList.toggle('dark-scheme');
-  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
-  localStorage.setItem('theme', isDark ? 'dark' : 'light');
-  updateWelcomeThemeUi(isDark);
-});
 </script>
 
 <x-marketing-chatbot />
