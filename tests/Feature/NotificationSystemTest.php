@@ -6,7 +6,9 @@ use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
 use App\Enums\SignatureFieldType;
 use App\Enums\TemplateRoleType;
+use App\Events\DocumentCompleted;
 use App\Events\DocumentSent;
+use App\Events\DocumentSignerCompleted;
 use App\Jobs\SendDocumentEmailJob;
 use App\Jobs\SendReminderJob;
 use App\Mail\ReminderMail;
@@ -69,10 +71,10 @@ class NotificationSystemTest extends TestCase
         $signer = DocumentSigner::factory()->for($document)->create(['status' => DocumentSignerStatus::Pending]);
 
         app(DocumentNotificationService::class)->handleSignerCompleted(
-            new \App\Events\DocumentSignerCompleted($document->fresh()->load('documentSigners', 'user'), $signer->fresh())
+            new DocumentSignerCompleted($document->fresh()->load('documentSigners', 'user'), $signer->fresh())
         );
         app(DocumentNotificationService::class)->handleDocumentCompleted(
-            new \App\Events\DocumentCompleted($document->fresh()->load('documentSigners', 'user'))
+            new DocumentCompleted($document->fresh()->load('documentSigners', 'user'))
         );
 
         Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job) use ($document, $signer): bool {
@@ -152,7 +154,7 @@ class NotificationSystemTest extends TestCase
             signUrl: route('sign.show', $signer->access_token),
         ))->handle();
 
-        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
+        Mail::assertQueued(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
             return $mail->requiresDocumentPassword === true
                 && $mail->documentPasswordHint === 'Shared in chat';
         });
@@ -180,7 +182,7 @@ class NotificationSystemTest extends TestCase
             signUrl: route('sign.show', $signer->access_token),
         ))->handle();
 
-        Mail::assertSent(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
+        Mail::assertQueued(SignerInvitationMail::class, function (SignerInvitationMail $mail): bool {
             return $mail->customSubject === 'Custom invitation subject'
                 && $mail->customMessage === "Please sign this today.\nIt is time-sensitive."
                 && $mail->envelope()->subject === 'Custom invitation subject';
@@ -255,7 +257,7 @@ class NotificationSystemTest extends TestCase
         ]);
 
         app(DocumentNotificationService::class)->handleDocumentCompleted(
-            new \App\Events\DocumentCompleted($document->fresh()->load('documentSigners', 'user'))
+            new DocumentCompleted($document->fresh()->load('documentSigners', 'user'))
         );
 
         Queue::assertPushed(SendDocumentEmailJob::class, function (SendDocumentEmailJob $job): bool {

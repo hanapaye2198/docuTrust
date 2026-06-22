@@ -334,6 +334,12 @@ html.dark-scheme .doc-card{
   word-break:break-all;
   line-height:1.6;
 }
+.chain-hash-short{display:block}
+.chain-hash-full{display:none}
+@media(min-width:481px){
+  .chain-hash-short{display:none}
+  .chain-hash-full{display:block}
+}
 .chain-blocks{
   display:flex;gap:6px;margin-top:10px;
 }
@@ -836,6 +842,114 @@ html.dark-scheme .ai-visual{
 .industry-name{font-family:var(--font-display);font-weight:700;font-size:.9rem;color:var(--headline);margin-bottom:4px}
 .industry-desc{font-size:.78rem;color:var(--text-dim)}
 
+/* ── ENOTARY ── */
+.enotary-section{padding:80px 0}
+.enotary-card{
+  display:grid;
+  grid-template-columns:1.05fr .95fr;
+  gap:32px;
+  align-items:center;
+  background:linear-gradient(135deg,rgba(46,196,182,0.08),var(--surface));
+  border:1px solid var(--border);
+  border-radius:24px;
+  padding:36px;
+  box-shadow:0 18px 46px rgba(15,23,42,0.08);
+}
+html.dark-scheme .enotary-card{
+  background:linear-gradient(135deg,rgba(94,162,255,0.10),var(--surface));
+  box-shadow:0 18px 52px rgba(0,0,0,0.35);
+}
+.enotary-list{display:grid;gap:12px;margin-top:24px}
+.enotary-list li{
+  list-style:none;
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  color:var(--text-muted);
+  font-size:.92rem;
+}
+.enotary-list svg{width:16px;height:16px;color:var(--teal);flex-shrink:0;margin-top:5px}
+.enotary-panel{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:18px;
+  padding:24px;
+}
+.enotary-step{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  padding:14px 0;
+  border-bottom:1px solid var(--border2);
+}
+.enotary-step:last-child{border-bottom:0}
+.enotary-step strong{font-family:var(--font-display);color:var(--headline);font-size:.9rem}
+.enotary-step span{font-size:.78rem;color:var(--text-dim);text-align:right}
+
+/* ── PRICING ── */
+.pricing-section{padding:80px 0}
+.pricing-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:20px;
+  margin-top:40px;
+}
+.pricing-card{
+  position:relative;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:20px;
+  padding:28px;
+  box-shadow:0 16px 42px rgba(15,23,42,0.06);
+}
+.pricing-card.featured{
+  border-color:rgba(46,196,182,0.45);
+  background:linear-gradient(180deg,rgba(46,196,182,0.08),var(--surface));
+  transform:translateY(-6px);
+}
+.pricing-badge{
+  position:absolute;
+  top:18px;
+  right:18px;
+  border-radius:999px;
+  background:rgba(46,196,182,0.12);
+  color:var(--teal);
+  border:1px solid rgba(46,196,182,0.25);
+  padding:4px 10px;
+  font-size:.68rem;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.pricing-name{font-family:var(--font-display);font-weight:800;font-size:1.2rem;color:var(--headline);margin-bottom:8px}
+.pricing-price{font-family:var(--font-display);font-weight:800;font-size:2rem;color:var(--teal);line-height:1.1}
+.pricing-sub{color:var(--text-dim);font-size:.85rem;margin-top:6px}
+.pricing-list{display:grid;gap:10px;margin:24px 0;list-style:none}
+.pricing-list li{display:flex;gap:8px;color:var(--text-muted);font-size:.9rem}
+.pricing-list li::before{content:'✓';color:var(--teal);font-weight:800}
+.pricing-card .btn-cta,.pricing-card .btn-secondary{width:100%;justify-content:center}
+
+/* ── HOW IT WORKS ── */
+.how-section{padding:80px 0}
+.how-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:40px}
+.how-card{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:18px;
+  padding:28px;
+}
+.how-number{
+  width:42px;height:42px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(46,196,182,0.1);
+  color:var(--teal);
+  font-family:var(--font-display);
+  font-weight:800;
+  margin-bottom:18px;
+}
+.how-card h3{font-family:var(--font-display);font-size:1.08rem;color:var(--headline);margin-bottom:10px}
+.how-card p{font-size:.92rem;color:var(--text-muted);line-height:1.7}
+
 /* ── ABOUT ── */
 .about-section{padding:80px 0}
 .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
@@ -933,7 +1047,7 @@ html.dark-scheme .about-surepay-label{
 }
 .about-stat-label{font-size:.75rem;color:var(--text-dim)}
 
-/* ── ADVERTISEMENT ── */
+/* ── PRODUCT SHOWCASE ── */
 .showcase-section{padding:80px 0}
 .showcase-head{margin-bottom:18px}
 .showcase-head .section-label{margin-bottom:8px}
@@ -1146,7 +1260,7 @@ footer{
 }
 .footer-grid{
   display:grid;
-  grid-template-columns:1.5fr 1fr 1fr 1fr;
+  grid-template-columns:1.5fr 1fr 1fr;
   gap:40px;
   margin-bottom:40px;
 }
@@ -1200,6 +1314,7 @@ footer{
 @media(max-width:1024px){
   .features-grid{grid-template-columns:1fr 1fr}
   .industries-grid{grid-template-columns:1fr 1fr}
+  .pricing-grid{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr 1fr}
 }
 @media(max-width:768px){
@@ -1209,6 +1324,8 @@ footer{
   .csc-card{grid-template-columns:1fr;gap:32px;padding:32px 24px}
   .blockchain-grid{grid-template-columns:1fr}
   .ai-inner{grid-template-columns:1fr}
+  .enotary-card{grid-template-columns:1fr;padding:28px 22px}
+  .how-grid{grid-template-columns:1fr}
   .about-grid{grid-template-columns:1fr}
   .showcase-head h2{font-size:2rem}
   .showcase-grid{grid-template-columns:1fr;padding:24px}
@@ -1216,6 +1333,7 @@ footer{
   .showcase-video{aspect-ratio:11 / 16}
   .showcase-actions .btn-cta,
   .showcase-actions .btn-secondary{width:100%;justify-content:center}
+  .pricing-card.featured{transform:none}
   .about-media img{height:260px}
   .about-surepay{
     right:12px;
@@ -1312,8 +1430,8 @@ footer{
           <span class="badge-float-text">Blockchain Verified ✓</span>
         </div>
         <div class="badge-float2">
-          <div class="badge-float2-label">Docs Signed Today</div>
-          <div class="badge-float2-val">4,291</div>
+          <div class="badge-float2-label">Documents Processed</div>
+          <div class="badge-float2-val">10,000+</div>
         </div>
         <div class="doc-card">
           <div class="doc-header">
@@ -1325,7 +1443,10 @@ footer{
           </div>
           <div class="chain-vis">
             <div class="chain-label">Blockchain Hash · Block #847,291</div>
-            <div class="chain-hash">0x4f8a2b1c9d3e7f6a2b8c4d1e9f3a7b2c<br>5d8e4f1a6b3c9d2e7f4a1b8c5d3e9f2a</div>
+            <div class="chain-hash">
+              <span class="chain-hash-short">0x4f8a2b1c9d3e7f...</span>
+              <span class="chain-hash-full">0x4f8a2b1c9d3e7f6a2b8c4d1e9f3a7b2c<br>5d8e4f1a6b3c9d2e7f4a1b8c5d3e9f2a</span>
+            </div>
             <div class="chain-blocks">
               <div class="chain-block"></div>
               <div class="chain-block"></div>
@@ -1358,14 +1479,15 @@ footer{
 <div class="trust-bar">
   <div class="container">
     <div class="trust-bar-inner">
-      <span class="trust-bar-label">Trusted by</span>
-      <span class="trust-chip">CivicCore</span>
-      <span class="trust-chip">UniTrust</span>
-      <span class="trust-chip">LegalGrid</span>
-      <span class="trust-chip">HomeAxis</span>
-      <span class="trust-chip">FinPulse</span>
+      <span class="trust-bar-label">Built for industries like</span>
+      <span class="trust-chip">Government &amp; LGU</span>
+      <span class="trust-chip">Legal Firms</span>
+      <span class="trust-chip">Real Estate</span>
+      <span class="trust-chip">HR &amp; Finance</span>
+      <span class="trust-chip">Education</span>
       <span class="trust-chip csc-chip">☁ Cloud Signature Consortium Member</span>
       <span class="trust-chip csc-chip">🔒 BSP-Licensed</span>
+      <span class="trust-chip csc-chip">Philippine E-Commerce Act Ready</span>
     </div>
   </div>
 </div>
@@ -1395,6 +1517,9 @@ footer{
         </div>
         <p>DocuTrust is a proud member of the <strong style="color:var(--teal-light)">Cloud Signature Consortium (CSC)</strong> — the global standards body for cloud-based digital signatures trusted by enterprises, governments, and regulators worldwide.</p>
         <p style="margin-top:12px;color:var(--text-muted);font-size:.875rem;line-height:1.7">CSC membership means our digital signature infrastructure is built on internationally recognized open standards — including the CSC API, PAdES, and XAdES — ensuring interoperability, legal compliance, and verifiable trust across borders.</p>
+        <p style="margin-top:14px;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,196,182,0.24);background:rgba(46,196,182,0.08);border-radius:999px;padding:8px 14px;color:var(--text-muted);font-size:.8rem;line-height:1.5">
+          DocuTrust is aligned with the Philippine Electronic Commerce Act (RA 8792), BSP regulations for payment service operators, and DICT e-government standards. Built for Philippine organizations — trusted nationwide.
+        </p>
         <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener" class="csc-link" style="margin-top:20px;display:inline-flex">
           Visit cloudsignatureconsortium.org
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
@@ -1590,6 +1715,51 @@ footer{
   </div>
 </section>
 
+<!-- ENOTARY -->
+<section class="enotary-section" id="enotary">
+  <div class="container">
+    <div class="enotary-card reveal">
+      <div>
+        <div class="section-label">eNotary</div>
+        <h2 class="section-title">Remote Notarization Built for Regulated Workflows</h2>
+        <p class="section-sub" style="margin-bottom:0">DocuTrust brings identity verification, video sessions, attorney signing, audit evidence, and final document sealing into one guided digital notary workflow.</p>
+        <ul class="enotary-list">
+          <li>
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4"/></svg>
+            Identity, location, and video session evidence captured before notarial approval.
+          </li>
+          <li>
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4"/></svg>
+            Attorney signing, register entries, certificates, and final PDF sealing stay connected.
+          </li>
+          <li>
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4"/></svg>
+            Designed for Philippine legal, real estate, government, and financial workflows.
+          </li>
+        </ul>
+      </div>
+      <div class="enotary-panel">
+        <div class="enotary-step">
+          <strong>Identity verified</strong>
+          <span>Signer and location checks</span>
+        </div>
+        <div class="enotary-step">
+          <strong>Video completed</strong>
+          <span>Session evidence retained</span>
+        </div>
+        <div class="enotary-step">
+          <strong>Attorney signed</strong>
+          <span>Notarial record prepared</span>
+        </div>
+        <div class="enotary-step">
+          <strong>Finalized</strong>
+          <span>PDF, certificate, and hash sealed</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- INDUSTRIES -->
 <section class="industries-section" id="industries">
   <div class="container">
@@ -1638,6 +1808,54 @@ footer{
           <div class="industry-name">Finance & Fintech</div>
           <div class="industry-desc">Loan agreements, KYC documents, and financial instruments with full regulatory compliance.</div>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section" id="pricing">
+  <div class="container">
+    <div class="section-label reveal" style="text-align:center">Pricing</div>
+    <h2 class="section-title reveal" style="text-align:center">Simple, Transparent Pricing</h2>
+    <p class="section-sub reveal" style="text-align:center;margin:0 auto">Start free. Scale as you grow.</p>
+    <div class="pricing-grid">
+      <div class="pricing-card reveal">
+        <div class="pricing-name">Starter</div>
+        <div class="pricing-price">Free</div>
+        <div class="pricing-sub">14-day trial</div>
+        <ul class="pricing-list">
+          <li>5 documents per month</li>
+          <li>3 signers</li>
+          <li>Basic audit trail</li>
+          <li>Email support</li>
+        </ul>
+        <a href="{{ $primaryCtaUrl }}" class="btn-secondary">Start Free</a>
+      </div>
+      <div class="pricing-card featured reveal">
+        <div class="pricing-badge">Most Popular</div>
+        <div class="pricing-name">Professional</div>
+        <div class="pricing-price">Contact us</div>
+        <div class="pricing-sub">For team pricing</div>
+        <ul class="pricing-list">
+          <li>Unlimited documents</li>
+          <li>eNotary workflows</li>
+          <li>AI assistant</li>
+          <li>Blockchain verification</li>
+        </ul>
+        <a href="mailto:hello@docutrust.tech?subject=Sales%20inquiry" class="btn-cta">Talk to Us</a>
+      </div>
+      <div class="pricing-card reveal">
+        <div class="pricing-name">Enterprise</div>
+        <div class="pricing-price">Custom</div>
+        <div class="pricing-sub">Custom pricing</div>
+        <ul class="pricing-list">
+          <li>Dedicated instance</li>
+          <li>HSM signing options</li>
+          <li>Custom SLA</li>
+          <li>Onboarding support</li>
+        </ul>
+        <a href="mailto:hello@docutrust.tech?subject=Sales%20inquiry" class="btn-secondary">Contact Sales</a>
       </div>
     </div>
   </div>
@@ -1693,10 +1911,13 @@ footer{
             <div class="about-stat-label">Platform Uptime</div>
           </div>
           <div class="about-stat">
-            <span class="about-stat-num">0</span>
-            <div class="about-stat-label">Security Breaches</div>
+            <span class="about-stat-num">Since 2024</span>
+            <div class="about-stat-label">Built for Philippine Organizations</div>
           </div>
         </div>
+        <p style="font-size:.72rem;color:var(--text-dim);margin-top:12px;line-height:1.6">
+          *Figures are projected estimates based on platform capacity and growth targets.
+        </p>
         <div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px">
           <div style="font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px">Compliance & Certifications</div>
           <div style="display:flex;flex-wrap:wrap;gap:8px">
@@ -1713,14 +1934,13 @@ footer{
   </div>
 </section>
 
-<!-- ADVERTISEMENT -->
+<!-- PRODUCT SHOWCASE -->
 <section class="showcase-section" id="showcase" style="padding:72px 0;background:linear-gradient(180deg,rgba(46,196,182,0.12),rgba(6,13,16,0.94));border-top:2px solid rgba(46,196,182,0.35);border-bottom:2px solid rgba(46,196,182,0.35);">
   <div class="container">
     <div style="text-align:center;margin-bottom:18px">
-      <div class="section-label" style="font-size:.9rem;letter-spacing:.2em;color:var(--gold)">ADVERTISEMENT</div>
-      <h2 style="font-family:var(--font-display);font-size:clamp(2.2rem,4vw,3.2rem);color:#fff;margin:0">DocuTrust Advertisement</h2>
+      <h2 style="font-family:var(--font-display);font-size:clamp(2.2rem,4vw,3.2rem);color:#fff;margin:0">See DocuTrust in Action</h2>
       <p style="margin:12px auto 0;max-width:900px;color:#d5e9e6;font-size:1.08rem;line-height:1.75">
-        Watch our official product video and see how DocuTrust helps teams sign, verify, and automate document workflows with security and speed.
+        Watch how teams use DocuTrust to sign, verify, and automate document workflows in minutes.
       </p>
     </div>
     <div style="max-width:1100px;margin:0 auto;border-radius:20px;overflow:hidden;border:1px solid rgba(46,196,182,0.35);box-shadow:0 20px 60px rgba(0,0,0,0.4);background:#000">
@@ -1736,62 +1956,27 @@ footer{
   </div>
 </section>
 
-<!-- TESTIMONIALS -->
-<section class="testimonials-section">
+<!-- HOW IT WORKS -->
+<section class="how-section">
   <div class="container">
-    <div class="section-label reveal" style="text-align:center">Testimonials</div>
-    <h2 class="section-title reveal" style="text-align:center">What Our Users Say</h2>
-    <div class="testimonials-grid">
-      <div class="testimonial reveal">
-        <div class="stars">
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-        </div>
-        <p class="testimonial-text">DocuTrust reduced our contract turnaround time dramatically. The blockchain verification gives our legal team the confidence they need — every signature is irrefutable.</p>
-        <div class="testimonial-author">
-          <div class="testimonial-avatar">OL</div>
-          <div>
-            <div class="testimonial-name">Operations Lead</div>
-            <div class="testimonial-role">Civic Agency</div>
-          </div>
-        </div>
+    <div class="section-label reveal" style="text-align:center">How It Works</div>
+    <h2 class="section-title reveal" style="text-align:center">From Upload to Verified Signature in Minutes</h2>
+    <p class="section-sub reveal" style="text-align:center;margin:0 auto">A simple workflow for teams that need speed, evidence, and compliance without extra complexity.</p>
+    <div class="how-grid">
+      <div class="how-card reveal">
+        <div class="how-number">1</div>
+        <h3>Upload your document</h3>
+        <p>Add contracts, forms, or notarial documents and prepare fields for every signer in a guided workspace.</p>
       </div>
-      <div class="testimonial reveal">
-        <div class="stars">
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-        </div>
-        <p class="testimonial-text">The audit trail and verification workflow are exactly what our legal team needed. The CSC compliance and blockchain anchoring mean we can stand behind every signed document in court.</p>
-        <div class="testimonial-author">
-          <div class="testimonial-avatar">PA</div>
-          <div>
-            <div class="testimonial-name">Partner</div>
-            <div class="testimonial-role">Legal Advisory Group</div>
-          </div>
-        </div>
+      <div class="how-card reveal">
+        <div class="how-number">2</div>
+        <h3>Add signers and send</h3>
+        <p>Assign roles, signing order, reminders, and authentication requirements before sending secure links.</p>
       </div>
-      <div class="testimonial reveal">
-        <div class="stars">
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-          <svg fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-        </div>
-        <p class="testimonial-text">Secure, intuitive, and lightning-fast onboarding for every signer. The AI assistant saves our HR team hours every week — it handles reminders, routing, and extraction automatically.</p>
-        <div class="testimonial-author">
-          <div class="testimonial-avatar">HD</div>
-          <div>
-            <div class="testimonial-name">HR Director</div>
-            <div class="testimonial-role">Enterprise Group</div>
-          </div>
-        </div>
+      <div class="how-card reveal">
+        <div class="how-number">3</div>
+        <h3>Sign and verify instantly</h3>
+        <p>Everyone signs online, audit evidence is retained, and completed documents can be blockchain-verified.</p>
       </div>
     </div>
   </div>
@@ -1840,9 +2025,9 @@ footer{
       <div class="cta-actions">
         <a href="{{ $primaryCtaUrl }}" class="btn-cta">
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
-          {{ $authenticatedUser ? __('Open workspace') : __('Create Free Account') }}
+          {{ $primaryCtaLabel }}
         </a>
-        <a href="mailto:{{ config('mail.from.address') }}?subject=Sales%20inquiry" class="btn-secondary cta-talk-sales">
+        <a href="mailto:hello@docutrust.tech?subject=Sales%20inquiry" class="btn-secondary cta-talk-sales">
           Talk to Sales
         </a>
       </div>
@@ -1883,7 +2068,6 @@ footer{
           <a href="#features">Features</a>
           <a href="#blockchain">Security</a>
           <a href="#ai">AI Engine</a>
-          <a href="#industries">Integrations</a>
           <a href="{{ route('verify.index') }}">Verify document</a>
         </div>
       </div>
@@ -1891,26 +2075,14 @@ footer{
         <h4>Company</h4>
         <div class="footer-links">
           <a href="#about">About Us</a>
-          <a href="#">Blog</a>
-          <a href="#">Careers</a>
-          <a href="mailto:{{ config('mail.from.address') }}">Contact</a>
+          <a href="mailto:hello@docutrust.tech">Contact</a>
           <a href="https://cloudsignatureconsortium.org/" target="_blank" rel="noopener">CSC Membership</a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <h4>Support</h4>
-        <div class="footer-links">
-          <a href="#faq">Help Center</a>
-          <a href="#faq">Privacy Policy</a>
-          <a href="#faq">Terms of Service</a>
-          <a href="#blockchain">Trust &amp; Compliance</a>
-          <a href="#">Status</a>
         </div>
       </div>
     </div>
     <div class="footer-bottom">
       <div class="footer-copy">© {{ date('Y') }} {{ config('app.name') }}. All rights reserved.</div>
-      <div class="footer-powered">Powered by <a href="#">Surepay Technologies Inc.</a> · BSP-Licensed · ISO 9001:2015</div>
+      <div class="footer-powered">Powered by Surepay Technologies Inc. · BSP-Licensed · ISO 9001:2015</div>
     </div>
   </div>
 </footer>

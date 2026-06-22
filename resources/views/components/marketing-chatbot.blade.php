@@ -16,7 +16,7 @@
   data-logo="{{ $chatbotLogo }}"
   data-logo-light="{{ $chatbotLogoLight }}"
 >
-  <button type="button" class="dt-chatbot-toggle" id="docutrustChatbotToggle" aria-expanded="false" aria-controls="docutrustChatbotPanel" aria-label="{{ __('Open DocuTrust AI assistant') }}">
+  <button type="button" class="dt-chatbot-toggle" id="docutrustChatbotToggle" data-chatbot-trigger aria-expanded="false" aria-controls="docutrustChatbotPanel" aria-label="{{ __('Open DocuTrust AI assistant') }}">
     <img src="{{ $chatbotLogoLight }}" alt="" class="dt-chatbot-toggle-logo" width="28" height="28" decoding="async">
     <span class="dt-chatbot-toggle-label">{{ __('Ask AI') }}</span>
   </button>
@@ -99,6 +99,7 @@ html.dark-scheme .dt-chatbot{
   --dt-chat-border:rgba(46,196,182,0.18);
 }
 .dt-chatbot-toggle{
+  position:relative;
   display:inline-flex;
   align-items:center;
   gap:10px;
@@ -114,6 +115,37 @@ html.dark-scheme .dt-chatbot{
   transition:transform .2s ease,box-shadow .2s ease;
 }
 .dt-chatbot-toggle:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(46,196,182,0.45)}
+.dt-chatbot-toggle::after{
+  content:'Ask me anything about DocuTrust →';
+  position:absolute;
+  right:0;
+  bottom:calc(100% + 10px);
+  width:max-content;
+  max-width:260px;
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid var(--dt-chat-border);
+  background:var(--dt-chat-bg);
+  color:var(--dt-chat-text);
+  box-shadow:0 10px 24px rgba(0,0,0,0.16);
+  font-size:.78rem;
+  line-height:1.2;
+  opacity:0;
+  pointer-events:none;
+  transform:translateY(4px);
+  transition:opacity .18s ease,transform .18s ease;
+}
+.dt-chatbot-toggle:hover::after,
+.dt-chatbot-toggle:focus-visible::after{
+  opacity:1;
+  transform:translateY(0);
+}
+@keyframes once-pulse {
+  0% { transform:scale(1); box-shadow:0 0 0 0 rgba(16,185,129,0.4); }
+  50% { transform:scale(1.08); box-shadow:0 0 0 10px rgba(16,185,129,0); }
+  100% { transform:scale(1); box-shadow:0 0 0 0 rgba(16,185,129,0); }
+}
+.chat-pulse{animation:once-pulse .6s ease-out}
 .dt-chatbot-toggle-logo{width:30px;height:30px;border-radius:8px;object-fit:contain;flex-shrink:0}
 .dt-chatbot-toggle-label{display:none}
 @media(min-width:480px){.dt-chatbot-toggle-label{display:inline}}
@@ -388,6 +420,16 @@ html.dark-scheme .dt-chatbot{
   var logoUrl = root.dataset.logo || '';
   var logoLightUrl = root.dataset.logoLight || logoUrl;
   var inputBaseHeight = 44;
+
+  window.setTimeout(function () {
+    var pulseTarget = document.querySelector('[data-chatbot-trigger]');
+    if (!pulseTarget) return;
+
+    pulseTarget.classList.add('chat-pulse');
+    pulseTarget.addEventListener('animationend', function () {
+      pulseTarget.classList.remove('chat-pulse');
+    }, { once: true });
+  }, 5000);
 
   function resetInputHeight () {
     if (!input) return;

@@ -59,7 +59,7 @@ class NotarySignerVideoInvitationService
     /**
      * Create one video session per signed party and optionally email personal join links.
      */
-    public function inviteAllSignersWhenReady(NotaryRequest $request, bool $forceResend = false, bool $deliverSynchronously = false): int
+    public function inviteAllSignersWhenReady(NotaryRequest $request, bool $forceResend = false): int
     {
         if (! config('docutrust.notary.require_video_session', true)) {
             return 0;
@@ -90,7 +90,7 @@ class NotarySignerVideoInvitationService
                 continue;
             }
 
-            $this->sendInvitation($request, $signer, $session, $deliverSynchronously);
+            $this->sendInvitation($request, $signer, $session);
             $invited++;
         }
 
@@ -282,7 +282,6 @@ class NotarySignerVideoInvitationService
         NotaryRequest $request,
         NotarySigner $signer,
         NotarySession $session,
-        bool $deliverSynchronously = false,
     ): void {
         $mailable = new NotarySignerVideoInvitationMail(
             $request,
@@ -291,9 +290,7 @@ class NotarySignerVideoInvitationService
             $this->signerVideoJoinUrl($session),
         );
 
-        Mail::to($signer->email)
-            ->onQueue((string) config('docutrust.queues.notifications'))
-            ->queue($mailable);
+        Mail::to($signer->email)->queue($mailable);
 
         $session->forceFill(['invitation_sent_at' => now()])->save();
     }

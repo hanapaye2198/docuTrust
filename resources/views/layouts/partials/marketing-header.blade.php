@@ -13,8 +13,8 @@
   <a href="{{ $marketingNavPrefix }}#features" onclick="closeMobileNav()">{{ __('Features') }}</a>
   <a href="{{ $marketingNavPrefix }}#blockchain" onclick="closeMobileNav()">{{ __('Security') }}</a>
   <a href="{{ $marketingNavPrefix }}#ai" onclick="closeMobileNav()">{{ __('AI Engine') }}</a>
+  <a href="{{ $marketingNavPrefix }}#enotary" onclick="closeMobileNav()">{{ __('eNotary') }}</a>
   <a href="{{ $marketingNavPrefix }}#about" onclick="closeMobileNav()">{{ __('About') }}</a>
-  <a href="{{ $marketingNavPrefix }}#showcase" onclick="closeMobileNav()">{{ __('Advertisement') }}</a>
   <a href="{{ $marketingNavPrefix }}#industries" onclick="closeMobileNav()">{{ __('Industries') }}</a>
   <a href="{{ $marketingNavPrefix }}#faq" onclick="closeMobileNav()">{{ __('FAQ') }}</a>
   <a href="{{ $secondaryHeaderUrl }}" onclick="closeMobileNav()">{{ $secondaryHeaderLabel }}</a>
@@ -43,8 +43,8 @@
       <a href="{{ $marketingNavPrefix }}#features">{{ __('Features') }}</a>
       <a href="{{ $marketingNavPrefix }}#blockchain">{{ __('Security') }}</a>
       <a href="{{ $marketingNavPrefix }}#ai">{{ __('AI Engine') }}</a>
+      <a href="{{ $marketingNavPrefix }}#enotary">{{ __('eNotary') }}</a>
       <a href="{{ $marketingNavPrefix }}#about">{{ __('About') }}</a>
-      <a href="{{ $marketingNavPrefix }}#showcase">{{ __('Advertisement') }}</a>
       <a href="{{ $marketingNavPrefix }}#industries">{{ __('Industries') }}</a>
       <a href="{{ $marketingNavPrefix }}#faq">{{ __('FAQ') }}</a>
     </nav>

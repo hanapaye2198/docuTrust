@@ -54,7 +54,7 @@ class SendDocumentEmailJob implements ShouldQueue
                     return;
                 }
 
-                Mail::to($this->recipientEmail)->send(
+                Mail::to($this->recipientEmail)->queue(
                     new SignerInvitationMail(
                         documentTitle: $document->title,
                         senderName: $document->user?->name ?? config('app.name'),
