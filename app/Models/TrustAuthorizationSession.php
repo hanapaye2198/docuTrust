@@ -16,6 +16,7 @@ class TrustAuthorizationSession extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'document_id',
         'document_signer_id',
         'provider_name',
         'credential_id',
@@ -26,6 +27,7 @@ class TrustAuthorizationSession extends Model
         'access_token',
         'expires_at',
         'completed_at',
+        'consumed_at',
         'payload',
     ];
 
@@ -38,7 +40,16 @@ class TrustAuthorizationSession extends Model
             'payload' => 'array',
             'expires_at' => 'datetime',
             'completed_at' => 'datetime',
+            'consumed_at' => 'datetime',
         ];
+    }
+
+    /**
+     * @return BelongsTo<Document, $this>
+     */
+    public function document(): BelongsTo
+    {
+        return $this->belongsTo(Document::class);
     }
 
     /**

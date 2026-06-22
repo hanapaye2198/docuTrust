@@ -49,6 +49,9 @@ class Document extends Model
         'archived_at',
         'status',
         'sent_at',
+        'csc_signed',
+        'pades_byte_range',
+        'pades_cms_signature',
     ];
 
     /**
@@ -63,6 +66,8 @@ class Document extends Model
             'files' => 'array',
             'audit_enabled' => 'boolean',
             'audit_settings' => 'array',
+            'csc_signed' => 'boolean',
+            'pades_byte_range' => 'array',
         ];
     }
 

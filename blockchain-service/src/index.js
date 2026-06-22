@@ -84,9 +84,10 @@ app.post("/anchor", async (request, response) => {
       transactionHash: receipt?.hash ?? transaction.hash
     });
   } catch (error) {
+    console.error("[DocuTrust]", error);
     response.status(422).json({
-      message: "Unable to anchor hash on Polygon.",
-      error: error instanceof Error ? error.message : "Unknown blockchain error"
+      error: "Request could not be processed.",
+      code: "PROCESSING_ERROR"
     });
   }
 });
@@ -154,9 +155,10 @@ app.post("/verify", async (request, response) => {
       submittedBy: proof.submittedBy
     });
   } catch (error) {
+    console.error("[DocuTrust]", error);
     response.status(422).json({
-      exists: false,
-      message: error instanceof Error ? error.message : "Unable to verify transaction."
+      error: "Request could not be processed.",
+      code: "PROCESSING_ERROR"
     });
   }
 });
@@ -188,9 +190,10 @@ app.post("/csc/v2/credentials/authorize", requireCscService, requireBearerAuth, 
       authMode: cscConfig.authorizationMode
     });
   } catch (error) {
+    console.error("[DocuTrust]", error);
     response.status(422).json({
-      error: "invalid_request",
-      error_description: error instanceof Error ? error.message : "Authorization request is invalid."
+      error: "Request could not be processed.",
+      code: "PROCESSING_ERROR"
     });
   }
 });
@@ -227,9 +230,10 @@ app.post("/csc/v2/credentials/authorizeCheck", requireCscService, requireBearerA
       authMode: cscConfig.authorizationMode
     });
   } catch (error) {
+    console.error("[DocuTrust]", error);
     response.status(422).json({
-      error: "invalid_request",
-      error_description: error instanceof Error ? error.message : "Authorization status request is invalid."
+      error: "Request could not be processed.",
+      code: "PROCESSING_ERROR"
     });
   }
 });
@@ -271,9 +275,10 @@ app.post("/csc/v1/signatures/signHash", requireCscService, requireBearerAuth, (r
       }
     });
   } catch (error) {
+    console.error("[DocuTrust]", error);
     response.status(422).json({
-      error: "invalid_request",
-      error_description: error instanceof Error ? error.message : "Signing request is invalid."
+      error: "Request could not be processed.",
+      code: "PROCESSING_ERROR"
     });
   }
 });
@@ -298,11 +303,30 @@ app.post("/csc/v1/signatures/timestamp", requireCscService, requireBearerAuth, (
       timestampNonce: tokenNonce
     });
   } catch (error) {
+    console.error("[DocuTrust]", error);
     response.status(422).json({
-      error: "invalid_request",
-      error_description: error instanceof Error ? error.message : "Timestamp request is invalid."
+      error: "Request could not be processed.",
+      code: "PROCESSING_ERROR"
     });
   }
+});
+
+app.use((err, request, response, next) => {
+  console.error("[Unhandled Error]", err);
+  response.status(500).json({
+    error: "Internal server error.",
+    code: "INTERNAL_ERROR"
+  });
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[Uncaught Exception]", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[Unhandled Rejection]", reason);
+  process.exit(1);
 });
 
 app.listen(PORT, () => {

@@ -20,15 +20,25 @@ class SignerCertificate extends Model
         'certificate_source',
         'provider_name',
         'provider_reference',
+        'csc_credential_id',
         'subject_dn',
         'issuer_dn',
         'serial_number',
         'public_key_pem',
         'certificate_pem',
         'issuer_certificate_pem',
+        'certificate_chain',
         'fingerprint_sha256',
         'valid_from',
         'valid_to',
+        'valid_until',
+        'key_algorithm',
+        'key_size',
+        'ocsp_url',
+        'crl_url',
+        'ocsp_staple',
+        'ocsp_checked_at',
+        'revocation_status',
         'revoked_at',
         'revocation_reason',
         'status',
@@ -40,8 +50,11 @@ class SignerCertificate extends Model
     protected function casts(): array
     {
         return [
+            'certificate_chain' => 'array',
             'valid_from' => 'datetime',
             'valid_to' => 'datetime',
+            'valid_until' => 'datetime',
+            'ocsp_checked_at' => 'datetime',
             'revoked_at' => 'datetime',
         ];
     }

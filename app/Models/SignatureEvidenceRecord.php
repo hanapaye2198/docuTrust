@@ -28,6 +28,13 @@ class SignatureEvidenceRecord extends Model
         'signing_provider',
         'signing_provider_payload',
         'audit_trail_snapshot',
+        'pades_profile',
+        'cms_signature_hash',
+        'tsr_hash',
+        'ltv_applied',
+        'csc_provider',
+        'csc_transaction_id',
+        'validation_snapshot',
     ];
 
     /**
@@ -39,6 +46,8 @@ class SignatureEvidenceRecord extends Model
             'signer_identity' => 'array',
             'signing_provider_payload' => 'array',
             'audit_trail_snapshot' => 'array',
+            'ltv_applied' => 'boolean',
+            'validation_snapshot' => 'array',
             'signed_at' => 'datetime',
             'otp_verified' => 'boolean',
         ];

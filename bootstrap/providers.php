@@ -5,6 +5,7 @@ use App\Providers\BrevoMailServiceProvider;
 use App\Providers\EkycServiceProvider;
 use App\Providers\FolioServiceProvider;
 use App\Providers\HsmServiceProvider;
+use App\Providers\PadesServiceProvider;
 use App\Providers\VoltServiceProvider;
 
 return [
@@ -13,5 +14,6 @@ return [
     BrevoMailServiceProvider::class,
     FolioServiceProvider::class,
     HsmServiceProvider::class,
+    PadesServiceProvider::class,
     VoltServiceProvider::class,
 ];

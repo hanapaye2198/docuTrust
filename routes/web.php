@@ -19,6 +19,7 @@ use App\Http\Controllers\NotaryRegisterEvidenceImageController;
 use App\Http\Controllers\NotaryRegisterEvidencePathImageController;
 use App\Http\Controllers\NotarySettlementFeeController;
 use App\Http\Controllers\PublicNotaryPaymentController;
+use App\Http\Controllers\Signature\CscOAuthController;
 use App\Http\Controllers\SignDocumentController;
 use App\Http\Controllers\TemplatePrepareController;
 use App\Http\Controllers\TemplateUseController;
@@ -67,10 +68,21 @@ Route::middleware('throttle:signing-links')->group(function () {
     Route::get('/sign/{token}/signature-image/{signatureField}', [SignDocumentController::class, 'streamSignatureImage'])->name('sign.signature.image');
     Route::post('/sign/{token}', [SignDocumentController::class, 'sign'])->name('sign.store');
     Route::post('/sign/{token}/signature', [SignDocumentController::class, 'storeSignature'])->name('sign.signature.store');
+    Route::post('/sign/{token}/csc/authorize', [SignDocumentController::class, 'initiateCscAuthorization'])->name('sign.csc.authorize');
     Route::post('/sign/{token}/trust/authorize', [SignDocumentController::class, 'startTrustAuthorization'])->name('sign.trust.authorize');
     Route::get('/sign/{token}/trust/authorize/{session}', [SignDocumentController::class, 'pollTrustAuthorization'])->name('sign.trust.authorize.poll');
     Route::post('/sign/{token}/complete', [SignDocumentController::class, 'complete'])->name('sign.complete');
 });
+
+Route::get('/csc/oauth/redirect',
+    [CscOAuthController::class, 'redirect'])
+    ->middleware('throttle:signing-links')
+    ->name('csc.oauth.redirect');
+
+Route::get('/csc/oauth/callback',
+    [CscOAuthController::class, 'callback'])
+    ->middleware('throttle:signing-links')
+    ->name('csc.oauth.callback');
 
 Route::middleware(['signed', 'throttle:signing-links'])->group(function () {
     Route::get('/notary/payment/{notaryRequest}', [PublicNotaryPaymentController::class, 'show'])->name('public.notary.payment.show');

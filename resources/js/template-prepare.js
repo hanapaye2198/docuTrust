@@ -126,7 +126,9 @@ function createPrepareSession(cfgEl) {
     const canSendFromServer = Boolean(btnSendToSigner) && !btnSendToSigner.disabled;
 
     function debugLog(message, payload) {
-        console.log(debugPrefix, message, payload ?? '');
+        if (import.meta.env.DEV) {
+            console.log(debugPrefix, message, payload ?? '');
+        }
     }
 
     function isEditableTarget(target) {

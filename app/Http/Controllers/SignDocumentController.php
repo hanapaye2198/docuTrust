@@ -16,6 +16,7 @@ use App\Services\CompletedDocumentArtifactService;
 use App\Services\DocumentPdfStampingService;
 use App\Services\DocumentSigningWorkflowService;
 use App\Services\FieldSignatureCaptureService;
+use App\Services\Signature\SadLifecycleService;
 use App\Services\SigningMethodService;
 use App\Support\PublicPdfStream;
 use App\Trust\Authorization\TrustAuthorizationRequiredException;
@@ -770,6 +771,28 @@ class SignDocumentController extends Controller
                 'message' => __('Unable to check trust authorization right now. Please try again.'),
             ], 500);
         }
+    }
+
+    public function initiateCscAuthorization(Request $request, string $token): JsonResponse
+    {
+        $signer = DocumentSigner::query()
+            ->where('access_token', $token)
+            ->firstOrFail();
+
+        $sadService = app(SadLifecycleService::class);
+        if ($sadService->isValid($signer->document_id, $signer->id)) {
+            return response()->json(['status' => 'already_authorized']);
+        }
+
+        $redirectUrl = route('csc.oauth.redirect').'?'.http_build_query([
+            'document_id' => $signer->document_id,
+            'signer_id' => $signer->id,
+        ]);
+
+        return response()->json([
+            'status' => 'redirect_required',
+            'redirect_url' => $redirectUrl,
+        ]);
     }
 
     public function unlock(Request $request, string $token): JsonResponse|RedirectResponse|Response

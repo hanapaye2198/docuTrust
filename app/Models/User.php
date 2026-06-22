@@ -185,7 +185,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_otp_expires_at' => now()->addMinutes(10),
         ])->save();
 
-        Mail::to($this)->send(new EmailOtpVerificationMail($otp));
+        Mail::to($this)
+            ->onQueue((string) config('docutrust.queues.notifications'))
+            ->queue(new EmailOtpVerificationMail($otp));
     }
 
     /**

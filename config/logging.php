@@ -89,6 +89,13 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'signature' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/signature.log'),
+            'level' => env('LOG_SIGNATURE_LEVEL', 'info'),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

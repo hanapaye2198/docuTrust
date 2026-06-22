@@ -105,6 +105,44 @@ class DocumentSignerWorkflowTest extends TestCase
             ->assertSee('Start trust authorization to enable cloud signing for this document.');
     }
 
+    public function test_pades_sign_page_shows_csc_livewire_authorization_components(): void
+    {
+        config()->set('signature.pades_enabled', true);
+
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+            'signing_method' => SigningMethod::PkiCertificate,
+            'remote_credential_id' => 'credential-csc-ui-001',
+        ]);
+
+        $this->get(route('sign.show', $signer->access_token))
+            ->assertOk()
+            ->assertSee('CSC cloud credentials')
+            ->assertSee('Connect CSC Credentials')
+            ->assertSee('Awaiting authorization...');
+    }
+
+    public function test_signer_csc_authorize_endpoint_returns_oauth_redirect_url(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        $this->postJson(route('sign.csc.authorize', ['token' => $signer->access_token]))
+            ->assertOk()
+            ->assertJson([
+                'status' => 'redirect_required',
+            ])
+            ->assertJsonPath('redirect_url', route('csc.oauth.redirect').'?'.http_build_query([
+                'document_id' => $document->id,
+                'signer_id' => $signer->id,
+            ]));
+    }
+
     public function test_signing_updates_signer_and_completes_document_when_only_one_signer(): void
     {
         $user = User::factory()->create();

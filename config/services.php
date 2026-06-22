@@ -92,6 +92,16 @@ return [
         'enabled' => env('MARKETING_CHATBOT_ENABLED', true),
     ],
 
+    'csc' => [
+        'base_url' => env('CSC_BASE_URL', ''),
+        'client_id' => env('CSC_CLIENT_ID', ''),
+        'client_secret' => env('CSC_CLIENT_SECRET', ''),
+        'redirect_uri' => env('CSC_REDIRECT_URI', ''),
+        'sign_algo' => env('CSC_SIGN_ALGO', '1.2.840.113549.1.1.11'),
+        'timeout' => (int) env('CSC_TIMEOUT', 30),
+        'sandbox' => (bool) env('CSC_SANDBOX', true),
+    ],
+
     'remote_signing' => [
         'provider_name' => env('REMOTE_SIGNING_PROVIDER_NAME', 'remote_managed'),
         'base_url' => env('REMOTE_SIGNING_BASE_URL', ''),

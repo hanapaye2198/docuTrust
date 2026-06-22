@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('app:send-pending-signature-reminders')->hourly();
 Schedule::command('app:recover-stale-einvoices')->everyFiveMinutes();
 Schedule::command('app:prune-einvoice-submission-payloads')->daily();
+Schedule::command('signature:expire-sad-sessions')->everyFiveMinutes();

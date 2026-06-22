@@ -291,11 +291,9 @@ class NotarySignerVideoInvitationService
             $this->signerVideoJoinUrl($session),
         );
 
-        if ($deliverSynchronously) {
-            Mail::to($signer->email)->sendNow($mailable);
-        } else {
-            Mail::to($signer->email)->queue($mailable);
-        }
+        Mail::to($signer->email)
+            ->onQueue((string) config('docutrust.queues.notifications'))
+            ->queue($mailable);
 
         $session->forceFill(['invitation_sent_at' => now()])->save();
     }

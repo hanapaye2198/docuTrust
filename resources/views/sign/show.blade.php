@@ -1,6 +1,7 @@
 @php
     use App\Enums\DocumentSignerStatus;
     use App\Enums\DocumentStatus;
+    use App\Enums\SigningMethod;
 
     $isNotaryUser = auth()->user()?->role->value === 'notary';
     $accountRoutePrefix = $isNotaryUser ? 'notary.sign.account' : 'sign.account';
@@ -21,6 +22,13 @@
         && $signer->status === DocumentSignerStatus::Pending
         && $signer->document->status === DocumentStatus::Pending
         && ! $signer->isRecipient();
+
+    $showCscCredentialAuthorization =
+        (bool) config('signature.pades_enabled')
+        && (
+            is_string($signer->remote_credential_id)
+            || $signer->signingMethod() === SigningMethod::PkiCertificate
+        );
 
     $isApprover = $signer->isApprover();
     $isRecipient = $signer->isRecipient();
@@ -405,6 +413,20 @@
                     <input type="hidden" name="signature_field_id" id="modal-field-id" value="" />
                     <input type="hidden" name="signature_image" id="modal-signature-image" value="" />
                     <input type="hidden" name="submitted_value" id="modal-submitted-value" value="" />
+                    @if ($showCscCredentialAuthorization)
+                        <div class="mb-4 mt-1">
+                            <livewire:signature.csc-credential-selector
+                                :document-id="$signer->document->id"
+                                :signer-id="$signer->id"
+                            />
+                        </div>
+                        <div class="mb-2">
+                            <livewire:signature.trust-authorization-status
+                                :document-id="$signer->document->id"
+                                :signer-id="$signer->id"
+                            />
+                        </div>
+                    @endif
                     <div class="flex justify-end gap-2">
                         <button type="button" id="modal-cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-200/80 dark:text-zinc-400 dark:hover:bg-zinc-800">
                             {{ __('Cancel') }}
@@ -430,6 +452,20 @@
                                 ? __('Trust authorization is active. You can complete cloud signing now.')
                                 : __('Start trust authorization to enable cloud signing for this document.') }}
                         </p>
+                    @endif
+                    @if ($showCscCredentialAuthorization)
+                        <div class="mb-4 mt-1">
+                            <livewire:signature.csc-credential-selector
+                                :document-id="$signer->document->id"
+                                :signer-id="$signer->id"
+                            />
+                        </div>
+                        <div class="mb-2">
+                            <livewire:signature.trust-authorization-status
+                                :document-id="$signer->document->id"
+                                :signer-id="$signer->id"
+                            />
+                        </div>
                     @endif
                     <flux:button
                         variant="primary"

@@ -30,6 +30,19 @@ class Signature extends Model
         'signing_provider_reference',
         'signing_provider_payload',
         'position_data',
+        'pades_profile',
+        'cms_signature',
+        'byte_range',
+        'digest_algorithm',
+        'signing_time',
+        'tsa_timestamp',
+        'tsa_url',
+        'ltv_applied',
+        'ltv_dss_path',
+        'csc_credential_id',
+        'csc_transaction_id',
+        'validation_status',
+        'validated_at',
     ];
 
     /**
@@ -40,6 +53,10 @@ class Signature extends Model
         return [
             'signing_provider_payload' => 'array',
             'position_data' => 'array',
+            'byte_range' => 'array',
+            'ltv_applied' => 'boolean',
+            'signing_time' => 'datetime',
+            'validated_at' => 'datetime',
         ];
     }
 

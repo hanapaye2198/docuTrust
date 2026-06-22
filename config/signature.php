@@ -22,6 +22,16 @@ return [
         'default' => env('SIGNATURE_ENGINE', 'basic'),
     ],
 
+    'pades_enabled' => env('PADES_ENABLED', false),
+
+    'ltv_enabled' => env('LTV_ENABLED', false),
+
+    'tsa' => [
+        'url' => env('TSA_URL', 'http://timestamp.digicert.com'),
+        'ca_cert' => env('TSA_CA_CERT', ''),
+        'timeout' => (int) env('TSA_TIMEOUT', 15),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Feature flags (early production: HSM/KMS/PKCS#11 off by default)
