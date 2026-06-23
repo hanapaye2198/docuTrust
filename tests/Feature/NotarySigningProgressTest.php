@@ -63,7 +63,7 @@ class NotarySigningProgressTest extends TestCase
         $this->assertSame('current', collect($summary['tracker_steps'])->firstWhere('key', 'signatures')['state']);
     }
 
-    public function test_notary_request_show_does_not_display_signing_tracker_on_document_page(): void
+    public function test_notary_request_show_displays_compact_signer_status_on_document_page(): void
     {
         $notary = User::factory()->notary()->create();
         $request = NotaryRequest::factory()->for($notary)->create([
@@ -86,12 +86,15 @@ class NotarySigningProgressTest extends TestCase
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
             ->assertSee('Document')
+            ->assertSee('Signer status')
+            ->assertSee('Waiting for signatures')
+            ->assertSee('Hannah Faye')
             ->assertDontSee('Live polling')
             ->assertDontSee('Document completion')
             ->assertDontSee('data-live-signing-progress', false);
     }
 
-    public function test_document_page_route_does_not_render_live_signing_tracker(): void
+    public function test_document_page_route_renders_compact_signer_status_without_full_tracker(): void
     {
         $notary = User::factory()->notary()->create();
         $request = NotaryRequest::factory()->for($notary)->create([
@@ -113,6 +116,9 @@ class NotarySigningProgressTest extends TestCase
             ->get(route('notary.requests.show', [$request, 'document']))
             ->assertOk()
             ->assertSee('Document')
+            ->assertSee('Signer status')
+            ->assertSee('Waiting for signatures')
+            ->assertSee('Realtime Signer')
             ->assertDontSee('Live polling')
             ->assertDontSee('Document completion')
             ->assertDontSee('data-live-signing-progress', false)

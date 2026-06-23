@@ -119,6 +119,7 @@
                         @php
                             $artifactState = collect($finalizationReadiness['documents'])->firstWhere('document_id', $document->id);
                             $workflowState = $documentWorkflowStates[$document->id] ?? null;
+                            $documentProgress = collect($signingProgress['documents'] ?? [])->firstWhere('document_id', $document->id);
                         @endphp
                         <div class="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900">
                             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -208,6 +209,92 @@
                                     </div>
                                 @endif
                             </div>
+                            @if (is_array($documentProgress) && ($documentProgress['total'] ?? 0) > 0 && in_array($document->status->value, ['pending', 'completed'], true))
+                                <div
+                                    class="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/50"
+                                    wire:poll.5s="refreshSigningStatus"
+                                    wire:key="document-signer-status-{{ $document->id }}"
+                                    data-document-signer-status
+                                >
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Signer status') }}</span>
+                                                @if (($documentProgress['completed'] ?? 0) >= ($documentProgress['total'] ?? 0))
+                                                    <flux:badge size="sm" color="emerald">{{ __('All signers completed') }}</flux:badge>
+                                                @else
+                                                    <flux:badge size="sm" color="amber">{{ __('Waiting for signatures') }}</flux:badge>
+                                                @endif
+                                            </div>
+                                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                                {{ trans_choice(':count of :total signer complete|:count of :total signers complete', (int) ($documentProgress['total'] ?? 0), [
+                                                    'count' => (int) ($documentProgress['completed'] ?? 0),
+                                                    'total' => (int) ($documentProgress['total'] ?? 0),
+                                                ]) }}
+                                                @if ($documentProgress['is_sequential'] ?? false)
+                                                    <span class="mx-1 text-zinc-300 dark:text-zinc-700">•</span>
+                                                    {{ __('Sequential') }}
+                                                @endif
+                                            </p>
+                                        </div>
+                                        <div class="w-full sm:max-w-48">
+                                            <div class="flex items-center justify-between gap-2 text-xs">
+                                                <span class="font-medium text-zinc-500 dark:text-zinc-400">{{ __('Progress') }}</span>
+                                                <span class="font-bold tabular-nums text-sky-700 dark:text-sky-300">{{ (int) ($documentProgress['percent'] ?? 0) }}%</span>
+                                            </div>
+                                            <div class="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                                                <div class="h-full rounded-full bg-sky-500 transition-all duration-500" style="width: {{ max(0, min(100, (int) ($documentProgress['percent'] ?? 0))) }}%"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 grid gap-2">
+                                        @foreach ($documentProgress['signers'] as $signerProgress)
+                                            <div
+                                                class="flex flex-col gap-2 rounded-xl border border-white bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between"
+                                                wire:key="document-signer-status-{{ $document->id }}-{{ $signerProgress['signer_id'] }}"
+                                            >
+                                                <div class="min-w-0">
+                                                    <div class="flex flex-wrap items-center gap-2">
+                                                        <span @class([
+                                                            'inline-flex size-5 items-center justify-center rounded-full text-[10px] font-bold',
+                                                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' => $signerProgress['is_completed'],
+                                                            'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' => ! $signerProgress['is_completed'],
+                                                        ])>
+                                                            @if ($signerProgress['is_completed'])
+                                                                <flux:icon.check variant="mini" class="size-3" />
+                                                            @else
+                                                                {{ $signerProgress['signing_order'] ?? '·' }}
+                                                            @endif
+                                                        </span>
+                                                        <span class="truncate font-semibold text-zinc-900 dark:text-zinc-100">{{ $signerProgress['name'] }}</span>
+                                                        <flux:badge size="sm" :color="$signerProgress['is_completed'] ? 'emerald' : 'amber'">
+                                                            {{ $signerProgress['status_label'] }}
+                                                        </flux:badge>
+                                                    </div>
+                                                    <div class="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{{ $signerProgress['email'] }}</div>
+                                                </div>
+                                                <div class="text-xs font-medium">
+                                                    @if ($signerProgress['completed_at'])
+                                                        <span class="text-emerald-700 dark:text-emerald-300">{{ __('Completed :date', ['date' => $signerProgress['completed_at']]) }}</span>
+                                                    @elseif (is_string($signerProgress['waiting_label'] ?? null) && $signerProgress['waiting_label'] !== '')
+                                                        <span class="text-amber-700 dark:text-amber-300">{{ $signerProgress['waiting_label'] }}</span>
+                                                    @else
+                                                        <span class="text-zinc-500 dark:text-zinc-400">{{ __('Waiting') }}</span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+
+                                    @if (($signingProgress['phase'] ?? '') === 'awaiting_video')
+                                        <div class="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-200">
+                                            <div class="font-semibold">{{ __('Signer signatures are complete.') }}</div>
+                                            <div class="mt-1">{{ __('Next step: go to Signers & video for video verification.') }}</div>
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
                             @if (app()->environment('local') && in_array($document->status->value, ['pending', 'completed'], true))
                                 @php
                                     $localTestingSigners = $document->documentSigners->filter(
