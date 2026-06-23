@@ -6,7 +6,7 @@
     $navRoleLabel = app(TrustProfileService::class)->summary($navUser)['role_label'];
 @endphp
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         @include('partials.head')
     </head>
@@ -41,7 +41,7 @@
 
             {{-- ── Nav ── --}}
             <flux:sidebar.nav
-                class="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-1 py-0.5
+                class="shrink-0 overflow-visible px-1 py-0.5
                     [&_[data-flux-sidebar-item]]:relative
                     [&_[data-flux-sidebar-item]]:my-0.5
                     [&_[data-flux-sidebar-item]]:h-10
@@ -163,28 +163,66 @@
 
                 @if ($navRole === UserRole::Notary)
                     <flux:sidebar.item
-                        icon="scale"
+                        icon="squares-2x2"
                         :href="route('notary.dashboard')"
                         :current="request()->routeIs('notary.dashboard')"
-                        :tooltip="__('e-Notary Dashboard')"
+                        :tooltip="__('Dashboard')"
                         wire:navigate
-                    >{{ __('e-Notary Dashboard') }}</flux:sidebar.item>
+                    >{{ __('Dashboard') }}</flux:sidebar.item>
 
                     <flux:sidebar.item
-                        icon="clipboard-document-list"
+                        icon="folder-open"
                         :href="route('notary.requests.index')"
-                        :current="request()->routeIs('notary.requests.*') && ! request()->routeIs('notary.attorney-registries.*')"
-                        :tooltip="__('Notarizations')"
+                        :current="request()->routeIs('notary.requests.*')"
+                        :tooltip="__('Notary Cases')"
                         wire:navigate
-                    >{{ __('Notarizations') }}</flux:sidebar.item>
+                    >{{ __('Notary Cases') }}</flux:sidebar.item>
 
                     <flux:sidebar.item
-                        icon="book-open"
+                        icon="calendar-days"
+                        :href="route('notary.calendar')"
+                        :current="request()->routeIs('notary.calendar')"
+                        :tooltip="__('Calendar')"
+                        wire:navigate
+                    >{{ __('Calendar') }}</flux:sidebar.item>
+
+                    <div class="my-0.5 flex h-10 select-none items-center gap-3 rounded-xl px-3 py-2 text-zinc-400 opacity-60 in-data-flux-sidebar-collapsed-desktop:mx-auto in-data-flux-sidebar-collapsed-desktop:w-10 in-data-flux-sidebar-collapsed-desktop:justify-center in-data-flux-sidebar-collapsed-desktop:px-0 dark:text-zinc-500">
+                        <flux:icon name="users" class="size-[18px] shrink-0" />
+                        <span class="flex-1 truncate text-[13.5px] font-semibold in-data-flux-sidebar-collapsed-desktop:hidden">{{ __('Clients') }}</span>
+                        <span class="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-teal-500 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-teal-400">{{ __('Soon') }}</span>
+                    </div>
+
+                    <div class="my-0.5 flex h-10 select-none items-center gap-3 rounded-xl px-3 py-2 text-zinc-400 opacity-60 in-data-flux-sidebar-collapsed-desktop:mx-auto in-data-flux-sidebar-collapsed-desktop:w-10 in-data-flux-sidebar-collapsed-desktop:justify-center in-data-flux-sidebar-collapsed-desktop:px-0 dark:text-zinc-500">
+                        <flux:icon name="credit-card" class="size-[18px] shrink-0" />
+                        <span class="flex-1 truncate text-[13.5px] font-semibold in-data-flux-sidebar-collapsed-desktop:hidden">{{ __('Payments') }}</span>
+                        <span class="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-teal-500 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-teal-400">{{ __('Soon') }}</span>
+                    </div>
+
+                    <div class="mb-1.5 mt-4 px-3 pt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-zinc-600">
+                        {{ __('Records') }}
+                    </div>
+
+                    <flux:sidebar.item
+                        icon="book-open-text"
                         :href="route('notary.attorney-registries.index')"
                         :current="request()->routeIs('notary.attorney-registries.*', 'notary.attorney-registry')"
-                        :tooltip="__('Notary registry')"
+                        :tooltip="__('Notary Register')"
                         wire:navigate
-                    >{{ __('Notary registry') }}</flux:sidebar.item>
+                    >{{ __('Notary Register') }}</flux:sidebar.item>
+
+                    <div class="my-0.5 flex h-10 select-none items-center gap-3 rounded-xl px-3 py-2 text-zinc-400 opacity-60 in-data-flux-sidebar-collapsed-desktop:mx-auto in-data-flux-sidebar-collapsed-desktop:w-10 in-data-flux-sidebar-collapsed-desktop:justify-center in-data-flux-sidebar-collapsed-desktop:px-0 dark:text-zinc-500">
+                        <flux:icon name="clipboard-document-list" class="size-[18px] shrink-0" />
+                        <span class="flex-1 truncate text-[13.5px] font-semibold in-data-flux-sidebar-collapsed-desktop:hidden">{{ __('Audit Logs') }}</span>
+                        <span class="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-teal-500 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-teal-400">{{ __('Soon') }}</span>
+                    </div>
+
+                    <flux:sidebar.item
+                        icon="shield-check"
+                        :href="route('verify.index')"
+                        :current="request()->routeIs('verify.*')"
+                        :tooltip="__('Verify')"
+                        wire:navigate
+                    >{{ __('Verify') }}</flux:sidebar.item>
                 @endif
 
                 @if ($navUser->canManageNotaryRequestPortal())
@@ -223,7 +261,7 @@
                     >{{ __('Templates') }}</flux:sidebar.item>
                 @endif
 
-                @if ($navUser->canAccessWorkspaceTools())
+                @if ($navRole !== UserRole::Notary && $navUser->canAccessWorkspaceTools())
                     {{-- Divider before Verify --}}
                     <div class="my-2.5 mx-3 border-t border-zinc-100 in-data-flux-sidebar-collapsed-desktop:mx-auto in-data-flux-sidebar-collapsed-desktop:w-6 dark:border-zinc-800/80"></div>
 
@@ -286,6 +324,30 @@
                         wire:navigate
                     >{{ __('Settings') }}</flux:sidebar.item>
                 </flux:sidebar.nav>
+
+                @if ($navRole === UserRole::Notary)
+                    <div class="mt-4 border-t border-zinc-100 px-3 pb-2 pt-4 in-data-flux-sidebar-collapsed-desktop:hidden dark:border-white/10">
+                        <p class="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+                            {{ __('Case Workflow') }}
+                        </p>
+                        <ol class="space-y-1">
+                            @foreach ([
+                                '1. Create Case',
+                                '2. Add Signers',
+                                '3. Prepare Document',
+                                '4. Client Signs',
+                                '5. Video Verification',
+                                '6. Payment',
+                                '7. Digital Seal',
+                                '8. Completed',
+                            ] as $step)
+                                <li class="px-1 py-0.5 text-xs leading-relaxed text-zinc-500">
+                                    {{ __($step) }}
+                                </li>
+                            @endforeach
+                        </ol>
+                    </div>
+                @endif
 
                 <div class="hidden items-center justify-between px-1 pt-1 lg:flex in-data-flux-sidebar-collapsed-desktop:justify-center">
                     <span class="text-[11px] text-zinc-400 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-zinc-600">

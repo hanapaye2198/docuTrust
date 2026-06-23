@@ -71,12 +71,25 @@ function updateDocutrustThemeUi(isDark) {
   syncDocutrustLogos(isDark);
 }
 
+function setDocutrustTheme(isDark, persist) {
+  document.documentElement.classList.toggle('dark-scheme', isDark);
+  document.documentElement.classList.toggle('dark', isDark);
+  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+
+  if (persist) {
+    try {
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    } catch (error) {
+      // Ignore storage errors in restricted browsing contexts.
+    }
+  }
+
+  updateDocutrustThemeUi(isDark);
+}
+
 updateDocutrustThemeUi(document.documentElement.classList.contains('dark-scheme'));
 
 docutrustThemeToggle?.addEventListener('click', function () {
-  const isDark = document.documentElement.classList.toggle('dark-scheme');
-  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
-  localStorage.setItem('theme', isDark ? 'dark' : 'light');
-  updateDocutrustThemeUi(isDark);
+  setDocutrustTheme(! document.documentElement.classList.contains('dark-scheme'), true);
 });
 </script>

@@ -165,6 +165,41 @@
                     @endif
                 </flux:menu>
             </flux:dropdown>
+
+            <div x-data="{
+                isDark: document.documentElement.classList.contains('dark'),
+                toggle() {
+                    this.isDark = !this.isDark;
+                    document.documentElement.classList.toggle('dark', this.isDark);
+                    localStorage.setItem('docutrust-theme', this.isDark ? 'dark' : 'light');
+                }
+            }">
+                <flux:tooltip content="{{ __('Switch to Dark Mode') }}" position="bottom">
+                    <flux:button
+                        x-show="! isDark"
+                        variant="subtle"
+                        size="sm"
+                        class="!size-9 !rounded-xl transition-colors duration-200"
+                        x-on:click="toggle()"
+                        icon="moon"
+                        icon:variant="outline"
+                        aria-label="{{ __('Switch to Dark Mode') }}"
+                    />
+                </flux:tooltip>
+
+                <flux:tooltip content="{{ __('Switch to Light Mode') }}" position="bottom">
+                    <flux:button
+                        x-show="isDark"
+                        variant="subtle"
+                        size="sm"
+                        class="!size-9 !rounded-xl transition-colors duration-200"
+                        x-on:click="toggle()"
+                        icon="sun"
+                        icon:variant="outline"
+                        aria-label="{{ __('Switch to Light Mode') }}"
+                    />
+                </flux:tooltip>
+            </div>
         </div>
 
         <x-user.profile-menu :user="$authUser" class="shrink-0" />

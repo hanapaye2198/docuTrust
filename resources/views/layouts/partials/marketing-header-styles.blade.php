@@ -244,7 +244,7 @@ body.mobile-nav-open{overflow:hidden;overscroll-behavior:none}
   }
   .theme-toggle-label{display:none}
 }
-@media(max-width:1024px){
+@media(max-width:1180px){
   nav{display:none}
   .nav-mobile-toggle{display:inline-flex}
   .header-inner{padding:0 16px}
@@ -253,8 +253,10 @@ body.mobile-nav-open{overflow:hidden;overscroll-behavior:none}
   .btn-ghost{display:none}
   .btn-primary{padding:9px 14px;font-size:.8125rem}
 }
+@media(max-width:560px){
+  .btn-primary{display:none}
+}
 @media(max-width:420px){
   .logo-text{font-size:.95rem}
-  .btn-primary{padding:9px 12px}
 }
 </style>

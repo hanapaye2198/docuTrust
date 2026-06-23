@@ -143,6 +143,7 @@ Route::middleware(['auth', 'role:super_admin'])->group(function () {
 
 Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function () {
     Volt::route('notary/dashboard', 'notary.dashboard')->name('notary.dashboard');
+    Volt::route('notary/calendar', 'notary.calendar')->name('notary.calendar');
     Volt::route('notary/credentials', 'notary.credentials')->name('notary.credentials');
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
@@ -188,6 +189,8 @@ Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(funct
         Volt::route('notary-requests/{notaryRequest}/session/{session}', 'notary-requests.session-live')
             ->middleware(['enotary.portal:view', AllowMediaPermissions::class])
             ->name('notary-requests.session.live');
+        Volt::route('notary-requests/book/{notaryUser}', 'notary-requests.book-appointment')
+            ->name('notary.appointment.book');
     });
 
     Route::middleware(['workspace:signing'])->group(function () {

@@ -120,6 +120,14 @@ class NotaryRequest extends Model
     }
 
     /**
+     * @return HasOne<NotaryAppointment, $this>
+     */
+    public function notaryAppointment(): HasOne
+    {
+        return $this->hasOne(NotaryAppointment::class);
+    }
+
+    /**
      * @return HasMany<NotaryJournal, $this>
      */
     public function journals(): HasMany

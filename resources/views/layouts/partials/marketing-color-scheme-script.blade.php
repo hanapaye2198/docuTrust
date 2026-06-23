@@ -1,7 +1,17 @@
 <script>
 (function () {
-  var isDark = localStorage.getItem('theme') === 'dark';
+  var savedTheme = null;
+  try {
+    savedTheme = localStorage.getItem('theme');
+  } catch (error) {
+    savedTheme = null;
+  }
+
+  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var isDark = savedTheme === 'dark' || (savedTheme === null && prefersDark);
+
   document.documentElement.classList.toggle('dark-scheme', isDark);
+  document.documentElement.classList.toggle('dark', isDark);
   document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
   var themeColor = document.getElementById('docutrustThemeColor');
   if (themeColor) {
