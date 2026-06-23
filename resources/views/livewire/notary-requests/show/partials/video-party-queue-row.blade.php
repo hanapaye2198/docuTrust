@@ -66,12 +66,7 @@
                     @if ($isCurrent)
                         <flux:badge size="sm" color="indigo">{{ __('Next') }}</flux:badge>
                     @endif
-                    @if ($isWaiting)
-                        <span class="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                            <span class="size-1.5 animate-pulse rounded-full bg-emerald-500"></span>
-                            {{ __('Waiting in room') }}
-                        </span>
-                    @elseif ($isVerified)
+                    @if ($isVerified)
                         <span class="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
                             {{ __('Verified') }}
                         </span>

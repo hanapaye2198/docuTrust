@@ -235,6 +235,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('settings/trust-profile/photo', [TrustProfileAssetController::class, 'photo'])->name('settings.trust-profile.photo');
     Route::get('settings/trust-profile/signature', [TrustProfileAssetController::class, 'signature'])->name('settings.trust-profile.signature');
     Route::get('settings/trust-profile/seal', [TrustProfileAssetController::class, 'seal'])->name('settings.trust-profile.seal');
+    Route::post('settings/trust-profile/seal', [TrustProfileAssetController::class, 'storeSeal'])->name('settings.trust-profile.seal.store');
     Volt::route('settings/profile', 'settings.profile')->name('settings.profile');
     Route::redirect('settings/password', '/settings/profile?tab=password')->name('settings.password');
     Route::redirect('settings/security', '/settings/profile?tab=security')->name('settings.security');

@@ -132,8 +132,13 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertSee("You're in the waiting room")
+            ->assertSee('Joining your video call')
             ->assertSee('https://meet.jit.si/docutrust-test-room', false);
+
+        $contentSecurityPolicy = (string) $response->headers->get('Content-Security-Policy');
+        $this->assertStringContainsString('frame-src', $contentSecurityPolicy);
+        $this->assertStringContainsString('https://meet.jit.si', $contentSecurityPolicy);
+        $this->assertStringContainsString('https://8x8.vc', $contentSecurityPolicy);
 
         $session->refresh();
         $this->assertTrue($session->signer_confirmed);

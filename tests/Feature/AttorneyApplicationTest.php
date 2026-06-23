@@ -59,6 +59,7 @@ class AttorneyApplicationTest extends TestCase
             ->set('ibpDocument', UploadedFile::fake()->create('ibp.pdf', 100, 'application/pdf'))
             ->set('ptrDocument', UploadedFile::fake()->create('ptr.pdf', 100, 'application/pdf'))
             ->set('sealImage', UploadedFile::fake()->image('seal.png'))
+            ->assertSee('Seal selected')
             ->set('signatureImage', UploadedFile::fake()->image('sig.png'))
             ->call('submit')
             ->assertHasNoErrors();

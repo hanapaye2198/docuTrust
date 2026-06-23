@@ -261,12 +261,63 @@ new class extends Component {
                         </flux:field>
                     </div>
 
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:field>
-                            <flux:label>{{ __('Notary seal image') }}</flux:label>
-                            <input type="file" wire:model="sealImage" accept="image/*" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+                    <div class="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
+                        <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-5 transition dark:border-zinc-700 dark:bg-zinc-950/30">
+                            <div class="flex items-start gap-3">
+                                <div class="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">
+                                    <flux:icon name="cloud-arrow-up" class="size-5" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Notary seal image') }}</p>
+                                    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                                        {{ __('Upload a clear image of your official seal for review with your attorney application.') }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <label class="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-zinc-200 bg-white px-4 py-6 text-center shadow-sm transition hover:border-teal-300 hover:bg-teal-50/50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-teal-500/50 dark:hover:bg-teal-500/10">
+                                <input type="file" wire:model="sealImage" accept="image/*" class="sr-only" />
+                                <span class="text-sm font-semibold text-teal-700 dark:text-teal-300">{{ __('Choose seal image') }}</span>
+                                <span class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('PNG or JPG, max 2MB') }}</span>
+                            </label>
+
                             <flux:error name="sealImage" />
-                        </flux:field>
+                            <div wire:loading wire:target="sealImage" class="mt-3 text-sm text-teal-600 dark:text-teal-400">
+                                {{ __('Preparing seal preview...') }}
+                            </div>
+
+                            @if ($sealImage)
+                                <p class="mt-3 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Selected: :file', ['file' => $sealImage->getClientOriginalName()]) }}
+                                </p>
+                            @endif
+                        </div>
+
+                        <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-950/40">
+                            @if ($sealImage)
+                                <div class="mb-4 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-sm font-semibold text-teal-950 dark:text-teal-100">{{ __('Seal selected') }}</p>
+                                        <p class="mt-1 text-xs text-teal-800 dark:text-teal-200">{{ __('Submit the application to send this seal for review.') }}</p>
+                                    </div>
+                                    <flux:badge color="emerald" size="sm">{{ __('Ready') }}</flux:badge>
+                                </div>
+                                <div class="flex min-h-44 items-center justify-center rounded-2xl border border-teal-200 bg-teal-50/70 p-4 dark:border-teal-500/30 dark:bg-teal-500/10">
+                                    <div class="text-center text-teal-900 dark:text-teal-100">
+                                        <flux:icon name="check-circle" class="mx-auto size-8" />
+                                        <p class="mt-3 text-sm font-semibold">{{ __('Image uploaded successfully') }}</p>
+                                        <p class="mt-1 text-xs">{{ __('Continue once the selected file is correct.') }}</p>
+                                    </div>
+                                </div>
+                            @else
+                                <div class="flex min-h-44 flex-col items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 p-5 text-center text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
+                                    <flux:icon name="shield-check" class="size-8" />
+                                    <p class="mt-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Seal preview will appear here') }}</p>
+                                    <p class="mt-1 text-xs">{{ __('Select an image to confirm it is readable before you submit.') }}</p>
+                                </div>
+                            @endif
+                        </div>
+
                         <flux:field>
                             <flux:label>{{ __('Registered signature') }}</flux:label>
                             <input type="file" wire:model="signatureImage" accept="image/*" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900" />

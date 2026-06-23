@@ -10,7 +10,6 @@ use App\Services\NotaryRequestWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class NotarySealProfileTest extends TestCase
@@ -28,10 +27,9 @@ class NotarySealProfileTest extends TestCase
 
         $this->actingAs($notary);
 
-        Volt::test('settings.trust-profile')
-            ->set('notarySealUpload', UploadedFile::fake()->image('seal.png'))
-            ->call('uploadNotarySeal')
-            ->assertHasNoErrors();
+        $this->post(route('settings.trust-profile.seal.store'), [
+            'notary_seal_upload' => UploadedFile::fake()->image('seal.png'),
+        ])->assertRedirect(route('settings.trust-profile').'#notary-seal');
 
         $credential->refresh();
 
@@ -52,10 +50,9 @@ class NotarySealProfileTest extends TestCase
 
         $this->actingAs($notary);
 
-        Volt::test('settings.trust-profile')
-            ->set('notarySealUpload', UploadedFile::fake()->image('seal.png'))
-            ->call('uploadNotarySeal')
-            ->assertHasNoErrors();
+        $this->post(route('settings.trust-profile.seal.store'), [
+            'notary_seal_upload' => UploadedFile::fake()->image('seal.png'),
+        ])->assertRedirect(route('settings.trust-profile').'#notary-seal');
 
         $this->assertTrue(app(NotaryRequestWorkflowService::class)->hasAttorneySealOnFile($request));
 
@@ -74,7 +71,8 @@ class NotarySealProfileTest extends TestCase
             ->get(route('settings.trust-profile'))
             ->assertOk()
             ->assertSee('Notary personal seal')
-            ->assertSee('Upload once here');
+            ->assertSee('Upload once here')
+            ->assertSee('Choose seal image');
     }
 
     public function test_trust_profile_seal_asset_route_returns_uploaded_seal(): void

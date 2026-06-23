@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UploadNotarySealRequest;
 use App\Services\Notary\NotarySealProfileService;
+use App\Services\OnboardingAuditLogger;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 
 class TrustProfileAssetController extends Controller
@@ -43,6 +48,28 @@ class TrustProfileAssetController extends Controller
         }
 
         return $this->streamPrivateAsset($path);
+    }
+
+    public function storeSeal(UploadNotarySealRequest $request, NotarySealProfileService $sealProfile): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($user !== null, 401);
+        $file = $request->file('notary_seal_upload');
+        abort_unless($file instanceof UploadedFile, 422);
+
+        try {
+            $sealProfile->storeSeal($user, $file);
+        } catch (InvalidArgumentException $exception) {
+            return redirect()
+                ->to(route('settings.trust-profile').'#notary-seal')
+                ->withErrors(['notary_seal_upload' => $exception->getMessage()]);
+        }
+
+        app(OnboardingAuditLogger::class)->log($user, 'trust_profile.notary_seal_updated');
+
+        return redirect()
+            ->to(route('settings.trust-profile').'#notary-seal')
+            ->with('trust-status', __('Notary seal saved. It will be used on all cases.'));
     }
 
     private function streamPrivateAsset(string $path): Response

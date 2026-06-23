@@ -53,7 +53,7 @@ class AddSecurityHeaders
         }
 
         $frameSrc = $isEnotaryRoute
-            ? "'self' https://meet.jit.si https://*.jit.si https://8x8.vc https://*.8x8.vc"
+            ? "'self' https://meet.jit.si https://*.jit.si https://8x8.vc https://*.8x8.vc https://*.onjitsi.com"
             : "'self'";
 
         $response->headers->set(
@@ -80,6 +80,7 @@ class AddSecurityHeaders
             'notary.requests.show',
             'notary-requests.session.live',
             'notary.requests.session.live',
+            'enotary.video.join',
         ]);
     }
 

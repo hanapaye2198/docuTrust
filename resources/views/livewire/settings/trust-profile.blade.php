@@ -456,33 +456,97 @@ new class extends Component {
                     </flux:subheading>
 
                     @if ($notaryCredential)
-                        <div class="space-y-4">
-                            @if ($hasNotarySeal)
-                                <div class="flex flex-wrap items-center gap-4">
-                                    <img
-                                        src="{{ route('settings.trust-profile.seal') }}"
-                                        alt=""
-                                        class="max-h-24 rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950"
-                                    />
-                                    <flux:badge color="emerald" size="sm">{{ __('Seal on file') }}</flux:badge>
+                        <form
+                            method="POST"
+                            action="{{ route('settings.trust-profile.seal.store') }}"
+                            enctype="multipart/form-data"
+                            data-seal-upload
+                            class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]"
+                        >
+                            @csrf
+                            <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-5 transition dark:border-zinc-700 dark:bg-zinc-950/30">
+                                <div class="flex items-start gap-3">
+                                    <div class="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">
+                                        <flux:icon name="cloud-arrow-up" class="size-5" />
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Upload your official notary seal') }}</p>
+                                        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                                            {{ __('Choose a clear PNG or JPG. This seal will be applied automatically on every case you notarize.') }}
+                                        </p>
+                                    </div>
                                 </div>
-                            @else
-                                <div class="rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                                    {{ __('Add your official notary seal before creating register entries or digitalizing documents.') }}
-                                </div>
-                            @endif
 
-                            <div>
-                                <input type="file" wire:model="notarySealUpload" accept="image/*" class="w-full text-sm" />
-                                <p class="mt-1 text-xs text-zinc-500">{{ __('PNG or JPG, max 2MB') }}</p>
-                                <flux:error name="notarySealUpload" />
-                                @if ($notarySealUpload)
-                                    <flux:button variant="primary" size="sm" type="button" class="mt-3" wire:click="uploadNotarySeal">
-                                        {{ $hasNotarySeal ? __('Replace seal') : __('Save seal') }}
-                                    </flux:button>
-                                @endif
+                                <label class="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-zinc-200 bg-white px-4 py-6 text-center shadow-sm transition hover:border-teal-300 hover:bg-teal-50/50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-teal-500/50 dark:hover:bg-teal-500/10">
+                                    <input
+                                        type="file"
+                                        name="notary_seal_upload"
+                                        accept="image/png,image/jpeg"
+                                        class="sr-only"
+                                        onchange="(function(input){const root=input.closest('[data-seal-upload]');const file=input.files&&input.files[0];const selected=root&&root.querySelector('[data-seal-selected]');const name=root&&root.querySelector('[data-seal-file-name]');const preview=root&&root.querySelector('[data-seal-preview]');const empty=root&&root.querySelector('[data-seal-empty]');const image=root&&root.querySelector('[data-seal-preview-image]');if(name){name.textContent=file?file.name:'';}if(selected){selected.classList.toggle('hidden',!file);}if(!file||!preview||!empty||!image){return;}const reader=new FileReader();reader.onload=function(event){image.src=event.target.result;preview.classList.remove('hidden');empty.classList.add('hidden');};reader.readAsDataURL(file);})(this)"
+                                    />
+                                    <span class="text-sm font-semibold text-teal-700 dark:text-teal-300">{{ $hasNotarySeal ? __('Choose replacement seal') : __('Choose seal image') }}</span>
+                                    <span class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('PNG or JPG, max 2MB') }}</span>
+                                </label>
+
+                                @error('notary_seal_upload')
+                                    <p class="mt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+
+                                <p data-seal-selected class="mt-3 hidden truncate text-xs text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Selected:') }} <span data-seal-file-name></span>
+                                </p>
+
+                                <flux:button variant="primary" size="sm" type="submit" class="mt-4 w-full sm:w-auto">
+                                    {{ $hasNotarySeal ? __('Replace seal') : __('Save seal') }}
+                                </flux:button>
                             </div>
-                        </div>
+
+                            <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-950/40">
+                                <div data-seal-preview class="hidden">
+                                    <div class="mb-4 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p class="text-sm font-semibold text-teal-950 dark:text-teal-100">{{ __('Preview selected seal') }}</p>
+                                            <p class="mt-1 text-xs text-teal-800 dark:text-teal-200">{{ __('Review before saving.') }}</p>
+                                        </div>
+                                        <flux:badge color="emerald" size="sm">{{ __('Ready') }}</flux:badge>
+                                    </div>
+                                    <div class="flex min-h-44 items-center justify-center rounded-2xl border border-teal-200 bg-teal-50/70 p-4 dark:border-teal-500/30 dark:bg-teal-500/10">
+                                        <img
+                                            data-seal-preview-image
+                                            src=""
+                                            alt="{{ __('Selected notary seal preview') }}"
+                                            class="max-h-40 max-w-full rounded-xl border border-teal-200 bg-white p-3 shadow-sm dark:border-teal-500/30 dark:bg-zinc-950"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div data-seal-empty>
+                                    @if ($hasNotarySeal)
+                                        <div class="mb-4 flex items-center justify-between gap-3">
+                                            <div>
+                                                <p class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Current seal') }}</p>
+                                                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('This seal is already on file.') }}</p>
+                                            </div>
+                                            <flux:badge color="emerald" size="sm">{{ __('Seal on file') }}</flux:badge>
+                                        </div>
+                                        <div class="flex min-h-44 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/60">
+                                            <img
+                                                src="{{ route('settings.trust-profile.seal') }}"
+                                                alt=""
+                                                class="max-h-40 max-w-full rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                            />
+                                        </div>
+                                    @else
+                                        <div class="flex min-h-44 flex-col items-center justify-center rounded-2xl border border-amber-200/80 bg-amber-50/80 p-5 text-center text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                                            <flux:icon name="shield-check" class="size-8" />
+                                            <p class="mt-3 text-sm font-semibold">{{ __('No seal uploaded yet') }}</p>
+                                            <p class="mt-1 text-xs">{{ __('Add your official notary seal before creating register entries or digitalizing documents.') }}</p>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </form>
                     @else
                         <div class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
                             {{ __('Complete attorney application and receive approval before uploading your seal.') }}

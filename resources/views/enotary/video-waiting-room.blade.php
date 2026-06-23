@@ -14,13 +14,13 @@
             </div>
 
             <h1 class="text-xl font-semibold text-zinc-900 dark:text-white">
-                {{ __("You're in the waiting room") }}
+                {{ __('Joining your video call') }}
             </h1>
             <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __("The notary has been notified you're here.") }}
+                {{ __('The attorney has been notified you are here.') }}
             </p>
             <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-                {{ __('Please stay on this page. The session will begin shortly.') }}
+                {{ __('If the video does not appear, open it in a separate window below.') }}
             </p>
         </div>
 
