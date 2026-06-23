@@ -429,6 +429,14 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * @return HasMany<NotaryRequest, $this>
+     */
+    public function notaryRequestsAsRequester(): HasMany
+    {
+        return $this->hasMany(NotaryRequest::class, 'user_id');
+    }
+
+    /**
      * @return HasMany<Payment, $this>
      */
     public function payments(): HasMany

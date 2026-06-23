@@ -2,7 +2,9 @@
 (function () {
   var savedTheme = null;
   try {
-    savedTheme = localStorage.getItem('theme');
+    savedTheme = localStorage.getItem('flux.appearance')
+      || localStorage.getItem('docutrust-theme')
+      || localStorage.getItem('theme');
   } catch (error) {
     savedTheme = null;
   }

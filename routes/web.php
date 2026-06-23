@@ -144,7 +144,10 @@ Route::middleware(['auth', 'role:super_admin'])->group(function () {
 Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function () {
     Volt::route('notary/dashboard', 'notary.dashboard')->name('notary.dashboard');
     Volt::route('notary/calendar', 'notary.calendar')->name('notary.calendar');
+    Volt::route('notary/clients', 'notary.clients')->name('notary.clients');
+    Volt::route('notary/clients/{clientUser}', 'notary.client-detail')->name('notary.client.show');
     Volt::route('notary/credentials', 'notary.credentials')->name('notary.credentials');
+    Volt::route('notary/payments', 'notary.payments')->name('notary.payments');
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');

@@ -186,17 +186,21 @@
                         wire:navigate
                     >{{ __('Calendar') }}</flux:sidebar.item>
 
-                    <div class="my-0.5 flex h-10 select-none items-center gap-3 rounded-xl px-3 py-2 text-zinc-400 opacity-60 in-data-flux-sidebar-collapsed-desktop:mx-auto in-data-flux-sidebar-collapsed-desktop:w-10 in-data-flux-sidebar-collapsed-desktop:justify-center in-data-flux-sidebar-collapsed-desktop:px-0 dark:text-zinc-500">
-                        <flux:icon name="users" class="size-[18px] shrink-0" />
-                        <span class="flex-1 truncate text-[13.5px] font-semibold in-data-flux-sidebar-collapsed-desktop:hidden">{{ __('Clients') }}</span>
-                        <span class="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-teal-500 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-teal-400">{{ __('Soon') }}</span>
-                    </div>
+                    <flux:sidebar.item
+                        icon="users"
+                        :href="route('notary.clients')"
+                        :current="request()->routeIs('notary.clients*', 'notary.client.*')"
+                        :tooltip="__('Clients')"
+                        wire:navigate
+                    >{{ __('Clients') }}</flux:sidebar.item>
 
-                    <div class="my-0.5 flex h-10 select-none items-center gap-3 rounded-xl px-3 py-2 text-zinc-400 opacity-60 in-data-flux-sidebar-collapsed-desktop:mx-auto in-data-flux-sidebar-collapsed-desktop:w-10 in-data-flux-sidebar-collapsed-desktop:justify-center in-data-flux-sidebar-collapsed-desktop:px-0 dark:text-zinc-500">
-                        <flux:icon name="credit-card" class="size-[18px] shrink-0" />
-                        <span class="flex-1 truncate text-[13.5px] font-semibold in-data-flux-sidebar-collapsed-desktop:hidden">{{ __('Payments') }}</span>
-                        <span class="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-teal-500 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-teal-400">{{ __('Soon') }}</span>
-                    </div>
+                    <flux:sidebar.item
+                        icon="credit-card"
+                        :href="route('notary.payments')"
+                        :current="request()->routeIs('notary.payments')"
+                        :tooltip="__('Payments')"
+                        wire:navigate
+                    >{{ __('Payments') }}</flux:sidebar.item>
 
                     <div class="mb-1.5 mt-4 px-3 pt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 in-data-flux-sidebar-collapsed-desktop:hidden dark:text-zinc-600">
                         {{ __('Records') }}

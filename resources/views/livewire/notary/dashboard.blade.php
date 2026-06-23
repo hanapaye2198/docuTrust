@@ -1,8 +1,12 @@
 <?php
 
+use App\Enums\NotaryRequestStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\UserRole;
 use App\Models\NotaryRequest;
+use App\Models\Payment;
 use App\Models\SignerCertificate;
+use App\Models\User;
 use App\Services\Attorney\AttorneyDashboardService;
 use App\Services\SignerCertificateRevocationService;
 use Illuminate\Support\Facades\Auth;
@@ -49,6 +53,125 @@ new #[Layout('components.layouts.app')] class extends Component {
             'user' => $user,
             'dashboardData' => $dashboard->dashboardData($user),
             'dashboardService' => $dashboard,
+            ...$this->analyticsData($user),
+        ];
+    }
+
+    /**
+     * @return array{
+     *   monthlyEarningsLabels: list<string>,
+     *   monthlyEarningsData: list<float>,
+     *   statusDonutData: list<array{label: string, color: string, count: int}>,
+     *   byTypeLabels: list<string>,
+     *   byTypeData: list<int>,
+     *   completionLabels: list<string>,
+     *   completionData: list<float>
+     * }
+     */
+    private function analyticsData(User $user): array
+    {
+        $months = collect(range(5, 0))
+            ->map(fn (int $monthsAgo) => now()->copy()->subMonths($monthsAgo)->startOfMonth());
+        $startDate = $months->first();
+
+        $paidPayments = Payment::query()
+            ->whereHas('notaryRequest', fn ($query) => $query->where('notary_user_id', $user->id))
+            ->where('status', PaymentStatus::Paid->value)
+            ->whereNotNull('paid_at')
+            ->where('paid_at', '>=', $startDate)
+            ->get(['amount', 'paid_at'])
+            ->groupBy(fn (Payment $payment): string => $payment->paid_at?->format('Y-m') ?? '');
+
+        $monthlyEarnings = $months
+            ->map(function ($date) use ($paidPayments): array {
+                $amount = $paidPayments
+                    ->get($date->format('Y-m'), collect())
+                    ->sum(fn (Payment $payment): float => (float) $payment->amount);
+
+                return [
+                    'label' => $date->format('M'),
+                    'amount' => (float) $amount,
+                ];
+            })
+            ->values();
+
+        $statusCounts = NotaryRequest::query()
+            ->where('notary_user_id', $user->id)
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
+        $closedStatuses = [
+            NotaryRequestStatus::Notarized->value,
+            NotaryRequestStatus::Rejected->value,
+            NotaryRequestStatus::Cancelled->value,
+            NotaryRequestStatus::Failed->value,
+        ];
+
+        $statusDonutData = [
+            [
+                'label' => 'Active',
+                'color' => '#8B5CF6',
+                'count' => (int) $statusCounts
+                    ->reject(fn (int $count, string $status): bool => in_array($status, $closedStatuses, true))
+                    ->sum(),
+            ],
+            [
+                'label' => 'Notarized',
+                'color' => '#10B981',
+                'count' => (int) ($statusCounts[NotaryRequestStatus::Notarized->value] ?? 0),
+            ],
+            [
+                'label' => 'Rejected',
+                'color' => '#EF4444',
+                'count' => (int) ($statusCounts[NotaryRequestStatus::Rejected->value] ?? 0),
+            ],
+            [
+                'label' => 'Cancelled',
+                'color' => '#9CA3AF',
+                'count' => (int) (($statusCounts[NotaryRequestStatus::Cancelled->value] ?? 0) + ($statusCounts[NotaryRequestStatus::Failed->value] ?? 0)),
+            ],
+        ];
+
+        $byType = NotaryRequest::query()
+            ->where('notary_user_id', $user->id)
+            ->whereNotNull('request_type')
+            ->selectRaw('request_type, COUNT(*) as aggregate')
+            ->groupBy('request_type')
+            ->orderByDesc('aggregate')
+            ->limit(6)
+            ->pluck('aggregate', 'request_type');
+
+        $completedRequests = NotaryRequest::query()
+            ->where('notary_user_id', $user->id)
+            ->where('status', NotaryRequestStatus::Notarized->value)
+            ->whereNotNull('notarized_at')
+            ->where('notarized_at', '>=', $startDate)
+            ->get(['created_at', 'notarized_at'])
+            ->groupBy(fn (NotaryRequest $request): string => $request->notarized_at?->format('Y-m') ?? '');
+
+        $avgCompletionTime = $months
+            ->map(function ($date) use ($completedRequests): array {
+                $requests = $completedRequests->get($date->format('Y-m'), collect());
+                $averageDays = $requests->isNotEmpty()
+                    ? $requests->avg(fn (NotaryRequest $request): float => max(0, (float) $request->created_at->diffInDays($request->notarized_at)))
+                    : 0;
+
+                return [
+                    'label' => $date->format('M'),
+                    'days' => round((float) $averageDays, 1),
+                ];
+            })
+            ->values();
+
+        return [
+            'monthlyEarningsLabels' => $monthlyEarnings->pluck('label')->all(),
+            'monthlyEarningsData' => $monthlyEarnings->pluck('amount')->all(),
+            'statusDonutData' => $statusDonutData,
+            'byTypeLabels' => $byType->keys()->all(),
+            'byTypeData' => $byType->values()->map(fn ($count): int => (int) $count)->all(),
+            'completionLabels' => $avgCompletionTime->pluck('label')->all(),
+            'completionData' => $avgCompletionTime->pluck('days')->all(),
         ];
     }
 }; ?>
@@ -187,6 +310,188 @@ new #[Layout('components.layouts.app')] class extends Component {
             <p class="mt-1 text-xs text-violet-700/80 dark:text-violet-400/80">{{ __(':sessions sessions · :signing signing', ['sessions' => $metrics['sessions'], 'signing' => $metrics['attorney_signing']]) }}</p>
             <flux:icon.arrow-right variant="mini" class="absolute bottom-5 end-5 size-4 text-violet-400/60 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
         </a>
+    </div>
+
+    {{-- ═══════════════════════════════════════════════════════════════
+         ANALYTICS SECTION — 4 charts
+         ═══════════════════════════════════════════════════════════════ --}}
+    <div class="mb-6 space-y-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
+                    {{ __('Practice Analytics') }}
+                </h2>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Last 6 months overview') }}
+                </p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700/60 dark:bg-gray-800/50 lg:col-span-2">
+                <div class="mb-1 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                        {{ __('Monthly Earnings') }}
+                    </h3>
+                    <span class="text-xs text-gray-400">
+                        ₱{{ number_format(array_sum($monthlyEarningsData), 2) }} {{ __('total') }}
+                    </span>
+                </div>
+                <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Notarial fees collected per month') }}
+                </p>
+                <div class="relative h-48" wire:ignore>
+                    <canvas
+                        id="earningsChart"
+                        class="absolute inset-0 z-10 h-full w-full"
+                        height="200"
+                        data-chart="@json(['labels' => $monthlyEarningsLabels, 'values' => $monthlyEarningsData])"
+                    ></canvas>
+                    <div data-chart-fallback="earningsChart" class="absolute inset-0 z-0 flex items-end gap-3 border-b border-gray-700/60 px-2 pb-6">
+                        @php
+                            $earningsMax = max($monthlyEarningsData) > 0 ? max($monthlyEarningsData) : 1;
+                        @endphp
+                        @foreach ($monthlyEarningsData as $index => $amount)
+                            <div class="flex h-full flex-1 flex-col justify-end gap-2">
+                                <div class="flex flex-1 items-end">
+                                    <div
+                                        class="w-full rounded-t-md bg-violet-500/70 ring-1 ring-violet-400/50"
+                                        style="height: {{ $amount > 0 ? max(6, ($amount / $earningsMax) * 100) : 2 }}%;"
+                                        title="₱{{ number_format($amount, 2) }}"
+                                    ></div>
+                                </div>
+                                <span class="text-center text-[11px] text-gray-400">{{ $monthlyEarningsLabels[$index] }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700/60 dark:bg-gray-800/50">
+                <h3 class="mb-1 text-sm font-semibold text-gray-900 dark:text-white">
+                    {{ __('Case Breakdown') }}
+                </h3>
+                <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('All-time status distribution') }}
+                </p>
+                <div class="relative flex h-40 items-center justify-center" wire:ignore>
+                    <canvas
+                        id="statusDonutChart"
+                        class="absolute inset-0 z-10 h-full w-full"
+                        style="max-width: 180px; max-height: 180px;"
+                        data-chart="@json($statusDonutData)"
+                    ></canvas>
+                    @php
+                        $statusTotal = collect($statusDonutData)->sum('count');
+                        $statusOffset = 0;
+                        $statusGradient = collect($statusDonutData)
+                            ->filter(fn (array $item): bool => $item['count'] > 0 && $statusTotal > 0)
+                            ->map(function (array $item) use (&$statusOffset, $statusTotal): string {
+                                $start = $statusOffset;
+                                $statusOffset += ($item['count'] / $statusTotal) * 360;
+
+                                return "{$item['color']} {$start}deg {$statusOffset}deg";
+                            })
+                            ->implode(', ');
+                    @endphp
+                    <div data-chart-fallback="statusDonutChart" class="absolute inset-0 z-0 flex items-center justify-center">
+                        <div class="relative flex size-36 items-center justify-center rounded-full" style="background: {{ $statusGradient !== '' ? "conic-gradient({$statusGradient})" : '#374151' }};">
+                        <div class="flex size-24 items-center justify-center rounded-full bg-gray-900 text-sm font-semibold text-white">
+                            {{ $statusTotal }}
+                        </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 space-y-2">
+                    @foreach ($statusDonutData as $item)
+                        @if ($item['count'] > 0)
+                            <div class="flex items-center justify-between">
+                                <span class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                    <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: {{ $item['color'] }}"></span>
+                                    {{ $item['label'] }}
+                                </span>
+                                <span class="text-xs font-semibold text-gray-900 dark:text-white">
+                                    {{ $item['count'] }}
+                                </span>
+                            </div>
+                        @endif
+                    @endforeach
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700/60 dark:bg-gray-800/50">
+                <h3 class="mb-1 text-sm font-semibold text-gray-900 dark:text-white">
+                    {{ __('Cases by Notarial Act') }}
+                </h3>
+                <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Most common document types') }}
+                </p>
+                @if ($byTypeLabels === [])
+                    <p class="py-8 text-center text-sm text-gray-400">{{ __('No case type data yet') }}</p>
+                @else
+                    <div class="relative h-52" wire:ignore>
+                        <canvas
+                            id="byTypeChart"
+                            class="absolute inset-0 z-10 h-full w-full"
+                            height="220"
+                            data-chart="@json(['labels' => $byTypeLabels, 'values' => $byTypeData])"
+                        ></canvas>
+                        <div data-chart-fallback="byTypeChart" class="absolute inset-0 z-0 space-y-3 pt-2">
+                            @php
+                                $byTypeMax = max($byTypeData) > 0 ? max($byTypeData) : 1;
+                            @endphp
+                            @foreach ($byTypeData as $index => $count)
+                                <div>
+                                    <div class="mb-1 flex items-center justify-between gap-3 text-xs">
+                                        <span class="truncate text-gray-400">{{ $byTypeLabels[$index] }}</span>
+                                        <span class="font-semibold text-gray-200">{{ $count }}</span>
+                                    </div>
+                                    <div class="h-2 overflow-hidden rounded-full bg-gray-800">
+                                        <div class="h-full rounded-full bg-teal-500" style="width: {{ max(4, ($count / $byTypeMax) * 100) }}%;"></div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+            </div>
+
+            <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700/60 dark:bg-gray-800/50">
+                <h3 class="mb-1 text-sm font-semibold text-gray-900 dark:text-white">
+                    {{ __('Avg. Completion Time') }}
+                </h3>
+                <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Days from case creation to notarized') }}
+                </p>
+                <div class="relative h-52" wire:ignore>
+                    <canvas
+                        id="completionTimeChart"
+                        class="absolute inset-0 z-10 h-full w-full"
+                        height="220"
+                        data-chart="@json(['labels' => $completionLabels, 'values' => $completionData])"
+                    ></canvas>
+                    <div data-chart-fallback="completionTimeChart" class="absolute inset-0 z-0 flex items-end gap-3 border-b border-gray-700/60 px-2 pb-6">
+                        @php
+                            $completionMax = max($completionData) > 0 ? max($completionData) : 1;
+                        @endphp
+                        @foreach ($completionData as $index => $days)
+                            <div class="flex h-full flex-1 flex-col justify-end gap-2">
+                                <div class="flex flex-1 items-end">
+                                    <div
+                                        class="w-full rounded-t-md bg-teal-500/70 ring-1 ring-teal-400/50"
+                                        style="height: {{ $days > 0 ? max(6, ($days / $completionMax) * 100) : 2 }}%;"
+                                        title="{{ $days }} {{ __('days') }}"
+                                    ></div>
+                                </div>
+                                <span class="text-center text-[11px] text-gray-400">{{ $completionLabels[$index] }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="grid gap-6 xl:grid-cols-3">
@@ -490,3 +795,11 @@ new #[Layout('components.layouts.app')] class extends Component {
         @endif
     </div>
 </x-admin.page>
+
+@push('scripts')
+    <script>
+        window.docuTrustUseDedicatedNotaryAnalytics = true;
+    </script>
+    @vite('resources/js/notary-dashboard-analytics.js')
+@endpush
+

@@ -4,11 +4,15 @@
         @include('partials.head')
         <script>
             (function () {
-                const savedTheme = localStorage.getItem("theme");
+                const savedTheme = localStorage.getItem("flux.appearance")
+                    || localStorage.getItem("docutrust-theme")
+                    || localStorage.getItem("theme");
                 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
                 if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
                     document.documentElement.classList.add("dark");
+                } else {
+                    document.documentElement.classList.remove("dark");
                 }
             })();
         </script>
@@ -55,7 +59,14 @@
 
             authThemeToggleButton?.addEventListener("click", function () {
                 const isDark = rootElement.classList.toggle("dark");
-                localStorage.setItem("theme", isDark ? "dark" : "light");
+                const theme = isDark ? "dark" : "light";
+
+                if (window.Flux?.applyAppearance) {
+                    window.Flux.applyAppearance(theme);
+                }
+
+                localStorage.setItem("docutrust-theme", theme);
+                localStorage.setItem("theme", theme);
                 setThemeState(isDark);
             });
         </script>

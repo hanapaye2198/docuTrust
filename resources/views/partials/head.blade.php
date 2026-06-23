@@ -1,8 +1,18 @@
 <script>
     (function () {
-        var theme = localStorage.getItem('docutrust-theme');
-        if (theme === 'dark') {
-            document.documentElement.classList.add('dark');
+        try {
+            var theme = localStorage.getItem('flux.appearance')
+                || localStorage.getItem('docutrust-theme')
+                || localStorage.getItem('theme');
+
+            if (theme === 'dark' || theme === 'light') {
+                localStorage.setItem('flux.appearance', theme);
+                localStorage.setItem('docutrust-theme', theme);
+                localStorage.setItem('theme', theme);
+                document.documentElement.classList.toggle('dark', theme === 'dark');
+            }
+        } catch (error) {
+            // Ignore storage errors in restricted browsing contexts.
         }
     })();
 </script>

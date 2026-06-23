@@ -78,6 +78,8 @@ function setDocutrustTheme(isDark, persist) {
 
   if (persist) {
     try {
+      localStorage.setItem('flux.appearance', isDark ? 'dark' : 'light');
+      localStorage.setItem('docutrust-theme', isDark ? 'dark' : 'light');
       localStorage.setItem('theme', isDark ? 'dark' : 'light');
     } catch (error) {
       // Ignore storage errors in restricted browsing contexts.

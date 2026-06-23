@@ -1,5 +1,6 @@
 let docuTrustStatusChart = null;
 let docuTrustActivityChart = null;
+const docuTrustAnalyticsCharts = {};
 let chartModulePromise = null;
 let idleSessionModulePromise = null;
 let templatePrepareModulePromise = null;
@@ -22,6 +23,8 @@ function loadChartModule() {
 
     return chartModulePromise;
 }
+
+window.docuTrustLoadChartModule = loadChartModule;
 
 function loadIdleSessionModule() {
     idleSessionModulePromise ??= import('./idle-session');
@@ -218,6 +221,337 @@ async function initDocuTrustActivityChart() {
     });
 }
 
+function destroyDocuTrustAnalyticsChart(id) {
+    if (docuTrustAnalyticsCharts[id]) {
+        docuTrustAnalyticsCharts[id].destroy();
+        delete docuTrustAnalyticsCharts[id];
+    }
+}
+
+function parseDocuTrustChartPayload(canvas) {
+    if (!canvas?.dataset?.chart) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(canvas.dataset.chart);
+    } catch {
+        return null;
+    }
+}
+
+function docuTrustChartIsDark() {
+    return document.documentElement.classList.contains('dark');
+}
+
+function docuTrustChartThemeColors() {
+    return {
+        grid: docuTrustChartIsDark() ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+        tick: docuTrustChartIsDark() ? '#6B7280' : '#9CA3AF',
+        bg: docuTrustChartIsDark() ? '#1F2937' : '#ffffff',
+        title: docuTrustChartIsDark() ? '#F9FAFB' : '#111827',
+        body: docuTrustChartIsDark() ? '#D1D5DB' : '#374151',
+        border: docuTrustChartIsDark() ? '#374151' : '#E5E7EB',
+    };
+}
+
+async function initDocuTrustEarningsChart() {
+    const canvas = document.getElementById('earningsChart');
+    const payload = parseDocuTrustChartPayload(canvas);
+    if (!payload?.labels?.length || !payload?.values) {
+        destroyDocuTrustAnalyticsChart('earnings');
+        return;
+    }
+
+    const { default: Chart } = await loadChartModule();
+    if (!canvas.isConnected) {
+        return;
+    }
+
+    destroyDocuTrustAnalyticsChart('earnings');
+    const theme = docuTrustChartThemeColors();
+
+    docuTrustAnalyticsCharts.earnings = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: payload.labels,
+            datasets: [{
+                label: 'Earnings (₱)',
+                data: payload.values,
+                backgroundColor(context) {
+                    const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 200);
+                    gradient.addColorStop(0, 'rgba(139, 92, 246, 0.85)');
+                    gradient.addColorStop(1, 'rgba(139, 92, 246, 0.2)');
+
+                    return gradient;
+                },
+                borderColor: '#8B5CF6',
+                borderWidth: 0,
+                borderRadius: 6,
+                borderSkipped: false,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: theme.bg,
+                    titleColor: theme.title,
+                    bodyColor: theme.body,
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: (context) => ` ₱${context.parsed.y.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: { color: theme.tick, font: { size: 11 } },
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: theme.grid },
+                    border: { display: false },
+                    ticks: {
+                        color: theme.tick,
+                        font: { size: 11 },
+                        callback: (value) => `₱${value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}`,
+                    },
+                },
+            },
+        },
+    });
+}
+
+async function initDocuTrustStatusDonutChart() {
+    const canvas = document.getElementById('statusDonutChart');
+    const payload = parseDocuTrustChartPayload(canvas);
+    const filtered = Array.isArray(payload) ? payload.filter((item) => Number(item.count) > 0) : [];
+    if (filtered.length === 0) {
+        destroyDocuTrustAnalyticsChart('donut');
+        return;
+    }
+
+    const { default: Chart } = await loadChartModule();
+    if (!canvas.isConnected) {
+        return;
+    }
+
+    destroyDocuTrustAnalyticsChart('donut');
+    const theme = docuTrustChartThemeColors();
+
+    docuTrustAnalyticsCharts.donut = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: filtered.map((item) => item.label),
+            datasets: [{
+                data: filtered.map((item) => item.count),
+                backgroundColor: filtered.map((item) => item.color),
+                borderColor: docuTrustChartIsDark() ? '#1F2937' : '#ffffff',
+                borderWidth: 3,
+                hoverOffset: 4,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            cutout: '72%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: theme.bg,
+                    titleColor: theme.title,
+                    bodyColor: theme.body,
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: (context) => ` ${context.label}: ${context.parsed} cases`,
+                    },
+                },
+            },
+        },
+    });
+}
+
+async function initDocuTrustByTypeChart() {
+    const canvas = document.getElementById('byTypeChart');
+    const payload = parseDocuTrustChartPayload(canvas);
+    if (!payload?.labels?.length || !payload?.values) {
+        destroyDocuTrustAnalyticsChart('byType');
+        return;
+    }
+
+    const { default: Chart } = await loadChartModule();
+    if (!canvas.isConnected) {
+        return;
+    }
+
+    destroyDocuTrustAnalyticsChart('byType');
+    const theme = docuTrustChartThemeColors();
+    const colors = ['#8B5CF6', '#6366F1', '#14B8A6', '#F59E0B', '#10B981', '#3B82F6'];
+
+    docuTrustAnalyticsCharts.byType = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: payload.labels,
+            datasets: [{
+                label: 'Cases',
+                data: payload.values,
+                backgroundColor: colors.map((color) => `${color}CC`),
+                borderColor: colors,
+                borderWidth: 0,
+                borderRadius: 4,
+                borderSkipped: false,
+            }],
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: theme.bg,
+                    titleColor: theme.title,
+                    bodyColor: theme.body,
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: (context) => ` ${context.parsed.x} case${context.parsed.x !== 1 ? 's' : ''}`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    grid: { color: theme.grid },
+                    border: { display: false },
+                    ticks: { color: theme.tick, font: { size: 11 }, precision: 0 },
+                },
+                y: {
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: {
+                        color: theme.tick,
+                        font: { size: 11 },
+                        callback: (_value, index) => {
+                            const label = payload.labels[index] ?? '';
+
+                            return label.length > 16 ? `${label.substring(0, 14)}...` : label;
+                        },
+                    },
+                },
+            },
+        },
+    });
+}
+
+async function initDocuTrustCompletionChart() {
+    const canvas = document.getElementById('completionTimeChart');
+    const payload = parseDocuTrustChartPayload(canvas);
+    if (!payload?.labels?.length || !payload?.values) {
+        destroyDocuTrustAnalyticsChart('completion');
+        return;
+    }
+
+    const { default: Chart } = await loadChartModule();
+    if (!canvas.isConnected) {
+        return;
+    }
+
+    destroyDocuTrustAnalyticsChart('completion');
+    const theme = docuTrustChartThemeColors();
+
+    docuTrustAnalyticsCharts.completion = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: payload.labels,
+            datasets: [{
+                label: 'Avg. days',
+                data: payload.values,
+                borderColor: '#14B8A6',
+                backgroundColor: 'rgba(20, 184, 166, 0.08)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#14B8A6',
+                pointBorderColor: docuTrustChartIsDark() ? '#1F2937' : '#fff',
+                pointBorderWidth: 2,
+                borderWidth: 2,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: theme.bg,
+                    titleColor: theme.title,
+                    bodyColor: theme.body,
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: (context) => ` ${context.parsed.y} day${context.parsed.y !== 1 ? 's' : ''} avg`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: { color: theme.tick, font: { size: 11 } },
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: theme.grid },
+                    border: { display: false },
+                    ticks: {
+                        color: theme.tick,
+                        font: { size: 11 },
+                        callback: (value) => `${value}d`,
+                    },
+                },
+            },
+        },
+    });
+}
+
+function initDocuTrustAnalyticsCharts() {
+    void initDocuTrustEarningsChart();
+    void initDocuTrustStatusDonutChart();
+    void initDocuTrustByTypeChart();
+    void initDocuTrustCompletionChart();
+}
+
+function scheduleDocuTrustAnalyticsCharts() {
+    if (window.docuTrustUseDedicatedNotaryAnalytics) {
+        return;
+    }
+
+    initDocuTrustAnalyticsCharts();
+    requestAnimationFrame(initDocuTrustAnalyticsCharts);
+    window.setTimeout(initDocuTrustAnalyticsCharts, 250);
+}
+
+window.docuTrustBootAnalyticsCharts = scheduleDocuTrustAnalyticsCharts;
+
 async function initTemplatePreparePage() {
     const hasPrepareConfig = Boolean(document.getElementById('template-prepare-config'));
 
@@ -267,6 +601,7 @@ async function initNotaryStatusPoll() {
 function bootDocuTrustUi() {
     void initDocuTrustDashboardChart();
     void initDocuTrustActivityChart();
+    scheduleDocuTrustAnalyticsCharts();
     void initTemplatePreparePage();
     void initIdleSession();
     void initSignView();

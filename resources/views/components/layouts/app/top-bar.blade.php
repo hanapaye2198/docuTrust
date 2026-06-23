@@ -170,8 +170,16 @@
                 isDark: document.documentElement.classList.contains('dark'),
                 toggle() {
                     this.isDark = !this.isDark;
-                    document.documentElement.classList.toggle('dark', this.isDark);
-                    localStorage.setItem('docutrust-theme', this.isDark ? 'dark' : 'light');
+                    const theme = this.isDark ? 'dark' : 'light';
+
+                    if (window.Flux?.applyAppearance) {
+                        window.Flux.applyAppearance(theme);
+                    } else {
+                        document.documentElement.classList.toggle('dark', this.isDark);
+                    }
+
+                    localStorage.setItem('docutrust-theme', theme);
+                    localStorage.setItem('theme', theme);
                 }
             }">
                 <flux:tooltip content="{{ __('Switch to Dark Mode') }}" position="bottom">
