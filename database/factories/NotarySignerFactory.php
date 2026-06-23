@@ -24,7 +24,9 @@ class NotarySignerFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'phone' => fake()->phoneNumber(),
             'address' => fake()->address(),
+            'id_document_path' => null,
             'role' => 'signer',
+            'witnessed_signer_id' => null,
         ];
     }
 }

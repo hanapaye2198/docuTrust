@@ -38,19 +38,27 @@
             </p>
         </div>
 
-        @if (! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
-            <flux:dropdown class="self-start">
-                <flux:button variant="ghost" icon="ellipsis-horizontal">{{ __('More actions') }}</flux:button>
-                <flux:menu>
-                    @if ($canManageLifecycle && $notaryRequest->status === \App\Enums\NotaryRequestStatus::Draft)
-                        <flux:menu.item wire:click="submitRequest">{{ __('Submit notarization') }}</flux:menu.item>
-                    @endif
-                    <flux:menu.item wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notarization? This cannot be undone.') }}">
-                        {{ __('Cancel case') }}
-                    </flux:menu.item>
-                </flux:menu>
-            </flux:dropdown>
-        @endif
+        <div class="flex flex-wrap items-center gap-2">
+            @if ($isNotary)
+                <flux:button variant="primary" :href="route('notary.requests.workflow', $notaryRequest)" wire:navigate icon="arrow-path-rounded-square">
+                    {{ __('Workflow') }}
+                </flux:button>
+            @endif
+
+            @if (! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
+                <flux:dropdown class="self-start">
+                    <flux:button variant="ghost" icon="ellipsis-horizontal">{{ __('More actions') }}</flux:button>
+                    <flux:menu>
+                        @if ($canManageLifecycle && $notaryRequest->status === \App\Enums\NotaryRequestStatus::Draft)
+                            <flux:menu.item wire:click="submitRequest">{{ __('Submit notarization') }}</flux:menu.item>
+                        @endif
+                        <flux:menu.item wire:click="cancelNotaryRequest" wire:confirm="{{ __('Cancel this notarization? This cannot be undone.') }}">
+                            {{ __('Cancel case') }}
+                        </flux:menu.item>
+                    </flux:menu>
+                </flux:dropdown>
+            @endif
+        </div>
     </div>
 
     @if ($errors->has('submitRequest') || $errors->has('digitalizeRequest') || $errors->has('finalizeRequest') || $errors->has('cancelNotaryRequest'))

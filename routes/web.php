@@ -150,6 +150,7 @@ Route::middleware(['auth', 'role:notary', 'attorney.practice'])->group(function 
     Volt::route('notary/payments', 'notary.payments')->name('notary.payments');
     Volt::route('notary/requests', 'notary-requests.index')->name('notary.requests.index');
     Volt::route('notary/requests/create', 'notary-requests.create')->name('notary.requests.create');
+    Volt::route('notary/requests/{notaryRequest}/workflow', 'notary-requests.workflow')->name('notary.requests.workflow');
     Volt::route('notary/requests/{notaryRequest}', 'notary-requests.show')->name('notary.requests.show');
     Route::post('notary/requests/{notaryRequest}/settlement-fee', NotarySettlementFeeController::class)->name('notary.requests.settlement-fee');
     Route::post('notary/requests/{notaryRequest}/payment-link', NotaryPaymentLinkController::class)->name('notary.requests.payment-link');

@@ -22,7 +22,9 @@ class NotarySigner extends Model
         'email',
         'phone',
         'address',
+        'id_document_path',
         'role',
+        'witnessed_signer_id',
     ];
 
     /**
@@ -31,6 +33,22 @@ class NotarySigner extends Model
     public function notaryRequest(): BelongsTo
     {
         return $this->belongsTo(NotaryRequest::class);
+    }
+
+    /**
+     * @return BelongsTo<NotarySigner, $this>
+     */
+    public function witnessedSigner(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'witnessed_signer_id');
+    }
+
+    /**
+     * @return HasMany<NotarySigner, $this>
+     */
+    public function witnesses(): HasMany
+    {
+        return $this->hasMany(self::class, 'witnessed_signer_id');
     }
 
     /**

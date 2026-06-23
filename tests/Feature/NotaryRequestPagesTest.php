@@ -59,7 +59,7 @@ class NotaryRequestPagesTest extends TestCase
             ->set('title', 'Board resolution acknowledgment')
             ->set('requestType', 'acknowledgment')
             ->set('remarks', 'Bring government ID and board secretary certificate.')
-            ->set('wizardStep', 3)
+            ->set('wizardStep', 4)
             ->call('save')
             ->assertHasNoErrors()
             ->assertRedirect();
@@ -95,9 +95,11 @@ class NotaryRequestPagesTest extends TestCase
             ->set('requestType', 'acknowledgment')
             ->call('nextStep')
             ->assertSet('wizardStep', 2)
-            ->call('skipDocumentStep')
-            ->assertSet('wizardStep', 3)
             ->call('skipPartiesStep')
+            ->assertSet('wizardStep', 3)
+            ->call('skipWitnessStep')
+            ->assertSet('wizardStep', 4)
+            ->call('save')
             ->assertHasNoErrors()
             ->assertRedirect();
 
@@ -107,7 +109,7 @@ class NotaryRequestPagesTest extends TestCase
         ]);
     }
 
-    public function test_attorney_wizard_can_attach_pdf_on_document_step(): void
+    public function test_attorney_wizard_can_attach_pdf_on_case_info_step(): void
     {
         Storage::fake(config('filesystems.docutrust_disk', 'local'));
 
@@ -120,10 +122,12 @@ class NotaryRequestPagesTest extends TestCase
         LivewireVolt::test('notary-requests.create')
             ->set('title', 'Deed of sale — Lot 5')
             ->set('requestType', 'acknowledgment')
+            ->set('caseDocument', $file)
             ->call('nextStep')
             ->assertSet('wizardStep', 2)
-            ->set('caseDocument', $file)
             ->call('skipPartiesStep')
+            ->call('skipWitnessStep')
+            ->call('save')
             ->assertHasNoErrors()
             ->assertRedirect();
 
@@ -149,7 +153,7 @@ class NotaryRequestPagesTest extends TestCase
         LivewireVolt::test('notary-requests.create')
             ->set('title', 'Affidavit of loss')
             ->set('requestType', 'acknowledgment')
-            ->set('wizardStep', 3)
+            ->set('wizardStep', 2)
             ->call('addSignerRow')
             ->call('addSignerRow')
             ->set('signers.1.full_name', 'Maria Santos')
@@ -165,7 +169,7 @@ class NotaryRequestPagesTest extends TestCase
         LivewireVolt::test('notary-requests.create')
             ->set('title', 'Affidavit of loss')
             ->set('requestType', 'acknowledgment')
-            ->set('wizardStep', 3)
+            ->set('wizardStep', 2)
             ->set('signers', [
                 [
                     'full_name' => 'Juan Dela Cruz',
@@ -177,6 +181,96 @@ class NotaryRequestPagesTest extends TestCase
             ])
             ->call('save')
             ->assertHasErrors(['signers.0.full_name']);
+    }
+
+    public function test_attorney_can_view_new_case_workflow_page(): void
+    {
+        $attorney = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($attorney)->create([
+            'notary_user_id' => $attorney->id,
+        ]);
+
+        $this->actingAs($attorney)
+            ->get(route('notary.requests.workflow', $request))
+            ->assertOk()
+            ->assertSee('Notary Case Workflow')
+            ->assertSee('Prepare Document');
+    }
+
+    public function test_create_wizard_links_witness_to_selected_signer(): void
+    {
+        $attorney = User::factory()->notary()->create();
+
+        $this->actingAs($attorney);
+
+        LivewireVolt::test('notary-requests.create')
+            ->set('title', 'Witnessed deed of sale')
+            ->set('requestType', 'acknowledgment')
+            ->set('wizardStep', 4)
+            ->set('signers', [
+                [
+                    'full_name' => 'Juan Dela Cruz',
+                    'email' => 'juan@example.test',
+                    'phone' => '',
+                    'address' => '',
+                    'role' => 'signer',
+                ],
+            ])
+            ->set('witnesses', [
+                [
+                    'full_name' => 'Maria Santos',
+                    'email' => 'maria@example.test',
+                    'phone' => '',
+                    'address' => '',
+                    'role' => 'witness',
+                    'witnessed_signer_row_index' => 0,
+                ],
+            ])
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertRedirect();
+
+        $signer = NotarySigner::query()->where('email', 'juan@example.test')->first();
+        $witness = NotarySigner::query()->where('email', 'maria@example.test')->first();
+
+        $this->assertNotNull($signer);
+        $this->assertNotNull($witness);
+        $this->assertSame($signer->id, $witness->witnessed_signer_id);
+    }
+
+    public function test_create_wizard_stores_signer_id_document_upload(): void
+    {
+        Storage::fake(config('filesystems.docutrust_disk', 'local'));
+
+        $attorney = User::factory()->notary()->create();
+
+        $this->actingAs($attorney);
+
+        $idDocument = UploadedFile::fake()->image('juan-id.jpg');
+
+        LivewireVolt::test('notary-requests.create')
+            ->set('title', 'Case with signer ID')
+            ->set('requestType', 'acknowledgment')
+            ->set('wizardStep', 4)
+            ->set('signers', [
+                [
+                    'full_name' => 'Juan Dela Cruz',
+                    'email' => 'juan-id@example.test',
+                    'phone' => '',
+                    'address' => '',
+                    'role' => 'signer',
+                ],
+            ])
+            ->set('signerIdDocuments.0', $idDocument)
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertRedirect();
+
+        $signer = NotarySigner::query()->where('email', 'juan-id@example.test')->first();
+
+        $this->assertNotNull($signer);
+        $this->assertNotNull($signer->id_document_path);
+        $this->assertTrue(Storage::disk(config('filesystems.docutrust_disk', 'local'))->exists($signer->id_document_path));
     }
 
     public function test_notary_index_only_shows_assigned_requests(): void
@@ -518,7 +612,7 @@ class NotaryRequestPagesTest extends TestCase
         LivewireVolt::test('notary-requests.create')
             ->set('title', 'Affidavit with duplicate emails')
             ->set('requestType', 'acknowledgment')
-            ->set('wizardStep', 3)
+            ->set('wizardStep', 2)
             ->set('signers', [
                 [
                     'full_name' => 'Juan Dela Cruz',
