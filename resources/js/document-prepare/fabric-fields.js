@@ -382,6 +382,7 @@ export function createFieldGroup({
     type,
     signerId,
     signerName,
+    fieldStyle = {},
     position,
     pageNumber,
     clientFieldId,
@@ -393,7 +394,10 @@ export function createFieldGroup({
     const width = position.width * w;
     const height = position.height * h;
     const angle = Number(position.angle) || 0;
-    const config = getFieldConfig(type);
+    const config = {
+        ...getFieldConfig(type),
+        ...fieldStyle,
+    };
     const visuals =
         config.kind === 'toggle'
             ? createToggleVisuals(fabric, config, width, height)

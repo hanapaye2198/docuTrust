@@ -409,6 +409,22 @@ class DocumentSignerWorkflowTest extends TestCase
         $this->assertSame(0, $document->documentSigners()->whereNotNull('signing_order')->count());
     }
 
+    public function test_document_can_send_when_sequential_orders_are_unique_but_not_contiguous(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Draft,
+            'signing_workflow' => Document::SIGNING_WORKFLOW_SEQUENTIAL,
+        ]);
+        $firstSigner = DocumentSigner::factory()->for($document)->create(['signing_order' => 999]);
+        $secondSigner = DocumentSigner::factory()->for($document)->create(['signing_order' => 1000]);
+
+        SignatureField::factory()->for($document)->create(['signer_id' => $firstSigner->id]);
+        SignatureField::factory()->for($document)->create(['signer_id' => $secondSigner->id]);
+
+        $this->assertTrue($document->fresh(['documentSigners', 'signatureFields'])->canSendForSigning());
+    }
+
     public function test_duplicate_signing_is_blocked(): void
     {
         $user = User::factory()->create();

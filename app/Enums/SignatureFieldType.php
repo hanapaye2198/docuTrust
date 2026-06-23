@@ -11,6 +11,7 @@ enum SignatureFieldType: string
     case Checkbox = 'checkbox';
     case Radio = 'radio';
     case Name = 'name';
+    case Seal = 'seal';
     case Date = 'date';
     case Email = 'email';
     case Initials = 'initials';
@@ -26,6 +27,7 @@ enum SignatureFieldType: string
             self::SignatureRight->value,
             self::Text->value,
             self::Name->value,
+            self::Seal->value,
             self::Date->value,
             self::Email->value,
             self::Initials->value,

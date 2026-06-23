@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\SignatureFieldType;
 use App\Events\DocumentCompleted;
 use App\Events\DocumentSignerCompleted;
 use App\Jobs\GenerateCertificateJob;
@@ -63,6 +64,7 @@ class DocumentSigningWorkflowService
     {
         $signerHasFields = $document->signatureFields()
             ->where('signer_id', $signer->id)
+            ->where('type', '!=', SignatureFieldType::Seal->value)
             ->exists();
 
         if (! $signerHasFields) {
@@ -71,6 +73,7 @@ class DocumentSigningWorkflowService
 
         $hasUnsignedFields = $document->signatureFields()
             ->where('signer_id', $signer->id)
+            ->where('type', '!=', SignatureFieldType::Seal->value)
             ->whereDoesntHave('signature', function ($query) use ($signer): void {
                 $query->where('signer_id', $signer->id);
             })

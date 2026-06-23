@@ -65,6 +65,7 @@ function createPrepareSession(cfgEl) {
     const signers = Array.isArray(config.signers) ? config.signers : [];
     const normalizedFirstSignerId = Number(firstSignerId) > 0 ? Number(firstSignerId) : null;
     const initialFields = Array.isArray(config.initialFields) ? config.initialFields : [];
+    const editorLocked = Boolean(config.editorLocked);
     const initialPage = Number(config.initialPage) > 0 ? Number(config.initialPage) : 1;
     const signerPagesUrl = config.signerPagesUrl || '';
     const pdfCanvas = document.getElementById('pdf-canvas');
@@ -79,10 +80,15 @@ function createPrepareSession(cfgEl) {
     const pageIndicator = document.getElementById('page-indicator');
     const btnPrevPage = document.getElementById('btn-prev-page');
     const btnNextPage = document.getElementById('btn-next-page');
+    const btnZoomOut = document.getElementById('btn-zoom-out');
+    const btnZoomIn = document.getElementById('btn-zoom-in');
+    const btnZoomReset = document.getElementById('btn-zoom-reset');
+    const zoomIndicator = document.getElementById('zoom-indicator');
     const btnSaveFields = document.getElementById('btn-save-fields');
     const btnSendToSigner = document.getElementById('btn-send-to-signer');
     const editorStatus = document.getElementById('editor-status');
     const fieldSigner = document.getElementById('field-signer');
+    const signerAssignmentButtons = Array.from(document.querySelectorAll('.signer-assignment-btn'));
     const fieldPaletteButtons = Array.from(document.querySelectorAll('.field-palette-btn'));
     const fieldInspectorBody = document.getElementById('field-inspector-body');
     const fieldInspectorEmpty = document.getElementById('field-inspector-empty');
@@ -93,7 +99,6 @@ function createPrepareSession(cfgEl) {
     const btnRotate90 = document.getElementById('btn-rotate-90');
     const btnRotate180 = document.getElementById('btn-rotate-180');
     const btnRotate270 = document.getElementById('btn-rotate-270');
-    const btnDuplicateField = document.getElementById('btn-duplicate-field');
     const btnDeleteField = document.getElementById('btn-delete-field');
     const btnBringForward = document.getElementById('btn-bring-forward');
     const btnSendBackward = document.getElementById('btn-send-backward');
@@ -113,17 +118,32 @@ function createPrepareSession(cfgEl) {
     let dragFieldType = null;
     let selectedFieldClientId = null;
     let clientFieldCounter = 0;
-    let copiedField = null;
     let currentSnapGuide = null;
     let resizeTimer = null;
     let renderSequence = 0;
     let destroyed = false;
     let isSubmittingSave = false;
+    let zoomMultiplier = 1;
 
     const pageFields = new Map();
     const signerById = new Map(signers.map((signer) => [Number(signer.id), signer]));
     const signerPageAssignments = new Map(signers.map((signer) => [Number(signer.id), signer.allowed_pages || null]));
     const canSendFromServer = Boolean(btnSendToSigner) && !btnSendToSigner.disabled;
+    const signerColorPalette = [
+        { accent: '#3b82f6', stroke: '#2563eb', text: '#1d4ed8', fill: 'rgba(59, 130, 246, 0.12)' },
+        { accent: '#8b5cf6', stroke: '#7c3aed', text: '#6d28d9', fill: 'rgba(139, 92, 246, 0.12)' },
+        { accent: '#10b981', stroke: '#059669', text: '#047857', fill: 'rgba(16, 185, 129, 0.12)' },
+        { accent: '#f59e0b', stroke: '#d97706', text: '#b45309', fill: 'rgba(245, 158, 11, 0.14)' },
+        { accent: '#f43f5e', stroke: '#e11d48', text: '#be123c', fill: 'rgba(244, 63, 94, 0.12)' },
+        { accent: '#06b6d4', stroke: '#0891b2', text: '#0e7490', fill: 'rgba(6, 182, 212, 0.12)' },
+    ];
+    const signerColorById = new Map(signers.map((signer, index) => [
+        Number(signer.id),
+        signerColorPalette[index % signerColorPalette.length],
+    ]));
+    const minZoomMultiplier = 0.5;
+    const maxZoomMultiplier = 2;
+    const zoomStep = 0.1;
 
     function debugLog(message, payload) {
         if (import.meta.env.DEV) {
@@ -171,6 +191,190 @@ function createPrepareSession(cfgEl) {
         return Number.isFinite(selectedSignerId()) && selectedSignerId() > 0;
     }
 
+    function isSinglePlacementType(type) {
+        return ['signature', 'signature_left', 'signature_right', 'seal'].includes(String(type || ''));
+    }
+
+    function isSignaturePlacementType(type) {
+        return ['signature', 'signature_left', 'signature_right'].includes(String(type || ''));
+    }
+
+    function hasSinglePlacementForSigner(type, signerId, ignoredClientFieldId = null) {
+        if (!fabricCanvas || !Number.isFinite(Number(signerId))) {
+            return false;
+        }
+
+        const normalizedType = String(type || '');
+        return fabricCanvas.getObjects().some((object) => {
+            if (!object?.fieldType) {
+                return false;
+            }
+
+            if (normalizedType === 'seal') {
+                if (object.fieldType !== 'seal') {
+                    return false;
+                }
+            } else if (!['signature', 'signature_left', 'signature_right'].includes(object.fieldType)) {
+                return false;
+            }
+
+            if (ignoredClientFieldId !== null && object.clientFieldId === ignoredClientFieldId) {
+                return false;
+            }
+
+            return Number(object.signerId) === Number(signerId);
+        });
+    }
+
+    function showDuplicatePlacementMessage(type, signerId) {
+        const signerName = signerNameFor(signerId);
+        const fieldLabel = String(type || '') === 'seal' ? 'seal' : 'signature';
+        showPdfLoadError(`${signerName} already has a ${fieldLabel} field on this page. Move the existing ${fieldLabel} instead.`);
+    }
+
+    function rectanglesOverlap(first, second) {
+        const padding = 0.008;
+
+        return first.x < second.x + second.width + padding
+            && first.x + first.width + padding > second.x
+            && first.y < second.y + second.height + padding
+            && first.y + first.height + padding > second.y;
+    }
+
+    function positionOverlapsExistingField(position) {
+        if (!fabricCanvas) {
+            return false;
+        }
+
+        return fabricCanvas.getObjects().some((object) => {
+            if (!object?.fieldType) {
+                return false;
+            }
+
+            const existingPosition = normalizedPositionFromObject(object, fabricCanvas);
+            return existingPosition ? rectanglesOverlap(position, existingPosition) : false;
+        });
+    }
+
+    function clampFieldPosition(position, width, height) {
+        return {
+            x: Math.max(0.01, Math.min(0.99 - width, position.x)),
+            y: Math.max(0.01, Math.min(0.99 - height, position.y)),
+            width,
+            height,
+        };
+    }
+
+    function resolveNonOverlappingPosition(basePosition, width, height) {
+        const stepX = Math.min(0.34, width + 0.03);
+        const stepY = Math.min(0.18, height + 0.03);
+        const candidates = [];
+
+        for (let row = 0; row <= 6; row += 1) {
+            for (let col = 0; col <= 4; col += 1) {
+                candidates.push({ x: basePosition.x + (col * stepX), y: basePosition.y + (row * stepY) });
+
+                if (col > 0) {
+                    candidates.push({ x: basePosition.x - (col * stepX), y: basePosition.y + (row * stepY) });
+                }
+            }
+        }
+
+        for (const candidate of candidates) {
+            const clamped = clampFieldPosition(candidate, width, height);
+
+            if (!positionOverlapsExistingField(clamped)) {
+                return clamped;
+            }
+        }
+
+        return clampFieldPosition(basePosition, width, height);
+    }
+
+    function updateSignerAssignmentButtons() {
+        const selectedId = selectedSignerId();
+
+        signerAssignmentButtons.forEach((button) => {
+            const signerId = Number(button.dataset.signerId);
+            const signerColor = signerColorById.get(signerId);
+            const isSelected = signerId === selectedId;
+            const dot = button.querySelector('[data-signer-color-dot]');
+
+            if (dot && signerColor) {
+                dot.style.backgroundColor = signerColor.accent;
+            }
+
+            button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+            button.classList.toggle('border-blue-300', isSelected);
+            button.classList.toggle('bg-blue-50', isSelected);
+            button.classList.toggle('ring-2', isSelected);
+            button.classList.toggle('ring-blue-500/20', isSelected);
+            button.classList.toggle('dark:border-blue-800', isSelected);
+            button.classList.toggle('dark:bg-blue-950/30', isSelected);
+
+            if (isSelected && signerColor) {
+                button.style.borderColor = signerColor.stroke;
+                button.style.boxShadow = `0 0 0 2px ${signerColor.fill}`;
+            } else {
+                button.style.borderColor = '';
+                button.style.boxShadow = '';
+            }
+        });
+    }
+
+    function selectSignerById(signerId) {
+        const normalizedSignerId = Number(signerId);
+        if (!fieldSigner || !Number.isFinite(normalizedSignerId) || normalizedSignerId <= 0) {
+            return;
+        }
+
+        const option = Array.from(fieldSigner.options).find((candidate) => Number(candidate.value) === normalizedSignerId);
+        if (!option || option.disabled) {
+            return;
+        }
+
+        fieldSigner.value = String(normalizedSignerId);
+        updateSignerAssignmentButtons();
+    }
+
+    function normalizedZoomMultiplier(value) {
+        const roundedValue = Math.round((Number(value) || 1) * 10) / 10;
+
+        return Math.min(maxZoomMultiplier, Math.max(minZoomMultiplier, roundedValue));
+    }
+
+    function updateZoomUi() {
+        if (zoomIndicator) {
+            zoomIndicator.textContent = `${Math.round(zoomMultiplier * 100)}%`;
+        }
+
+        if (btnZoomOut) {
+            btnZoomOut.disabled = isRenderingPage || zoomMultiplier <= minZoomMultiplier;
+        }
+
+        if (btnZoomIn) {
+            btnZoomIn.disabled = isRenderingPage || zoomMultiplier >= maxZoomMultiplier;
+        }
+
+        if (btnZoomReset) {
+            btnZoomReset.disabled = isRenderingPage || zoomMultiplier === 1;
+        }
+    }
+
+    async function setZoomMultiplier(value) {
+        const nextZoomMultiplier = normalizedZoomMultiplier(value);
+
+        if (nextZoomMultiplier === zoomMultiplier || isRenderingPage || destroyed) {
+            updateZoomUi();
+            return;
+        }
+
+        saveCurrentPageFields();
+        zoomMultiplier = nextZoomMultiplier;
+        updateZoomUi();
+        await renderPage(currentPage);
+    }
+
     /**
      * Get signers allowed on the current page.
      * A signer with allowed_pages = null is allowed on all pages.
@@ -211,10 +415,20 @@ function createPrepareSession(cfgEl) {
         } else if (allowedSigners.length > 0) {
             fieldSigner.value = String(allowedSigners[0].id);
         }
+
+        updateSignerAssignmentButtons();
     }
 
     function signerNameFor(id) {
         return signerById.get(Number(id))?.name || 'Signer';
+    }
+
+    function signerStyleForField(type, signerId) {
+        if (!isSignaturePlacementType(type)) {
+            return {};
+        }
+
+        return signerColorById.get(Number(signerId)) || {};
     }
 
     function activeFieldObject() {
@@ -363,17 +577,41 @@ function createPrepareSession(cfgEl) {
         pdfShell.classList.toggle('ring-teal-400', active);
     }
 
+    function applyFieldEditability(fieldObject) {
+        if (!fieldObject) {
+            return;
+        }
+
+        fieldObject.set({
+            selectable: !editorLocked,
+            evented: !editorLocked,
+            hasControls: !editorLocked,
+            hasBorders: !editorLocked,
+            lockMovementX: editorLocked,
+            lockMovementY: editorLocked,
+            lockScalingX: editorLocked,
+            lockScalingY: editorLocked,
+            lockRotation: editorLocked,
+            hoverCursor: editorLocked ? 'default' : 'move',
+        });
+    }
+
     function buildFieldGroup(type, signerId, position, clientFieldId) {
-        return createFieldGroup({
+        const group = createFieldGroup({
             fabric: window.fabric,
             fabricCanvas,
             type,
             signerId,
             signerName: signerNameFor(signerId),
+            fieldStyle: signerStyleForField(type, signerId),
             position,
             pageNumber: currentPage,
             clientFieldId: clientFieldId || nextClientFieldId(),
         });
+
+        applyFieldEditability(group);
+
+        return group;
     }
 
     function saveCurrentPageFields() {
@@ -399,10 +637,24 @@ function createPrepareSession(cfgEl) {
         });
 
         isLoadingPageFields = false;
+
+        if (editorLocked) {
+            selectedFieldClientId = null;
+            fabricCanvas.selection = false;
+            fabricCanvas.discardActiveObject();
+            setFieldInspectorState(null);
+
+            return;
+        }
+
         restoreSelectionByClientId(fabricCanvas, selectedFieldClientId);
     }
 
     function replaceActiveField(updates) {
+        if (editorLocked) {
+            return;
+        }
+
         const active = activeFieldObject();
         if (!active) {
             return;
@@ -416,6 +668,13 @@ function createPrepareSession(cfgEl) {
         const fieldType = updates?.type || active.fieldType;
         const signerId = updates?.signerId || active.signerId;
         const clientFieldId = active.clientFieldId;
+
+        if (isSinglePlacementType(fieldType) && hasSinglePlacementForSigner(fieldType, signerId, clientFieldId)) {
+            showDuplicatePlacementMessage(fieldType, signerId);
+            setFieldInspectorState(active);
+            return;
+        }
+
         const nextPosition = {
             ...normalized,
             angle: updates?.angle ?? normalized.angle ?? 0,
@@ -435,6 +694,10 @@ function createPrepareSession(cfgEl) {
     }
 
     function deleteActiveField() {
+        if (editorLocked) {
+            return;
+        }
+
         const active = activeFieldObject();
         if (!active) {
             return;
@@ -450,39 +713,11 @@ function createPrepareSession(cfgEl) {
         fabricCanvas.requestRenderAll();
     }
 
-    function duplicateField(target) {
-        if (!target || !fabricCanvas) {
-            return;
-        }
-
-        const normalized = normalizedPositionFromObject(target, fabricCanvas);
-        if (!normalized) {
-            return;
-        }
-
-        const copy = buildFieldGroup(
-            target.fieldType,
-            target.signerId,
-            {
-                x: Math.min(0.99 - normalized.width, normalized.x + 0.02),
-                y: Math.min(0.99 - normalized.height, normalized.y + 0.02),
-                width: normalized.width,
-                height: normalized.height,
-            },
-            nextClientFieldId(),
-        );
-
-        fabricCanvas.add(copy);
-        fabricCanvas.setActiveObject(copy);
-        selectedFieldClientId = copy.clientFieldId;
-
-        saveCurrentPageFields();
-        markDirty();
-        setFieldInspectorState(copy);
-        fabricCanvas.requestRenderAll();
-    }
-
     function moveActiveFieldLayer(direction) {
+        if (editorLocked) {
+            return;
+        }
+
         const active = activeFieldObject();
         if (!active || !fabricCanvas) {
             return;
@@ -502,8 +737,9 @@ function createPrepareSession(cfgEl) {
     }
 
     function addField(type, dropPoint) {
-        if (!hasAvailableSigner() || !fabricCanvas || isRenderingPage) {
+        if (editorLocked || !hasAvailableSigner() || !fabricCanvas || isRenderingPage) {
             debugLog('Add field blocked', {
+                editorLocked,
                 firstSignerId,
                 normalizedFirstSignerId,
                 selectedSignerId: selectedSignerId(),
@@ -511,7 +747,9 @@ function createPrepareSession(cfgEl) {
                 isRenderingPage,
             });
 
-            if (!fabricCanvas || isRenderingPage) {
+            if (editorLocked) {
+                showPdfLoadError(msgs.editorLocked || 'Attorney signing is locked until the video conference is completed.');
+            } else if (!fabricCanvas || isRenderingPage) {
                 showPdfLoadError(msgs.previewLoading || 'Preview still loading. Please wait a second, then try again.');
             } else if (!hasAvailableSigner()) {
                 showPdfLoadError(msgs.noSigner || 'No signer found. Add at least one signer first.');
@@ -525,6 +763,13 @@ function createPrepareSession(cfgEl) {
         const fieldConfig = getFieldConfig(type);
         const width = fieldConfig.width;
         const height = fieldConfig.height;
+        const signerId = selectedSignerId();
+
+        if (isSinglePlacementType(type) && hasSinglePlacementForSigner(type, signerId)) {
+            showDuplicatePlacementMessage(type, signerId);
+            return;
+        }
+
         const visiblePosition = dropPoint
             ? normalizedPositionFromClientPoint({
                 clientX: dropPoint.x,
@@ -535,14 +780,16 @@ function createPrepareSession(cfgEl) {
                 pdfPanel,
             })
             : resolveVisiblePosition({ width, height, pdfPanel, fabricEl });
+        const placementPosition = dropPoint
+            ? visiblePosition
+            : resolveNonOverlappingPosition(visiblePosition, width, height);
 
-        const signerId = selectedSignerId();
         const field = buildFieldGroup(
             type,
             signerId,
             {
-                x: visiblePosition.x,
-                y: visiblePosition.y,
+                x: placementPosition.x,
+                y: placementPosition.y,
                 width,
                 height,
             },
@@ -561,7 +808,7 @@ function createPrepareSession(cfgEl) {
             type,
             signerId,
             page: currentPage,
-            position: visiblePosition,
+            position: placementPosition,
         });
     }
 
@@ -602,12 +849,16 @@ function createPrepareSession(cfgEl) {
             btnNextPage.disabled = currentPage >= totalPages || isRenderingPage;
         }
 
+        updateZoomUi();
+
         // Filter signer dropdown based on current page assignments
         filterSignerDropdownForPage();
 
-        const shouldDisableFieldButtons = !hasAvailableSigner() || isRenderingPage;
+        const shouldDisableFieldButtons = editorLocked || !hasAvailableSigner() || isRenderingPage;
 
-        if (!hasAvailableSigner()) {
+        if (editorLocked) {
+            debugLog('Buttons disabled: editor locked');
+        } else if (!hasAvailableSigner()) {
             debugLog('Buttons disabled: missing first signer', { firstSignerId });
         } else if (isRenderingPage) {
             debugLog('Buttons disabled: page rendering');
@@ -620,6 +871,14 @@ function createPrepareSession(cfgEl) {
         if (fieldSigner) {
             fieldSigner.disabled = shouldDisableFieldButtons;
         }
+
+        signerAssignmentButtons.forEach((button) => {
+            const signerId = Number(button.dataset.signerId);
+            const isAllowedOnPage = signersForCurrentPage().some((signer) => Number(signer.id) === signerId);
+            button.disabled = shouldDisableFieldButtons || !isAllowedOnPage;
+            button.classList.toggle('opacity-45', !isAllowedOnPage);
+            button.classList.toggle('cursor-not-allowed', shouldDisableFieldButtons || !isAllowedOnPage);
+        });
 
         if (btnSaveFields) {
             btnSaveFields.disabled = shouldDisableFieldButtons;
@@ -737,7 +996,7 @@ function createPrepareSession(cfgEl) {
             }
 
             const viewport = page.getViewport({
-                scale: resolveRenderScale(page, pdfPanel ? pdfPanel.clientWidth : 0),
+                scale: resolveRenderScale(page, pdfPanel ? pdfPanel.clientWidth : 0) * zoomMultiplier,
             });
 
             const ctx = pdfCanvas?.getContext('2d');
@@ -948,6 +1207,18 @@ function createPrepareSession(cfgEl) {
             await renderPage(currentPage);
         });
 
+        listen(btnZoomOut, 'click', async () => {
+            await setZoomMultiplier(zoomMultiplier - zoomStep);
+        });
+
+        listen(btnZoomIn, 'click', async () => {
+            await setZoomMultiplier(zoomMultiplier + zoomStep);
+        });
+
+        listen(btnZoomReset, 'click', async () => {
+            await setZoomMultiplier(1);
+        });
+
         // Safety net: if isRenderingPage stays true for more than 5 seconds
         // after a page change, force-reset it. This prevents the UI from
         // becoming permanently locked due to race conditions.
@@ -1013,6 +1284,12 @@ function createPrepareSession(cfgEl) {
                 const type = button.dataset.fieldType || 'signature';
                 debugLog('Field add requested from palette click', { type });
                 addField(type);
+            });
+        });
+
+        signerAssignmentButtons.forEach((button) => {
+            listen(button, 'click', () => {
+                selectSignerById(button.dataset.signerId);
             });
         });
 
@@ -1122,10 +1399,6 @@ function createPrepareSession(cfgEl) {
             deleteActiveField();
         });
 
-        listen(btnDuplicateField, 'click', () => {
-            duplicateField(activeFieldObject());
-        });
-
         listen(btnBringForward, 'click', () => {
             moveActiveFieldLayer('forward');
         });
@@ -1143,33 +1416,6 @@ function createPrepareSession(cfgEl) {
                 return;
             }
 
-            const ctrlOrMeta = event.ctrlKey || event.metaKey;
-
-            if (ctrlOrMeta && event.key.toLowerCase() === 'v' && copiedField?.position) {
-                event.preventDefault();
-
-                const copy = buildFieldGroup(
-                    copiedField.fieldType,
-                    copiedField.signerId,
-                    {
-                        x: Math.min(0.99 - copiedField.position.width, copiedField.position.x + 0.02),
-                        y: Math.min(0.99 - copiedField.position.height, copiedField.position.y + 0.02),
-                        width: copiedField.position.width,
-                        height: copiedField.position.height,
-                    },
-                    nextClientFieldId(),
-                );
-
-                fabricCanvas.add(copy);
-                fabricCanvas.setActiveObject(copy);
-                selectedFieldClientId = copy.clientFieldId;
-                saveCurrentPageFields();
-                markDirty();
-                setFieldInspectorState(copy);
-                fabricCanvas.requestRenderAll();
-                return;
-            }
-
             const active = fabricCanvas.getActiveObject();
 
             if (event.key === 'Escape') {
@@ -1183,16 +1429,6 @@ function createPrepareSession(cfgEl) {
             }
 
             if (!active || !active.fieldType) {
-                return;
-            }
-
-            if (ctrlOrMeta && event.key.toLowerCase() === 'c') {
-                event.preventDefault();
-                copiedField = {
-                    fieldType: active.fieldType,
-                    signerId: active.signerId,
-                    position: normalizedPositionFromObject(active, fabricCanvas),
-                };
                 return;
             }
 

@@ -12,6 +12,7 @@ use App\Jobs\GenerateDocumentPdfJob;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\NotaryRequest;
+use App\Models\NotarySigner;
 use App\Models\Signature;
 use App\Models\SignatureAuditEvent;
 use App\Models\SignatureField;
@@ -219,6 +220,7 @@ class SignatureEngineTest extends TestCase
             'organization_id' => $client->organization_id,
             'user_id' => $client->id,
             'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionCompleted,
         ]);
 
         $path = 'documents/attorney-prepare-source.pdf';
@@ -235,6 +237,10 @@ class SignatureEngineTest extends TestCase
         $clientSigner = DocumentSigner::factory()->for($document)->create([
             'name' => 'Client Signer',
             'email' => 'client-signer@example.test',
+        ]);
+        $notarySigner = NotarySigner::factory()->for($notaryRequest, 'notaryRequest')->create([
+            'full_name' => $clientSigner->name,
+            'email' => $clientSigner->email,
         ]);
         $attorneySigner = DocumentSigner::factory()->for($document)->create([
             'user_id' => $notary->id,
@@ -258,6 +264,16 @@ class SignatureEngineTest extends TestCase
             'signature_path' => $this->storeTinySignaturePng(),
             'signature_algorithm' => 'RSA-SHA256',
         ]);
+        $notaryRequest->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $notarySigner->id,
+            'provider_name' => 'jitsi',
+            'status' => 'completed',
+            'room_name' => 'docutrust-test',
+            'meeting_url' => 'https://meet.jit.si/docutrust-test',
+            'scheduled_for' => now(),
+            'ended_at' => now(),
+        ]);
 
         $this->actingAs($notary)
             ->get(route('notary.documents.prepare', $document))
@@ -273,7 +289,7 @@ class SignatureEngineTest extends TestCase
                 'fields' => [
                     [
                         'signer_id' => $clientSigner->id,
-                        'type' => SignatureFieldType::Signature->value,
+                        'type' => SignatureFieldType::Text->value,
                         'page_number' => 1,
                         'position_data' => [
                             'x' => 0.1,
@@ -284,7 +300,7 @@ class SignatureEngineTest extends TestCase
                     ],
                 ],
             ])
-            ->assertStatus(422);
+            ->assertRedirect();
 
         $this->assertDatabaseCount('signature_fields', 2);
         $this->assertDatabaseHas('signature_fields', ['id' => $clientField->id]);
@@ -574,6 +590,17 @@ class SignatureEngineTest extends TestCase
                         'height' => 0.055,
                     ],
                 ],
+                [
+                    'signer_id' => $signer->id,
+                    'type' => SignatureFieldType::Seal->value,
+                    'page_number' => 1,
+                    'position_data' => [
+                        'x' => 0.68,
+                        'y' => 0.25,
+                        'width' => 0.16,
+                        'height' => 0.11,
+                    ],
+                ],
             ],
         ])->assertRedirect(route('documents.prepare', ['document' => $document, 'page' => 1]));
 
@@ -588,6 +615,13 @@ class SignatureEngineTest extends TestCase
             'document_id' => $document->id,
             'signer_id' => $signer->id,
             'type' => SignatureFieldType::Initials->value,
+            'page_number' => 1,
+        ]);
+
+        $this->assertDatabaseHas('signature_fields', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Seal->value,
             'page_number' => 1,
         ]);
     }
@@ -623,6 +657,86 @@ class SignatureEngineTest extends TestCase
             'signer_id' => $signer->id,
             'type' => SignatureFieldType::Checkbox->value,
         ]);
+    }
+
+    public function test_prepare_rejects_duplicate_signature_fields_for_same_signer_on_same_page(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Draft]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $this->actingAs($user)
+            ->from(route('documents.prepare', $document))
+            ->post(route('documents.signature-fields.store', $document), [
+                'fields' => [
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::Signature->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => 0.1,
+                            'y' => 0.2,
+                            'width' => 0.2,
+                            'height' => 0.08,
+                        ],
+                    ],
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::SignatureRight->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => 0.45,
+                            'y' => 0.2,
+                            'width' => 0.2,
+                            'height' => 0.08,
+                        ],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('documents.prepare', $document))
+            ->assertSessionHasErrors('fields.1.type');
+
+        $this->assertDatabaseCount('signature_fields', 0);
+    }
+
+    public function test_prepare_rejects_duplicate_seal_fields_for_same_signer_on_same_page(): void
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Draft]);
+        $signer = DocumentSigner::factory()->for($document)->create();
+
+        $this->actingAs($user)
+            ->from(route('documents.prepare', $document))
+            ->post(route('documents.signature-fields.store', $document), [
+                'fields' => [
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::Seal->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => 0.1,
+                            'y' => 0.2,
+                            'width' => 0.16,
+                            'height' => 0.11,
+                        ],
+                    ],
+                    [
+                        'signer_id' => $signer->id,
+                        'type' => SignatureFieldType::Seal->value,
+                        'page_number' => 1,
+                        'position_data' => [
+                            'x' => 0.45,
+                            'y' => 0.2,
+                            'width' => 0.16,
+                            'height' => 0.11,
+                        ],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('documents.prepare', $document))
+            ->assertSessionHasErrors('fields.1.type');
+
+        $this->assertDatabaseCount('signature_fields', 0);
     }
 
     public function test_prepare_rejects_field_geometry_that_exceeds_page_bounds(): void
@@ -816,6 +930,18 @@ class SignatureEngineTest extends TestCase
             ],
         ]);
 
+        SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Seal,
+            'position_data' => [
+                'x' => 0.55,
+                'y' => 0.1,
+                'width' => 0.16,
+                'height' => 0.11,
+            ],
+        ]);
+
         $this->post(route('sign.signature.store', $signer), [
             'signature_field_id' => $radioField->id,
             'signature_image' => self::TINY_PNG_DATA_URL,
@@ -823,6 +949,15 @@ class SignatureEngineTest extends TestCase
 
         $signer->refresh();
         $this->assertSame(DocumentSignerStatus::Pending, $signer->status);
+
+        $this->post(route('sign.signature.store', $signer), [
+            'signature_field_id' => $radioField->id,
+            'signature_image' => self::TINY_PNG_DATA_URL,
+        ])
+            ->assertRedirect(route('sign.show', $signer->access_token))
+            ->assertSessionHas('status', 'Field already completed.');
+
+        $this->assertDatabaseCount('signatures', 1);
 
         $this->post(route('sign.signature.store', $signer), [
             'signature_field_id' => $signatureField->id,

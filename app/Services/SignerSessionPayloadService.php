@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\SignatureFieldType;
 use App\Models\DocumentSigner;
 
 class SignerSessionPayloadService
@@ -26,6 +27,7 @@ class SignerSessionPayloadService
         $document = $signer->document;
         $assignedCount = $document->signatureFields
             ->where('signer_id', $signer->id)
+            ->reject(fn ($field): bool => $field->type === SignatureFieldType::Seal)
             ->count();
         $signedCount = $signer->signatures->count();
         $signingAvailabilityMessage = $this->documentSigningWorkflowService->canSignerModifyFields($document, $signer);

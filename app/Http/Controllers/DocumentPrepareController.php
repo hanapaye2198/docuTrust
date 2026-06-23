@@ -34,6 +34,12 @@ class DocumentPrepareController extends Controller
             // If the document is fully completed and this is the assigned attorney,
             // auto-transition to attorney-signing preparation so the CTA link is always actionable.
             if ($document->status === DocumentStatus::Completed && $user?->role->value === 'notary') {
+                if (! $this->attorneySigningIsUnlocked($document)) {
+                    return redirect()
+                        ->route('notary.requests.show', $document->notaryRequest)
+                        ->with('error', __('Attorney signing will be available after the video conference is completed.'));
+                }
+
                 try {
                     app(NotaryRequestWorkflowService::class)->beginAttorneySigning($document->notaryRequest);
                 } catch (RuntimeException $exception) {
@@ -105,6 +111,7 @@ class DocumentPrepareController extends Controller
         $attorneySigner = $isAttorneySigningPhase
             ? $document->documentSigners->first(fn ($signer) => (int) $signer->user_id === (int) $user?->id)
             : null;
+        $attorneySigningLocked = $isAttorneySigningPhase && ! $this->attorneySigningIsUnlocked($document);
 
         // In attorney signing phase, only show the attorney as available signer
         if ($isAttorneySigningPhase) {
@@ -135,6 +142,7 @@ class DocumentPrepareController extends Controller
             'signers' => $signers,
             'canSend' => ! $isAttorneySigningPhase && $document->canSendForSigning(),
             'isAttorneySigningPhase' => $isAttorneySigningPhase,
+            'attorneySigningLocked' => $attorneySigningLocked,
             'initialFields' => $initialFieldsQuery
                 ->get()
                 ->map(fn (SignatureField $f) => [
@@ -171,6 +179,12 @@ class DocumentPrepareController extends Controller
             : null;
 
         if ($isAttorneySigningPhase) {
+            if (! $this->attorneySigningIsUnlocked($document)) {
+                return redirect()
+                    ->route('notary.documents.prepare', $document)
+                    ->with('error', __('Attorney signing will be available after the video conference is completed.'));
+            }
+
             if ($attorneySigner === null) {
                 abort(422, __('Unable to resolve the attorney signer for this document.'));
             }
@@ -285,5 +299,21 @@ class DocumentPrepareController extends Controller
             'source' => $useSignedPreview ? 0 : 1,
             'signed_preview' => $useSignedPreview ? 1 : 0,
         ], false);
+    }
+
+    private function attorneySigningIsUnlocked(Document $document): bool
+    {
+        if ($document->notary_request_id === null) {
+            return true;
+        }
+
+        if (! (bool) config('docutrust.notary.require_video_session', true)) {
+            return true;
+        }
+
+        $request = $document->notaryRequest;
+
+        return $request !== null
+            && app(NotaryRequestWorkflowService::class)->hasCompletedSession($request);
     }
 }

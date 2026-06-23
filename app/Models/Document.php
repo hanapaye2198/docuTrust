@@ -401,14 +401,17 @@ class Document extends Model
             ->pluck('signing_order')
             ->filter(fn ($value) => $value !== null)
             ->map(fn ($value) => (int) $value)
-            ->sort()
             ->values();
 
         if ($orders->count() !== $signers->count()) {
             return false;
         }
 
-        return $orders->all() === range(1, $signers->count());
+        if ($orders->contains(fn (int $order): bool => $order < 1)) {
+            return false;
+        }
+
+        return $orders->unique()->count() === $orders->count();
     }
 
     protected static function booted(): void

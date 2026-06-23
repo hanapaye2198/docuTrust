@@ -682,12 +682,18 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         if ($isNotary) {
             if ($document !== null) {
-                session()->flash('status', __('Case created with your PDF. Use Prepare signature fields on the case page to continue.'));
+                session()->flash('status', __('Case created with your PDF. Prepare all signer, witness, and attorney fields now.'));
             } else {
                 session()->flash('status', __('Case opened. Upload your PDF and add parties from the case page when ready.'));
             }
         } else {
             session()->flash('status', __('Notarization created. The assigned attorney will upload documents and manage the signing process.'));
+        }
+
+        if ($isNotary && $document !== null) {
+            $this->redirect(route('notary.documents.prepare', $document, absolute: false), navigate: true);
+
+            return;
         }
 
         $showRoute = $isNotary ? 'notary.requests.workflow' : 'notary-requests.show';

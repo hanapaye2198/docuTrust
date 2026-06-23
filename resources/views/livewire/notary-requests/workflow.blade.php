@@ -28,6 +28,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function workflowSteps(): array
     {
+        $firstDocument = $this->notaryRequest->documents->first();
         $hasDocument = $this->notaryRequest->documents->isNotEmpty() || $this->notaryRequest->document_path !== null;
         $hasSigners = $this->notaryRequest->signers->isNotEmpty();
         $hasSession = $this->notaryRequest->sessions->isNotEmpty();
@@ -39,7 +40,9 @@ new #[Layout('components.layouts.app')] class extends Component {
             [
                 'label' => __('Prepare Document'),
                 'description' => __('Upload the PDF, place fields, and prepare it for signing.'),
-                'href' => route('notary.requests.show', [$this->notaryRequest, 'tab' => 'documents']),
+                'href' => $firstDocument !== null
+                    ? route('notary.documents.prepare', $firstDocument)
+                    : route('notary.requests.show', [$this->notaryRequest, 'tab' => 'documents']),
                 'icon' => 'document-text',
                 'complete' => $hasDocument,
                 'active' => ! $hasDocument,

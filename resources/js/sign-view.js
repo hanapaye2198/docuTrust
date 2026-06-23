@@ -488,6 +488,10 @@ function createSignViewSession(cfgEl) {
         return Object.prototype.hasOwnProperty.call(signedByFieldId, String(fieldId));
     }
 
+    function requiresSignerAction(field) {
+        return field?.type !== 'seal';
+    }
+
     function orderedFields() {
         return [...fieldsJson].sort((a, b) => {
             const pageA = Number(a.page_number) > 0 ? Number(a.page_number) : 1;
@@ -503,7 +507,7 @@ function createSignViewSession(cfgEl) {
     }
 
     function firstUnsignedField() {
-        return orderedFields().find((field) => !isSigned(field.id)) || null;
+        return orderedFields().find((field) => requiresSignerAction(field) && !isSigned(field.id)) || null;
     }
 
     /**
@@ -511,7 +515,7 @@ function createSignViewSession(cfgEl) {
      * Checks current page first, then later pages, then wraps to earlier pages only if needed.
      */
     function nextUnsignedFieldForward() {
-        const unsigned = orderedFields().filter((field) => !isSigned(field.id));
+        const unsigned = orderedFields().filter((field) => requiresSignerAction(field) && !isSigned(field.id));
         if (unsigned.length === 0) {
             return null;
         }
@@ -591,8 +595,8 @@ function createSignViewSession(cfgEl) {
                 return { kind: 'signature', signatureAlignment: 'right', stroke: '#0369a1', fill: 'rgba(14, 165, 233, 0.12)', fillText: '#075985', label: 'Signature' };
             case 'text':
                 return { kind: 'input', stroke: '#ca8a04', fill: 'rgba(234, 179, 8, 0.15)', fillText: '#a16207', label: 'Text field' };
-            case 'name':
-                return { kind: 'input', stroke: '#15803d', fill: 'rgba(34, 197, 94, 0.15)', fillText: '#15803d', label: 'Name' };
+            case 'seal':
+                return { kind: 'input', stroke: '#334155', fill: 'rgba(15, 23, 42, 0.08)', fillText: '#1e293b', label: 'Atty. Seal' };
             case 'date':
                 return { kind: 'input', stroke: '#6d28d9', fill: 'rgba(139, 92, 246, 0.12)', fillText: '#5b21b6', label: 'Date' };
             case 'email':
@@ -1065,15 +1069,16 @@ function createSignViewSession(cfgEl) {
             return;
         }
 
+        if (isSigned(field.id)) {
+            showFeedback(messages.signed || 'Signed', 'success');
+            return;
+        }
+
         if (!hasActiveTrustAuthorization()) {
             showFeedback(messages.trustAuthorizationRequired, 'error');
             return;
         }
 
-        if (field.type === 'name') {
-            submitSignatureField(field.id, textToDataUrl(signerName), signerName);
-            return;
-        }
         if (field.type === 'date') {
             const value = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium' }).format(new Date());
             submitSignatureField(field.id, textToDataUrl(value), value);
@@ -1199,9 +1204,9 @@ function createSignViewSession(cfgEl) {
                     height: rect.height,
                     fill: 'rgba(0,0,0,0.001)',
                     selectable: false,
-                    evented: currentCanEditFields,
+                    evented: false,
                     hasControls: false,
-                    hoverCursor: currentCanEditFields ? 'pointer' : 'default',
+                    hoverCursor: 'default',
                 });
 
                 // For rotated fields, wrap all elements in a group so rotation
@@ -1218,29 +1223,15 @@ function createSignViewSession(cfgEl) {
 
                     const group = new fabric.Group([hitbox, target, badge], positionedGroupOptions(rect, {
                         selectable: false,
-                        evented: currentCanEditFields,
+                        evented: false,
                         hasControls: false,
-                        hoverCursor: currentCanEditFields ? 'pointer' : 'default',
+                        hoverCursor: 'default',
                         subTargetCheck: true,
                     }));
-
-                    if (currentCanEditFields) {
-                        group.on('mousedown', (event) => {
-                            event.e.preventDefault();
-                            activateField(field);
-                        });
-                    }
 
                     fabricCanvas.add(group);
                     registerFieldObject(field.id, group);
                     return;
-                }
-
-                if (currentCanEditFields) {
-                    hitbox.on('mousedown', (event) => {
-                        event.e.preventDefault();
-                        activateField(field);
-                    });
                 }
 
                 [target, badge, hitbox].forEach((object) => {
@@ -1261,17 +1252,11 @@ function createSignViewSession(cfgEl) {
                         scaleX: placement.scale,
                         scaleY: placement.scale,
                         selectable: false,
-                        evented: currentCanEditFields,
+                        evented: false,
                         hasControls: false,
-                        hoverCursor: currentCanEditFields ? 'pointer' : 'default',
+                        hoverCursor: 'default',
                         opacity: 0.98,
                     });
-                    if (currentCanEditFields) {
-                        img.on('mousedown', (event) => {
-                            event.e.preventDefault();
-                            activateField(field);
-                        });
-                    }
                     addSignedDecorators(img);
                     return;
                 }
@@ -1279,15 +1264,9 @@ function createSignViewSession(cfgEl) {
 
             const valueGroup = buildSignedValueGroup(field, rect, submittedValue);
             valueGroup.selectable = false;
-            valueGroup.evented = currentCanEditFields;
+            valueGroup.evented = false;
             valueGroup.hasControls = false;
-            valueGroup.hoverCursor = currentCanEditFields ? 'pointer' : 'default';
-            if (currentCanEditFields) {
-                valueGroup.on('mousedown', (event) => {
-                    event.e.preventDefault();
-                    activateField(field);
-                });
-            }
+            valueGroup.hoverCursor = 'default';
             addSignedDecorators(valueGroup);
             return;
         }
@@ -1295,16 +1274,18 @@ function createSignViewSession(cfgEl) {
         const group = buildFieldPreviewGroup(getFieldChrome(field.type), rect);
         group.fieldId = field.id;
         group.selectable = false;
-        group.evented = currentCanEditFields;
+        group.evented = currentCanEditFields && requiresSignerAction(field);
         group.hasControls = false;
-        group.hoverCursor = currentCanEditFields ? 'pointer' : 'default';
+        group.hoverCursor = currentCanEditFields && requiresSignerAction(field) ? 'pointer' : 'default';
         if (currentCanEditFields && nextFieldId !== null && field.id === nextFieldId) {
             group.shadow = new fabric.Shadow({ color: 'rgba(20, 184, 166, 0.35)', blur: 18, offsetX: 0, offsetY: 0 });
         }
-        group.on('mousedown', (event) => {
-            event.e.preventDefault();
-            activateField(field);
-        });
+        if (requiresSignerAction(field)) {
+            group.on('mousedown', (event) => {
+                event.e.preventDefault();
+                activateField(field);
+            });
+        }
         fabricCanvas.add(group);
         registerFieldObject(field.id, group);
     }
@@ -1529,6 +1510,11 @@ function createSignViewSession(cfgEl) {
             return;
         }
 
+        if (isSigned(fieldId)) {
+            showFeedback(messages.signed || 'Signed', 'success');
+            return;
+        }
+
         isSubmitting = true;
         modalSubmitButton?.setAttribute('disabled', 'disabled');
 
@@ -1548,6 +1534,11 @@ function createSignViewSession(cfgEl) {
         }
 
         const field = fieldById(fieldId);
+        if (field && isSigned(field.id)) {
+            showFeedback(messages.signed || 'Signed', 'success');
+            return;
+        }
+
         modalFieldId.value = String(fieldId);
         resetModalInputs();
         configureModalForField(field);

@@ -8,6 +8,7 @@ use App\Enums\EInvoiceStatus;
 use App\Enums\NotaryRequestStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\SignatureFieldType;
+use App\Enums\SigningMethod;
 use App\Enums\TemplateRoleType;
 use App\Enums\UserRole;
 use App\Http\Controllers\NotaryDocumentSignerSignatureImageController;
@@ -119,7 +120,7 @@ class NotaryRequestPagesTest extends TestCase
 
         $file = UploadedFile::fake()->create('deed-of-sale.pdf', 120, 'application/pdf');
 
-        LivewireVolt::test('notary-requests.create')
+        $component = LivewireVolt::test('notary-requests.create')
             ->set('title', 'Deed of sale — Lot 5')
             ->set('requestType', 'acknowledgment')
             ->set('caseDocument', $file)
@@ -135,12 +136,24 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->assertNotNull($request);
         $this->assertNotNull($request->document_path);
-        Storage::disk(config('filesystems.docutrust_disk', 'local'))->assertExists($request->document_path);
+        $this->assertTrue(Storage::disk(config('filesystems.docutrust_disk', 'local'))->exists($request->document_path));
+
+        $document = Document::query()->where('notary_request_id', $request->id)->first();
+
+        $this->assertNotNull($document);
+        $component->assertRedirect(route('notary.documents.prepare', $document));
 
         $this->assertDatabaseHas('documents', [
             'notary_request_id' => $request->id,
             'title' => 'Deed of sale — Lot 5',
             'status' => DocumentStatus::Draft->value,
+        ]);
+
+        $this->assertDatabaseHas('document_signers', [
+            'document_id' => $document->id,
+            'user_id' => $attorney->id,
+            'email' => $attorney->email,
+            'signing_method' => SigningMethod::AccountVerified->value,
         ]);
     }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Concerns\ResolvesSecureDisk;
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\SignatureFieldType;
 use App\Http\Requests\StartTrustAuthorizationRequest;
 use App\Http\Requests\StoreDocumentSignatureRequest;
 use App\Models\Document;
@@ -313,6 +314,7 @@ class SignDocumentController extends Controller
 
                 $assignedCount = $document->signatureFields()
                     ->where('signer_id', $signer->id)
+                    ->where('type', '!=', SignatureFieldType::Seal->value)
                     ->count();
 
                 return response()->json([
@@ -433,6 +435,7 @@ class SignDocumentController extends Controller
 
                 $assignedCount = $document->signatureFields()
                     ->where('signer_id', $signer->id)
+                    ->where('type', '!=', SignatureFieldType::Seal->value)
                     ->count();
 
                 return response()->json([
@@ -1143,6 +1146,7 @@ class SignDocumentController extends Controller
         $document = $signer->document;
         $assignedCount = $document->signatureFields
             ->where('signer_id', $signer->id)
+            ->reject(fn (SignatureField $field): bool => $field->type === SignatureFieldType::Seal)
             ->count();
         $signedCount = $signer->signatures->count();
 

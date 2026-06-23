@@ -319,6 +319,52 @@ class NotarySigningProgressTest extends TestCase
         ]);
     }
 
+    public function test_attorney_prepare_page_stays_locked_until_video_conference_is_completed(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionScheduled,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Completed,
+        ]);
+
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create([
+            'email' => 'signer@example.test',
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'email' => $party->email,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
+        ]);
+
+        $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'scheduled',
+            'room_name' => 'docutrust-test',
+            'meeting_url' => 'https://meet.jit.si/docutrust-test',
+            'scheduled_for' => now(),
+        ]);
+
+        $this->actingAs($notary)
+            ->get(route('notary.documents.prepare', $document))
+            ->assertRedirect(route('notary.requests.show', $request))
+            ->assertSessionHas('error', 'Attorney signing will be available after the video conference is completed.');
+
+        $document->refresh();
+        $this->assertSame(DocumentStatus::Completed, $document->status);
+        $this->assertDatabaseMissing('document_signers', [
+            'document_id' => $document->id,
+            'user_id' => $notary->id,
+        ]);
+    }
+
     public function test_authenticated_attorney_sign_page_shows_continue_process_button_after_signing(): void
     {
         $notary = User::factory()->notary()->create();

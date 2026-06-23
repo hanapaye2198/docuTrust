@@ -9,6 +9,7 @@ use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
+use Illuminate\Support\Collection;
 use RuntimeException;
 
 class NotaryParticipantSyncService
@@ -25,6 +26,8 @@ class NotaryParticipantSyncService
         if ($request === null) {
             return;
         }
+
+        $this->syncAssignedAttorneyToDocument($document, $request);
 
         $requestSigners = $request->signers;
         if ($requestSigners->isEmpty()) {
@@ -69,6 +72,46 @@ class NotaryParticipantSyncService
         }
     }
 
+    public function syncAssignedAttorneyToDocument(Document $document, ?NotaryRequest $request = null): ?DocumentSigner
+    {
+        if ($document->notary_request_id === null) {
+            return null;
+        }
+
+        $document->loadMissing(['documentSigners', 'notaryRequest.notary']);
+
+        $request ??= $document->notaryRequest;
+        if ($request === null || $request->notary === null) {
+            return null;
+        }
+
+        $attorney = $request->notary;
+        $attorneySigner = $document->documentSigners
+            ->first(fn (DocumentSigner $signer): bool => (int) $signer->user_id === (int) $attorney->id);
+
+        if ($attorneySigner instanceof DocumentSigner) {
+            $attorneySigner->update([
+                'name' => trim((string) $attorneySigner->name) !== '' ? $attorneySigner->name : $attorney->name,
+                'email' => trim((string) $attorneySigner->email) !== '' ? $attorneySigner->email : $attorney->email,
+                'role_type' => TemplateRoleType::Signer,
+                'signing_method' => SigningMethod::AccountVerified,
+            ]);
+
+            return $attorneySigner;
+        }
+
+        return $document->documentSigners()->create([
+            'name' => $attorney->name,
+            'email' => $attorney->email,
+            'user_id' => $attorney->id,
+            'role_name' => __('Attorney'),
+            'role_type' => TemplateRoleType::Signer,
+            'signing_method' => SigningMethod::AccountVerified,
+            'status' => 'pending',
+            'signing_order' => 999,
+        ]);
+    }
+
     public function syncRequestSignersToDocuments(NotaryRequest $request): void
     {
         $request->loadMissing('documents');
@@ -84,7 +127,7 @@ class NotaryParticipantSyncService
 
         $request = $requestSigner->notaryRequest;
         if ($request === null) {
-            $requestSigner->delete();
+            NotarySigner::destroy($requestSigner->getKey());
 
             return;
         }
@@ -105,19 +148,19 @@ class NotaryParticipantSyncService
             }
 
             $documentSigner->signatureFields()->delete();
-            $documentSigner->delete();
+            DocumentSigner::destroy($documentSigner->getKey());
         }
 
-        $requestSigner->delete();
+        NotarySigner::destroy($requestSigner->getKey());
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, DocumentSigner>  $documentSigners
+     * @param  Collection<int, DocumentSigner>  $documentSigners
      * @param  list<int>  $excludedSignerIds
      */
     private function resolveMatchingDocumentSigner(
         NotarySigner $requestSigner,
-        \Illuminate\Support\Collection $documentSigners,
+        Collection $documentSigners,
         array $excludedSignerIds
     ): ?DocumentSigner {
         $email = $this->normalize($requestSigner->email);

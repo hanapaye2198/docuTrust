@@ -81,6 +81,8 @@ class StoreSignatureFieldsRequest extends FormRequest
             /** @var Document $document */
             $document = $this->route('document');
             $fields = $this->validatedFields();
+            $signatureFieldsBySignerPage = [];
+            $sealFieldsBySignerPage = [];
 
             foreach ($fields as $index => $field) {
                 $position = $field['position_data'] ?? [];
@@ -122,6 +124,33 @@ class StoreSignatureFieldsRequest extends FormRequest
 
                 // Validate page is within signer's allowed pages
                 $pageNumber = (int) ($field['page_number'] ?? 0);
+                $fieldType = (string) ($field['type'] ?? '');
+                if ($this->isSignaturePlacementType($fieldType)) {
+                    $signatureKey = ((int) $field['signer_id']).':'.$pageNumber;
+
+                    if (isset($signatureFieldsBySignerPage[$signatureKey])) {
+                        $validator->errors()->add(
+                            "fields.$index.type",
+                            __('Each signer can only have one signature field per page.')
+                        );
+                    }
+
+                    $signatureFieldsBySignerPage[$signatureKey] = true;
+                }
+
+                if ($fieldType === SignatureFieldType::Seal->value) {
+                    $sealKey = ((int) $field['signer_id']).':'.$pageNumber;
+
+                    if (isset($sealFieldsBySignerPage[$sealKey])) {
+                        $validator->errors()->add(
+                            "fields.$index.type",
+                            __('Each signer can only have one seal field per page.')
+                        );
+                    }
+
+                    $sealFieldsBySignerPage[$sealKey] = true;
+                }
+
                 if (! $signer->isAllowedOnPage($pageNumber)) {
                     $validator->errors()->add(
                         "fields.$index.page_number",
@@ -151,6 +180,15 @@ class StoreSignatureFieldsRequest extends FormRequest
                 }
             }
         });
+    }
+
+    private function isSignaturePlacementType(string $type): bool
+    {
+        return in_array($type, [
+            SignatureFieldType::Signature->value,
+            SignatureFieldType::SignatureLeft->value,
+            SignatureFieldType::SignatureRight->value,
+        ], true);
     }
 
     /**

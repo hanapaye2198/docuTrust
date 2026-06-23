@@ -7,6 +7,7 @@ use App\Enums\SignatureFieldType;
 use App\Models\Document;
 use App\Models\Signature;
 use App\Models\SignatureField;
+use App\Services\Notary\NotarySealProfileService;
 use App\Support\RotatableFpdi;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -19,6 +20,7 @@ class DocumentPdfStampingService
 
     public function __construct(
         private readonly DocumentStorageService $documentStorageService,
+        private readonly NotarySealProfileService $notarySealProfileService,
     ) {}
 
     public function generatePreparedPdf(Document $document): ?string
@@ -51,7 +53,7 @@ class DocumentPdfStampingService
 
         try {
             $document->loadMissing([
-                'signatureFields.signer',
+                'signatureFields.signer.user',
                 'signatures.signatureField',
                 'documentSigners',
             ]);
@@ -143,7 +145,9 @@ class DocumentPdfStampingService
         if ($mode === 'prepared') {
             $this->drawPreparedField($pdf, $type, $field, $x, $y, $width, $height);
         } elseif ($mode === 'signed_preview') {
-            if ($signature !== null) {
+            if ($type === SignatureFieldType::Seal) {
+                $this->drawSealImage($pdf, $field, $x, $y, $width, $height);
+            } elseif ($signature !== null) {
                 $this->drawFinalField($pdf, $type, $field, $signature, $x, $y, $width, $height);
             }
         } else {
@@ -205,6 +209,12 @@ class DocumentPdfStampingService
 
         if ($isSignature) {
             $this->drawSignatureImage($pdf, $type, $signature, $x, $y, $width, $height);
+
+            return;
+        }
+
+        if ($type === SignatureFieldType::Seal) {
+            $this->drawSealImage($pdf, $field, $x, $y, $width, $height);
 
             return;
         }
@@ -279,6 +289,51 @@ class DocumentPdfStampingService
         );
     }
 
+    private function drawSealImage(Fpdi $pdf, SignatureField $field, float $x, float $y, float $width, float $height): void
+    {
+        $user = $field->signer?->user;
+        if ($user === null) {
+            return;
+        }
+
+        $path = $this->notarySealProfileService->sealImagePath($user);
+        if (! is_string($path) || $path === '') {
+            return;
+        }
+
+        $disk = $this->documentStorageService->secureDisk();
+        if (! $disk->exists($path)) {
+            return;
+        }
+
+        $margin = 1.2;
+
+        $this->documentStorageService->withTemporaryLocalPath(
+            $path,
+            function (string $localSealPath) use ($pdf, $x, $y, $width, $height, $margin): void {
+                $imageSize = @getimagesize($localSealPath);
+                if ($imageSize === false) {
+                    return;
+                }
+
+                [$imageWidth, $imageHeight] = $imageSize;
+                if ($imageWidth <= 0 || $imageHeight <= 0) {
+                    return;
+                }
+
+                $maxWidth = max(4, $width - ($margin * 2));
+                $maxHeight = max(4, $height - ($margin * 2));
+                $scale = min($maxWidth / $imageWidth, $maxHeight / $imageHeight);
+                $renderWidth = $imageWidth * $scale;
+                $renderHeight = $imageHeight * $scale;
+                $renderX = $x + (($width - $renderWidth) / 2);
+                $renderY = $y + (($height - $renderHeight) / 2);
+
+                $pdf->Image($localSealPath, $renderX, $renderY, $renderWidth, $renderHeight);
+            }
+        );
+    }
+
     private function resolvedFieldValue(SignatureFieldType $type, SignatureField $field, ?Signature $signature = null): string
     {
         if (is_string($signature?->submitted_value) && $signature->submitted_value !== '') {
@@ -313,6 +368,7 @@ class DocumentPdfStampingService
         return match ($type) {
             SignatureFieldType::Text => [202, 138, 4],
             SignatureFieldType::Name => [21, 128, 61],
+            SignatureFieldType::Seal => [51, 65, 85],
             SignatureFieldType::Date => [109, 40, 217],
             SignatureFieldType::Email => [190, 24, 93],
             SignatureFieldType::Initials => [162, 28, 175],
@@ -334,6 +390,7 @@ class DocumentPdfStampingService
             SignatureFieldType::Checkbox => 'Checkbox',
             SignatureFieldType::Radio => 'Radio',
             SignatureFieldType::Name => 'Name',
+            SignatureFieldType::Seal => 'Atty. Seal',
             SignatureFieldType::Date => 'Date',
             SignatureFieldType::Email => 'Email',
             SignatureFieldType::Initials => 'Initials',

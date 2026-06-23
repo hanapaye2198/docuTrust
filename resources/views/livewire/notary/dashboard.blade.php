@@ -186,9 +186,10 @@ new #[Layout('components.layouts.app')] class extends Component {
     $certificates = $dashboardData['certificates'];
     $roleLabel = app(TrustProfileService::class)->summary($user)['role_label'];
     $readinessPercent = $readiness['total'] > 0 ? (int) round(($readiness['met'] / $readiness['total']) * 100) : 0;
+    $philippineHour = now('Asia/Manila')->hour;
     $greeting = match (true) {
-        now()->hour < 12 => __('Good morning'),
-        now()->hour < 17 => __('Good afternoon'),
+        $philippineHour < 12 => __('Good morning'),
+        $philippineHour < 18 => __('Good afternoon'),
         default => __('Good evening'),
     };
     $displayName = $user->buildFullName() ?: $user->name;

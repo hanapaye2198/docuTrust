@@ -97,7 +97,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function headerGreeting(): string
     {
-        $hour = now()->hour;
+        $hour = now('Asia/Manila')->hour;
 
         if ($hour >= 5 && $hour < 12) {
             return __('Good morning');
@@ -113,7 +113,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     #[Computed]
     public function headerGreetingIcon(): string
     {
-        $hour = now()->hour;
+        $hour = now('Asia/Manila')->hour;
 
         if ($hour >= 5 && $hour < 18) {
             return 'sun';

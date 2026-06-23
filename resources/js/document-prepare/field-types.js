@@ -7,7 +7,7 @@ export const FIELD_TYPES = {
     radio: { label: 'Radio Button', canvasLabel: 'Radio', kind: 'toggle', control: 'circle', fill: 'rgba(99, 102, 241, 0.10)', stroke: '#4f46e5', text: '#4338ca', width: 0.14, height: 0.04, minWidth: 0.08, minHeight: 0.028, accent: '#4f46e5' },
     date: { label: 'Date Signed', canvasLabel: 'Date', kind: 'input', fill: 'rgba(139, 92, 246, 0.10)', stroke: '#6d28d9', text: '#5b21b6', width: 0.2, height: 0.05, minWidth: 0.14, minHeight: 0.034, accent: '#6d28d9' },
     email: { label: 'Email', canvasLabel: 'Email', kind: 'input', fill: 'rgba(244, 63, 94, 0.09)', stroke: '#be123c', text: '#9f1239', width: 0.24, height: 0.05, minWidth: 0.18, minHeight: 0.034, accent: '#be123c' },
-    name: { label: 'Name', canvasLabel: 'Name', kind: 'input', fill: 'rgba(34, 197, 94, 0.12)', stroke: '#15803d', text: '#15803d', width: 0.2, height: 0.05, minWidth: 0.14, minHeight: 0.034, accent: '#15803d' },
+    seal: { label: 'Seal', canvasLabel: 'Atty. Seal', kind: 'input', fill: 'rgba(15, 23, 42, 0.08)', stroke: '#334155', text: '#1e293b', width: 0.16, height: 0.11, minWidth: 0.1, minHeight: 0.07, accent: '#334155' },
     initials: { label: 'Initials', canvasLabel: 'Initials', kind: 'input', fill: 'rgba(217, 70, 239, 0.09)', stroke: '#a21caf', text: '#86198f', width: 0.14, height: 0.05, minWidth: 0.1, minHeight: 0.034, accent: '#a21caf' },
 };
 

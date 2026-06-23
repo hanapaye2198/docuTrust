@@ -39,6 +39,20 @@ class FieldSignatureCaptureService
             throw new RuntimeException('Signature field does not belong to the signer.');
         }
 
+        $existingSignature = Signature::query()
+            ->where('signature_field_id', $field->id)
+            ->where('signer_id', $signer->id)
+            ->first();
+
+        if ($existingSignature !== null) {
+            return new FieldSignatureCaptureResult(
+                document: $document->fresh(),
+                signer: $signer->fresh(),
+                signature: $existingSignature->fresh(),
+                message: __('Field already completed.'),
+            );
+        }
+
         $this->ensureActiveTrustAuthorizationIfRequired($signer);
         $this->ensureSignerKeyPair($signer);
         $signerCertificate = $this->signerCertificateService->getOrIssueForSigner($signer->fresh());
@@ -48,37 +62,27 @@ class FieldSignatureCaptureService
         $signatureImagePath = $this->shouldPersistSignatureImage($field)
             ? $this->storeSubmittedSignatureImage($signatureImage)
             : null;
-        $existingSignature = Signature::query()
-            ->where('signature_field_id', $field->id)
-            ->where('signer_id', $signer->id)
-            ->first();
 
-        $signature = Signature::query()->updateOrCreate(
-            [
-                'signature_field_id' => $field->id,
-            ],
-            [
-                'document_id' => $document->id,
-                'signer_id' => $signer->id,
-                'signer_certificate_id' => $signerCertificate->id,
-                'signature_path' => $signatureImagePath,
-                'submitted_value' => $resolvedSubmittedValue,
-                'signature_value' => null,
-                'signature_hash' => null,
-                'public_key_fingerprint' => $this->pkiSignatureService->fingerprint($signerKeyPair['public_key']),
-                'signature_algorithm' => 'RSA-SHA256',
-                'position_data' => null,
-            ]
-        );
+        $signature = Signature::query()->create([
+            'signature_field_id' => $field->id,
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'signer_certificate_id' => $signerCertificate->id,
+            'signature_path' => $signatureImagePath,
+            'submitted_value' => $resolvedSubmittedValue,
+            'signature_value' => null,
+            'signature_hash' => null,
+            'public_key_fingerprint' => $this->pkiSignatureService->fingerprint($signerKeyPair['public_key']),
+            'signature_algorithm' => 'RSA-SHA256',
+            'position_data' => null,
+        ]);
 
         $this->deleteStoredSignatureIfReplaced($existingSignature, $signatureImagePath);
         SignatureAuditLogger::fieldSigned($document, $signer, $ipAddress);
 
         $fieldType = $field->type->value;
         $isSignatureField = in_array($fieldType, ['signature', 'signature_left', 'signature_right'], true);
-        $message = $existingSignature !== null
-            ? ($isSignatureField ? __('Signature updated.') : __('Field updated.'))
-            : ($isSignatureField ? __('Signature saved.') : __('Field saved.'));
+        $message = $isSignatureField ? __('Signature saved.') : __('Field saved.');
 
         return new FieldSignatureCaptureResult(
             document: $document->fresh(),
