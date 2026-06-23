@@ -70,132 +70,19 @@
         </div>
     @endif
 
-    @include('livewire.notary-requests.show.partials.do-this-now-card', ['primaryAction' => $primaryAction])
+    @include('livewire.notary-requests.show.partials.workflow-wizard')
 
-    <div class="grid items-start gap-6 xl:grid-cols-12 xl:gap-8" wire:key="case-workspace-{{ $notaryRequest->id }}">
-        <aside class="order-first xl:col-span-3 xl:sticky xl:top-4 xl:self-start">
-            @include('livewire.notary-requests.show.partials.case-workflow-sidebar')
-        </aside>
-
-        <div class="flex min-w-0 flex-col gap-4 xl:col-span-9">
-            <nav
-                class="-mx-1 flex gap-2 overflow-x-auto border-b border-zinc-200/90 px-1 pb-2 dark:border-zinc-800"
-                aria-label="{{ __('Case sections') }}"
-            >
-                <button
-                    type="button"
-                    wire:click="setActiveTab('documents')"
-                    @class([
-                        'inline-flex shrink-0 items-center rounded-lg px-4 py-2.5 text-sm font-semibold transition min-h-11',
-                        'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'documents',
-                        'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' => $activeTab !== 'documents',
-                    ])
-                >
-                    {{ __('Document') }}
-                </button>
-                <button
-                    type="button"
-                    wire:click="setActiveTab('parties')"
-                    @class([
-                        'inline-flex shrink-0 items-center rounded-lg px-4 py-2.5 text-sm font-semibold transition min-h-11',
-                        'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'parties',
-                        'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' => $activeTab !== 'parties',
-                    ])
-                >
-                    {{ __('Signers') }}
-                    @if ($requestSigners->isNotEmpty())
-                        <span class="ml-1 text-xs opacity-70">{{ $requestSigners->count() }}</span>
-                    @endif
-                </button>
-                @if ($panels['session'])
-                    <button
-                        type="button"
-                        wire:click="setActiveTab('session')"
-                        @class([
-                            'inline-flex shrink-0 items-center rounded-lg px-4 py-2.5 text-sm font-semibold transition min-h-11',
-                            'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'session',
-                            'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' => $activeTab !== 'session',
-                        ])
-                    >
-                        {{ __('Verify on video') }}
-                    </button>
-                @endif
-                @if ($panels['closing'])
-                    <button
-                        type="button"
-                        wire:click="setActiveTab('closing')"
-                        @class([
-                            'inline-flex shrink-0 items-center rounded-lg px-4 py-2.5 text-sm font-semibold transition min-h-11',
-                            'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'closing',
-                            'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' => $activeTab !== 'closing',
-                        ])
-                    >
-                        {{ __('Fees & register') }}
-                        @if ($settlementPendingCount > 0)
-                            <span class="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-sky-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                                {{ $settlementPendingCount }}
-                            </span>
-                        @endif
-                    </button>
-                @endif
-                @if ($panels['audit'])
-                    <button
-                        type="button"
-                        wire:click="setActiveTab('audit')"
-                        @class([
-                            'inline-flex shrink-0 items-center rounded-lg px-4 py-2.5 text-sm font-semibold transition min-h-11',
-                            'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' => $activeTab === 'audit',
-                            'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' => $activeTab !== 'audit',
-                        ])
-                    >
-                        {{ __('Case history') }}
-                    </button>
-                @endif
-            </nav>
-
-            <div>
-                @if ($activeTab === 'documents')
-                <div wire:key="case-tab-documents">
-                    @if ($notaryRequest->status === \App\Enums\NotaryRequestStatus::Notarized)
-                        @include('livewire.notary-requests.show.partials.section-completed')
-                    @endif
-                    @include('livewire.notary-requests.show.partials.tab-documents')
-                </div>
-                @endif
-
-                @if ($activeTab === 'parties')
-                <div wire:key="case-tab-parties">
-                    @include('livewire.notary-requests.show.partials.tab-parties')
-                </div>
-                @endif
-
-                @if ($panels['session'] && $activeTab === 'session')
-                    <div wire:key="case-tab-session">
-                        @include('livewire.notary-requests.show.partials.tab-session')
-                    </div>
-                @endif
-
-                @if ($panels['closing'] && $activeTab === 'closing')
-                    <div
-                        wire:key="case-tab-closing"
-                        x-data
-                        x-init="$nextTick(() => {
-                            const scrollArea = document.querySelector('.main-scroll-area');
-                            if (scrollArea) {
-                                scrollArea.scrollTop = 0;
-                            }
-                        })"
-                    >
-                        @include('livewire.notary-requests.show.partials.tab-closing')
-                    </div>
-                @endif
-
-                @if ($panels['audit'] && $activeTab === 'audit')
-                    <div wire:key="case-tab-audit">
-                        @include('livewire.notary-requests.show.partials.tab-audit')
-                    </div>
-                @endif
-            </div>
+    <div class="flex w-full min-w-0 max-w-none flex-col gap-5" wire:key="case-workspace-{{ $notaryRequest->id }}-{{ $page }}">
+        <div>
+            @if ($page === 'document')
+                @include('livewire.notary-requests.show.pages.document')
+            @elseif ($page === 'signers')
+                @include('livewire.notary-requests.show.pages.signers')
+            @elseif ($page === 'fees')
+                @include('livewire.notary-requests.show.pages.fees')
+            @elseif ($page === 'history')
+                @include('livewire.notary-requests.show.pages.history')
+            @endif
         </div>
     </div>
 

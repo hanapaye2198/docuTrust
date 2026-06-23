@@ -747,9 +747,7 @@ function createPrepareSession(cfgEl) {
                 isRenderingPage,
             });
 
-            if (editorLocked) {
-                showPdfLoadError(msgs.editorLocked || 'Attorney signing is locked until the video conference is completed.');
-            } else if (!fabricCanvas || isRenderingPage) {
+            if (!fabricCanvas || isRenderingPage) {
                 showPdfLoadError(msgs.previewLoading || 'Preview still loading. Please wait a second, then try again.');
             } else if (!hasAvailableSigner()) {
                 showPdfLoadError(msgs.noSigner || 'No signer found. Add at least one signer first.');

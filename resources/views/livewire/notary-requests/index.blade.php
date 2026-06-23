@@ -267,6 +267,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $requests = $this->filteredRequestQuery($user)
             ->latest('created_at')
+            ->latest('id')
             ->paginate(self::PER_PAGE);
         $requests->getCollection()->load(['documents.documentSigners', 'documents.signatureFields', 'documents.documentHash']);
 
@@ -343,6 +344,37 @@ new #[Layout('components.layouts.app')] class extends Component {
                 default => 'partial',
             };
 
+            $queueLabel = match (true) {
+                $queueState === 'awaiting_signatures' => __('Waiting on signers'),
+                $queueState === 'ready_to_send' => __('Pending: send document'),
+                $queueState === 'blocked' => __('Needs setup'),
+                $request->status->value === 'session_completed' => __('Ready for attorney signing'),
+                $request->status->value === 'attorney_signing' => __('Attorney signing'),
+                in_array($request->status->value, ['session_scheduled', 'session_in_progress'], true) => __('Waiting for video'),
+                $queueState === 'completed_documents' => __('Waiting for video'),
+                default => __('No document yet'),
+            };
+
+            $queueDescription = match (true) {
+                $queueState === 'awaiting_signatures' => trans_choice(':count document is awaiting signatures|:count documents are awaiting signatures', $awaitingSignaturesCount, ['count' => $awaitingSignaturesCount]),
+                $queueState === 'ready_to_send' => trans_choice(':count document is ready to send|:count documents are ready to send', $readyToSendCount, ['count' => $readyToSendCount]),
+                $queueState === 'blocked' => trans_choice(':count document needs fields or signers|:count documents need fields or signers', $blockedCount, ['count' => $blockedCount]),
+                $request->status->value === 'session_completed' => __('Video is complete. Attorney signing is next.'),
+                $request->status->value === 'attorney_signing' => __('Attorney signature is in progress.'),
+                in_array($request->status->value, ['session_scheduled', 'session_in_progress'], true) => __('Video verification is pending.'),
+                $queueState === 'completed_documents' => __('Client signing is done. Video verification is next.'),
+                default => __('Upload and prepare the case document.'),
+            };
+
+            $queueColor = match (true) {
+                $queueState === 'awaiting_signatures' => 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900/50',
+                $queueState === 'ready_to_send' => 'bg-sky-100 text-sky-800 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900/50',
+                $queueState === 'blocked' => 'bg-rose-100 text-rose-800 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/50',
+                $request->status->value === 'session_completed' || $request->status->value === 'attorney_signing' => 'bg-indigo-100 text-indigo-800 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900/50',
+                in_array($request->status->value, ['session_scheduled', 'session_in_progress'], true) || $queueState === 'completed_documents' => 'bg-violet-100 text-violet-800 ring-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900/50',
+                default => 'bg-zinc-100 text-zinc-700 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700',
+            };
+
             return [
                 $request->id => [
                     'document_count' => $documents->count(),
@@ -351,6 +383,9 @@ new #[Layout('components.layouts.app')] class extends Component {
                     'awaiting_signatures_count' => $awaitingSignaturesCount,
                     'completed_count' => $completedCount,
                     'queue_state' => $queueState,
+                    'queue_label' => $queueLabel,
+                    'queue_description' => $queueDescription,
+                    'queue_color' => $queueColor,
                     'missing_certificate_count' => $missingCertificateCount,
                     'missing_hash_count' => $missingHashCount,
                     'missing_blockchain_count' => $missingBlockchainCount,
@@ -461,6 +496,9 @@ new #[Layout('components.layouts.app')] class extends Component {
                     class="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-2.5 pl-10 pr-4 text-sm text-zinc-900 transition placeholder:text-zinc-400 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-900"
                 />
             </div>
+            <div class="inline-flex items-center rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                {{ __('Latest first') }}
+            </div>
             <div class="flex flex-wrap items-center gap-2">
                 <select
                     wire:model.live="statusFilter"
@@ -543,6 +581,9 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 'failed' => 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
                                 default => 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
                             };
+                            $queueLabel = is_array($summary) ? (string) $summary['queue_label'] : __('No document yet');
+                            $queueDescription = is_array($summary) ? (string) $summary['queue_description'] : __('Upload and prepare the case document.');
+                            $queueColor = is_array($summary) ? (string) $summary['queue_color'] : 'bg-zinc-100 text-zinc-700 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700';
                         @endphp
                         <tr class="group transition hover:bg-zinc-50/80 dark:hover:bg-zinc-800/30">
                             <td class="px-5 py-4">
@@ -552,6 +593,12 @@ new #[Layout('components.layouts.app')] class extends Component {
                                         <span class="capitalize">{{ str_replace('_', ' ', $request->request_type) }}</span>
                                         <span class="text-zinc-300 dark:text-zinc-600">·</span>
                                         <span>{{ $request->created_at?->diffForHumans() ?? '-' }}</span>
+                                    </div>
+                                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                                        <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 {{ $queueColor }}">
+                                            {{ $queueLabel }}
+                                        </span>
+                                        <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ $queueDescription }}</span>
                                     </div>
                                 </a>
                                 {{-- Mobile-only status badge --}}

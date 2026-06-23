@@ -51,7 +51,6 @@ function createSignViewSession(cfgEl) {
         uploadRequired: 'Please choose an image.',
         progressPending: 'The next required field is highlighted on the page.',
         progressDone: 'All assigned fields have been completed.',
-        signatureFallbackText: 'Signature',
         signatureModalTitle: 'Add your signature',
         signatureModalDescription: 'Choose how you want to sign this field.',
         signatureTypeLabel: 'Your name',
@@ -113,7 +112,6 @@ function createSignViewSession(cfgEl) {
     const uploadInput = document.getElementById('upload-input');
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     const tabDraw = document.getElementById('tab-draw');
-    const tabType = document.getElementById('tab-type');
     const tabUpload = document.getElementById('tab-upload');
     const panelDraw = document.getElementById('panel-draw');
     const panelType = document.getElementById('panel-type');
@@ -1746,7 +1744,6 @@ function createSignViewSession(cfgEl) {
         }
 
         const drawHidden = panelDraw?.classList.contains('hidden');
-        const typeHidden = panelType?.classList.contains('hidden');
         const uploadHidden = panelUpload?.classList.contains('hidden');
 
         if (!drawHidden) {
@@ -1755,26 +1752,6 @@ function createSignViewSession(cfgEl) {
                 return;
             }
             submitSignatureField(modalFieldId.value, signatureDataUrl(), '');
-            return;
-        }
-
-        if (!typeHidden) {
-            const text = typeInput?.value.trim() || messages.signatureFallbackText;
-            const canvas = document.createElement('canvas');
-            canvas.width = 400;
-            canvas.height = 120;
-            const fabricCanvas = new window.fabric.Canvas(canvas);
-            const textNode = new window.fabric.Text(text, {
-                fontSize: 42,
-                fontFamily: 'Georgia, serif',
-                fill: '#0f172a',
-                originX: 'center',
-                originY: 'center',
-                left: 200,
-                top: 60,
-            });
-            fabricCanvas.add(textNode);
-            submitSignatureField(modalFieldId.value, trimmedCanvasDataUrl(canvas, { mode: 'transparent', padding: 12 }), '');
             return;
         }
 
@@ -1880,7 +1857,6 @@ function createSignViewSession(cfgEl) {
         listen(window, 'resize', configureSignatureCanvas);
         listen(document.getElementById('draw-clear'), 'click', clearSignatureCanvas);
         listen(tabDraw, 'click', () => showTab('draw'));
-        listen(tabType, 'click', () => showTab('type'));
         listen(tabUpload, 'click', () => showTab('upload'));
         listen(document.getElementById('modal-cancel'), 'click', closeModal);
         listen(modalSubmitButton, 'click', (event) => {

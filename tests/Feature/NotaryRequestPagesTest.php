@@ -315,10 +315,33 @@ class NotaryRequestPagesTest extends TestCase
             ->assertDontSee('Hidden request');
     }
 
+    public function test_notary_request_index_sorts_latest_cases_first(): void
+    {
+        /** @var User $admin */
+        $admin = User::factory()->create();
+
+        NotaryRequest::factory()->for($admin)->create([
+            'title' => 'Older notarization',
+            'created_at' => Carbon::parse('2026-06-22 08:00:00'),
+        ]);
+
+        NotaryRequest::factory()->for($admin)->create([
+            'title' => 'Latest notarization',
+            'created_at' => Carbon::parse('2026-06-23 08:00:00'),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('notary-requests.index'))
+            ->assertOk()
+            ->assertSee('Latest first')
+            ->assertSeeInOrder(['Latest notarization', 'Older notarization']);
+    }
+
     public function test_notary_request_index_shows_queue_state_badges_and_filtering(): void
     {
         Storage::fake('local');
 
+        /** @var User $admin */
         $admin = User::factory()->create();
 
         $blockedRequest = NotaryRequest::factory()->for($admin)->create([
@@ -362,7 +385,10 @@ class NotaryRequestPagesTest extends TestCase
             ->assertSee('Blocked request')
             ->assertSee('Ready request')
             ->assertSee('Pending request')
-            ->assertSee('Needs attention');
+            ->assertSee('Needs attention')
+            ->assertSee('Needs setup')
+            ->assertSee('Pending: send document')
+            ->assertSee('Waiting on signers');
 
         $this->actingAs($admin)
             ->get(route('notary-requests.index', ['queue' => 'ready_to_send']))
@@ -797,20 +823,12 @@ class NotaryRequestPagesTest extends TestCase
         $this->actingAs($notary)
             ->get(route('notary.requests.show', ['notaryRequest' => $request, 'tab' => 'closing']))
             ->assertOk()
-            ->assertSee('Case progress')
+            ->assertDontSee('Case progress')
+            ->assertSee('Workflow steps')
             ->assertSee('Document')
-            ->assertSee('Signers')
-            ->assertSee('Fees & register')
-            ->assertSee('Wait for signers')
-            ->assertSee('Verify client on video')
-            ->assertSee('Sign as attorney')
-            ->assertSee('Set the fee amount')
-            ->assertSee('Client pays the fee')
-            ->assertSee('Upload your notary seal')
-            ->assertSee('Fill notarial book')
-            ->assertSee('Complete notarial book')
-            ->assertSee('Review and approve')
-            ->assertSee('Available after the video session, attorney signing, register entry, and client payment (if required) are complete.')
+            ->assertSee('Fees &amp; register', false)
+            ->assertDontSee('aria-label="Case pages"', false)
+            ->assertSee('Complete payment, register entry, and attorney review before applying digital notarization.')
             ->assertDontSee('Complete attorney review')
             ->assertSee('Official notarial register')
             ->assertSee('Available after you sign the document, complete the register entry (with O.R. if a fee applies), collect payment, and upload your personal seal.')
@@ -1004,10 +1022,10 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($notary);
 
-        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
-            ->assertSee(__('Your next step'))
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request, 'page' => 'fees'])
+            ->assertDontSee(__('Your next step'))
             ->assertSee(__('Save fee'))
-            ->assertSee('do-this-now-settlement-fee', false);
+            ->assertDontSee('do-this-now-settlement-fee', false);
     }
 
     public function test_saving_settlement_fee_scrolls_to_payment_section(): void
@@ -2693,8 +2711,7 @@ class NotaryRequestPagesTest extends TestCase
 
         $this->actingAs($notary);
 
-        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request])
-            ->set('activeTab', 'closing')
+        LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request, 'page' => 'fees'])
             ->assertSee(__('Before you can apply the seal'))
             ->assertSee(__('Attorney signed the instrument'))
             ->assertSee(__('Notarial fee configured'));
@@ -2731,6 +2748,7 @@ class NotaryRequestPagesTest extends TestCase
             'status' => 'scheduled',
             'signer_confirmed' => true,
             'signer_confirmed_at' => now(),
+            'joined_at' => now(),
             'room_name' => 'alice-wait-room',
             'meeting_url' => 'https://meet.jit.si/alice-wait-room',
             'access_token' => 'alice-wait-token',
@@ -2741,6 +2759,7 @@ class NotaryRequestPagesTest extends TestCase
 
         LivewireVolt::test('notary-requests.show', ['notaryRequest' => $request->fresh()])
             ->assertSee(__('waiting in the video room'))
+            ->assertSee(__('Waiting in room'))
             ->assertSee('Alice Waiting');
     }
 

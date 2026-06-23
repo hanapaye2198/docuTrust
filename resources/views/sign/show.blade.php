@@ -372,9 +372,6 @@
                     <button type="button" id="tab-draw" class="sign-tab rounded-t-xl px-4 py-2.5 text-sm font-semibold text-teal-700 shadow-sm ring-1 ring-zinc-200/90 dark:text-teal-300 dark:ring-zinc-600">
                         {{ __('Draw') }}
                     </button>
-                    <button type="button" id="tab-type" class="sign-tab rounded-t-xl px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                        {{ __('Type') }}
-                    </button>
                     <button type="button" id="tab-upload" class="sign-tab rounded-t-xl px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400">
                         {{ __('Upload') }}
                     </button>
@@ -528,7 +525,6 @@
                         'uploadRequired' => __('Please choose an image.'),
                         'progressPending' => __('The next required field is highlighted on the page.'),
                         'progressDone' => __('All assigned fields have been completed.'),
-                        'signatureFallbackText' => __('Signature'),
                         'signatureModalTitle' => __('Add your signature'),
                         'signatureModalDescription' => __('Choose how you want to sign this field.'),
                         'signatureTypeLabel' => __('Your name'),

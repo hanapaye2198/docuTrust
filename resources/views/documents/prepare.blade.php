@@ -67,12 +67,6 @@
                 </div>
             @endif
 
-            @if ($attorneySigningLocked ?? false)
-                <div class="shrink-0 border-b border-indigo-200 bg-indigo-50 px-5 py-2 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-100">
-                    {{ __('Attorney signing is locked until the video conference is completed.') }}
-                </div>
-            @endif
-
             <div class="grid min-h-0 flex-1 gap-3 p-4 lg:grid-cols-[72px_minmax(0,1fr)_300px]">
                 <aside class="order-2 flex gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:order-1 lg:min-h-0 lg:flex-col lg:overflow-y-auto">
                     @foreach ([
@@ -87,7 +81,7 @@
                             draggable="true"
                             data-field-type="{{ $tool['type'] }}"
                             class="field-palette-btn flex min-w-16 flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 text-[11px] font-medium text-zinc-600 transition hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
-                            @if (! $firstSignerId || ($attorneySigningLocked ?? false)) disabled @endif
+                            @if (! $firstSignerId) disabled @endif
                         >
                             <span class="flex size-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{!! $fieldControlIcons[$tool['icon']] !!}</span>
                             {{ $tool['label'] }}
@@ -256,8 +250,7 @@
                             type="button"
                             id="btn-save-fields"
                             class="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            @if (! $firstSignerId || ($attorneySigningLocked ?? false)) disabled @endif
-                            @if ($attorneySigningLocked ?? false) title="{{ __('Attorney signing is locked until the video conference is completed.') }}" @endif
+                            @if (! $firstSignerId) disabled @endif
                         >
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" class="size-4" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 3.5h8l3 3v10h-11v-13Z" />
@@ -311,7 +304,7 @@
                 'firstSignerId' => $firstSignerId,
                 'signers' => $signers,
                 'initialFields' => $initialFields,
-                'editorLocked' => (bool) ($attorneySigningLocked ?? false),
+                'editorLocked' => false,
                 'initialPage' => (int) request()->query('page', 1) ?: 1,
                 'signerPagesUrl' => route(auth()->user()?->role->value === 'notary' ? 'notary.documents.signer-pages.store' : 'documents.signer-pages.store', $document),
                 'messages' => [
@@ -325,7 +318,6 @@
                     'renderingPage' => __('Rendering page :page of :total...', ['page' => '__PAGE__', 'total' => '__TOTAL__']),
                     'previewLoading' => __('Preview still loading. Please wait a second, then try again.'),
                     'noSigner' => __('No signer found. Add at least one signer first.'),
-                    'editorLocked' => __('Attorney signing is locked until the video conference is completed.'),
                     'loadFailed' => __('Unable to load document preview. Please refresh the page and try again.'),
                     'saveBeforeSend' => __('Save your latest field changes before sending to signer.'),
                     'pageAssignmentsSaved' => __('Page assignments saved.'),

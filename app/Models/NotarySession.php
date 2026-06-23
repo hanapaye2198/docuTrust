@@ -24,6 +24,8 @@ class NotarySession extends Model
         'room_name',
         'meeting_url',
         'access_token',
+        'joined_at',
+        'left_at',
         'host_reference',
         'scheduled_for',
         'invitation_sent_at',
@@ -44,6 +46,8 @@ class NotarySession extends Model
         return [
             'scheduled_for' => 'datetime',
             'invitation_sent_at' => 'datetime',
+            'joined_at' => 'datetime',
+            'left_at' => 'datetime',
             'started_at' => 'datetime',
             'ended_at' => 'datetime',
             'signer_confirmed_at' => 'datetime',

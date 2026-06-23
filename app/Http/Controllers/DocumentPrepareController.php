@@ -36,8 +36,8 @@ class DocumentPrepareController extends Controller
             if ($document->status === DocumentStatus::Completed && $user?->role->value === 'notary') {
                 if (! $this->attorneySigningIsUnlocked($document)) {
                     return redirect()
-                        ->route('notary.requests.show', $document->notaryRequest)
-                        ->with('error', __('Attorney signing will be available after the video conference is completed.'));
+                        ->route('notary.requests.show', [$document->notaryRequest, 'document'])
+                        ->with('error', __('Complete the video conference before attorney signing.'));
                 }
 
                 try {
@@ -111,7 +111,12 @@ class DocumentPrepareController extends Controller
         $attorneySigner = $isAttorneySigningPhase
             ? $document->documentSigners->first(fn ($signer) => (int) $signer->user_id === (int) $user?->id)
             : null;
-        $attorneySigningLocked = $isAttorneySigningPhase && ! $this->attorneySigningIsUnlocked($document);
+
+        if ($isAttorneySigningPhase && ! $this->attorneySigningIsUnlocked($document)) {
+            return redirect()
+                ->route('notary.requests.show', [$document->notaryRequest, 'document'])
+                ->with('error', __('Complete the video conference before attorney signing.'));
+        }
 
         // In attorney signing phase, only show the attorney as available signer
         if ($isAttorneySigningPhase) {
@@ -142,7 +147,6 @@ class DocumentPrepareController extends Controller
             'signers' => $signers,
             'canSend' => ! $isAttorneySigningPhase && $document->canSendForSigning(),
             'isAttorneySigningPhase' => $isAttorneySigningPhase,
-            'attorneySigningLocked' => $attorneySigningLocked,
             'initialFields' => $initialFieldsQuery
                 ->get()
                 ->map(fn (SignatureField $f) => [
@@ -181,8 +185,8 @@ class DocumentPrepareController extends Controller
         if ($isAttorneySigningPhase) {
             if (! $this->attorneySigningIsUnlocked($document)) {
                 return redirect()
-                    ->route('notary.documents.prepare', $document)
-                    ->with('error', __('Attorney signing will be available after the video conference is completed.'));
+                    ->route('notary.requests.show', [$document->notaryRequest, 'document'])
+                    ->with('error', __('Complete the video conference before attorney signing.'));
             }
 
             if ($attorneySigner === null) {

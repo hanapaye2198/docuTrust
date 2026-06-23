@@ -3,8 +3,10 @@
 namespace Tests\Feature\Settings;
 
 use App\Models\NotaryCredential;
+use App\Models\NotaryRequest;
 use App\Models\User;
 use App\Services\Notary\NotarySealProfileService;
+use App\Services\NotaryRequestWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -36,6 +38,32 @@ class NotarySealProfileTest extends TestCase
         $this->assertNotNull($credential->seal_image_path);
         Storage::disk('local')->assertExists($credential->seal_image_path);
         $this->assertTrue(app(NotarySealProfileService::class)->hasSealOnFile($notary));
+    }
+
+    public function test_uploaded_seal_reflects_on_notary_case_process(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.docutrust_disk' => 'local']);
+
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+        ]);
+
+        $this->actingAs($notary);
+
+        Volt::test('settings.trust-profile')
+            ->set('notarySealUpload', UploadedFile::fake()->image('seal.png'))
+            ->call('uploadNotarySeal')
+            ->assertHasNoErrors();
+
+        $this->assertTrue(app(NotaryRequestWorkflowService::class)->hasAttorneySealOnFile($request));
+
+        $this->get(route('notary.requests.show', [$request, 'fees']))
+            ->assertOk()
+            ->assertSee('Seal uploaded')
+            ->assertSee('No upload is needed here')
+            ->assertDontSee('Upload your personal seal in trust profile before creating the official register entry.');
     }
 
     public function test_trust_profile_shows_notary_seal_section_for_attorneys(): void

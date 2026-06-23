@@ -122,6 +122,8 @@ class NotarySignerVideoInvitationService
      *   signed_at: string|null,
      *   session_id: int|null,
      *   session_status: string|null,
+     *   joined_at: string|null,
+     *   joined_at_label: string|null,
      *   join_url: string|null,
      *   meeting_url: string|null,
      *   room_name: string|null,
@@ -167,10 +169,12 @@ class NotarySignerVideoInvitationService
                     )?->format('M j, Y g:i A'),
                     'session_id' => $session?->id,
                     'session_status' => $session?->status,
+                    'joined_at' => $session?->joined_at?->toDateTimeString(),
+                    'joined_at_label' => $session?->joined_at?->diffForHumans(),
                     'signer_confirmed' => (bool) ($session?->signer_confirmed ?? false),
                     'signer_waiting' => $session instanceof NotarySession
-                        && $session->status === 'scheduled'
-                        && (bool) $session->signer_confirmed,
+                        && $session->joined_at !== null
+                        && ! in_array($session->status, ['completed', 'cancelled'], true),
                     'join_url' => $session instanceof NotarySession ? $this->signerVideoJoinUrl($session) : null,
                     'meeting_url' => $session?->meeting_url,
                     'room_name' => $session?->room_name,
@@ -426,7 +430,7 @@ class NotarySignerVideoInvitationService
     public function sessionStatusLabel(?string $status, bool $signerWaiting = false): string
     {
         if ($signerWaiting) {
-            return __('Waiting for attorney');
+            return __('Waiting in room');
         }
 
         return match ($status) {

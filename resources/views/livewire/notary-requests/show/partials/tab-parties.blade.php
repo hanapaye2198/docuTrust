@@ -98,52 +98,6 @@
                     @endforelse
                 </div>
 
-                {{-- Add Signer Form (Attorney only) --}}
-                @if ($isNotary && ! in_array($notaryRequest->status->value, ['digitalized', 'notarized', 'rejected', 'failed', 'cancelled'], true))
-                    <div class="mt-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-800/30">
-                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Add a signer') }}</h3>
-                        <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                            <flux:field class="sm:col-span-2">
-                                <flux:label>{{ __('Full name') }} <span class="text-rose-500">*</span></flux:label>
-                                <flux:input type="text" wire:model="newSignerName" placeholder="{{ __('Juan Dela Cruz') }}" />
-                                <flux:error name="newSignerName" />
-                            </flux:field>
-                            <flux:field>
-                                <flux:label>{{ __('Email') }} <span class="text-rose-500">*</span></flux:label>
-                                <flux:input type="email" wire:model="newSignerEmail" placeholder="{{ __('juan@example.com') }}" />
-                                <flux:error name="newSignerEmail" />
-                            </flux:field>
-                            <flux:field>
-                                <flux:label>{{ __('Phone') }}</flux:label>
-                                <flux:input type="text" wire:model="newSignerPhone" placeholder="{{ __('+63 9XX XXX XXXX') }}" />
-                                <flux:error name="newSignerPhone" />
-                            </flux:field>
-                            <flux:field class="sm:col-span-2">
-                                <flux:label>{{ __('Address') }}</flux:label>
-                                <flux:input type="text" wire:model="newSignerAddress" placeholder="{{ __('Complete address') }}" />
-                                <flux:error name="newSignerAddress" />
-                            </flux:field>
-                            <flux:field>
-                                <flux:label>{{ __('Role in document') }}</flux:label>
-                                <select wire:model="newSignerRole" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                                    <option value="signer">{{ __('Signer') }}</option>
-                                    <option value="witness">{{ __('Witness') }}</option>
-                                    <option value="affiant">{{ __('Affiant') }}</option>
-                                    <option value="principal">{{ __('Principal') }}</option>
-                                </select>
-                                <flux:error name="newSignerRole" />
-                            </flux:field>
-                        </div>
-                        <p class="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                            {{ __('An e-Notary portal invitation email is sent automatically so the signer can create their account and access this case.') }}
-                        </p>
-                        <div class="mt-4">
-                            <flux:button variant="outline" type="button" wire:click="addSigner">{{ __('Add signer & send invite') }}</flux:button>
-                        </div>
-                        <flux:error name="resendInvite" />
-                    </div>
-                @endif
-
                 @if ($isNotary && $pendingIdentityReviews->isNotEmpty())
                     <div class="mt-6 border-t border-zinc-200 pt-6 dark:border-zinc-700">
                         <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Pending identity review') }}</h3>

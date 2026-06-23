@@ -6,11 +6,11 @@
 @endphp
 
 @if ($total > 0)
-    <div class="mb-6 rounded-2xl border border-indigo-200/80 bg-indigo-50/60 p-5 dark:border-indigo-900/40 dark:bg-indigo-950/20">
-        <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950 dark:border-indigo-900/40 dark:bg-indigo-950/25 dark:text-indigo-100">
+        <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
                 <div class="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">{{ __('Verification queue') }}</div>
-                <div class="mt-1 text-lg font-semibold text-indigo-950 dark:text-indigo-100">
+                <div class="mt-1 font-semibold">
                     {{ trans_choice(':verified of :total party verified|:verified of :total parties verified', $total, [
                         'verified' => $verifiedCount,
                         'total' => $total,
@@ -24,8 +24,8 @@
             @endif
         </div>
 
-        <div class="mt-4 h-2 overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-950/50">
-            <div class="h-full rounded-full bg-indigo-500 transition-all duration-300 dark:bg-indigo-400" style="width: {{ $progressPercent }}%"></div>
+        <div class="mt-3 h-2 overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-950/50">
+            <div class="h-full rounded-full bg-gradient-to-r from-indigo-500 to-sky-500 transition-all duration-300" style="width: {{ $progressPercent }}%"></div>
         </div>
     </div>
 @endif

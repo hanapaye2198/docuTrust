@@ -242,6 +242,7 @@ function createStatusPoll(cfgEl) {
             session.status || '',
             session.signer_confirmed ? '1' : '0',
             session.signer_waiting ? '1' : '0',
+            session.joined_at || '',
             session.updated_at || '',
         ].join(':'));
 

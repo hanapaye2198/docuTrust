@@ -12,7 +12,6 @@ use App\Events\NotaryRequestNotarized;
 use App\Events\NotaryRequestSubmitted;
 use App\Models\Document;
 use App\Models\DocumentSigner;
-use App\Models\NotaryCredential;
 use App\Models\NotaryJournal;
 use App\Models\NotaryRequest;
 use App\Models\NotarySigner;
@@ -891,15 +890,7 @@ class NotaryRequestWorkflowService
             return false;
         }
 
-        $credential = NotaryCredential::query()
-            ->where('user_id', $request->notary->id)
-            ->where('status', 'active')
-            ->latest()
-            ->first();
-
-        return $credential !== null
-            && is_string($credential->seal_image_path)
-            && $credential->seal_image_path !== '';
+        return app(NotarySealProfileService::class)->hasSealOnFile($request->notary);
     }
 
     private function documentsReadyForSessionState(NotaryRequest $request): bool

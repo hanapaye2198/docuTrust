@@ -13,6 +13,7 @@ use App\Models\DocumentSigner;
 use App\Models\EInvoice;
 use App\Models\NotaryIdentityVerification;
 use App\Models\NotaryRequest;
+use App\Models\NotarySession;
 use App\Models\NotarySigner;
 use App\Models\Payment;
 use App\Models\User;
@@ -35,11 +36,11 @@ use App\Models\EnotaryInvitation;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
-use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 
@@ -102,15 +103,21 @@ new #[Layout('components.layouts.app')] class extends Component {
      */
     public array $sessionChecklists = [];
 
-    #[Url(as: 'tab')]
+    /**
+     * @var list<int>
+     */
+    public array $notifiedSessionIds = [];
+
     public string $activeTab = 'documents';
+
+    public string $page = 'document';
 
     public bool $showAuditPanel = false;
     public bool $scrollToSettlementOnLoad = false;
 
     public ?string $pendingScrollSectionId = null;
 
-    public function mount(NotaryRequest $notaryRequest): void
+    public function mount(NotaryRequest $notaryRequest, ?string $page = null): void
     {
         $user = Auth::user();
         abort_unless($user !== null, 401);
@@ -120,24 +127,35 @@ new #[Layout('components.layouts.app')] class extends Component {
         Gate::authorize('view', $notaryRequest);
 
         $this->notaryRequest = $notaryRequest;
+        $this->notifiedSessionIds = $notaryRequest->sessions
+            ->filter(fn (NotarySession $session): bool => $session->joined_at !== null)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
         $this->settlementFee = $notaryRequest->attorneyNotarialRegistry !== null
             ? number_format((float) $notaryRequest->attorneyNotarialRegistry->fees, 2, '.', '')
             : '';
         $this->paymentRecipientEmail = '';
         $this->loadPaymentGateways();
 
+        $hasExplicitRequestedPage = is_string($page) || is_string(request()->route('page'));
+        $this->page = $this->normalizeCasePage($page ?? 'document');
+        $this->activeTab = $this->casePageToTab($this->page);
+
         $requestedTab = request()->query('tab');
         if (is_string($requestedTab) && in_array($requestedTab, $this->availableTabs(), true)) {
-            $this->activeTab = $requestedTab;
-            $this->scrollToSettlementOnLoad = $requestedTab === 'closing';
+            $this->page = $this->tabToCasePage($requestedTab);
+            $this->activeTab = $this->casePageToTab($this->page);
+            $this->scrollToSettlementOnLoad = $this->page === 'fees';
         }
 
         if ($user->role === \App\Enums\UserRole::Notary) {
             $availableTabs = $this->availableTabs();
             $hasValidRequestedTab = is_string($requestedTab) && in_array($requestedTab, $availableTabs, true);
-
-            if (! $hasValidRequestedTab) {
+            if (! $hasValidRequestedTab && ! $hasExplicitRequestedPage && $this->page === 'document') {
                 $this->activeTab = $this->resolveDefaultAttorneyTab();
+                $this->page = $this->tabToCasePage($this->activeTab);
             }
 
             if ($this->activeTab === 'session') {
@@ -148,12 +166,12 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->ensureActiveTabIsAvailable();
 
         $requestedSection = request()->query('section');
-        if ($this->activeTab === 'closing' && $requestedSection === 'payment') {
+        if ($this->page === 'fees' && $requestedSection === 'payment') {
             $this->pendingScrollSectionId = 'section-payment';
             $this->scrollToSettlementOnLoad = false;
         }
 
-        if ($this->activeTab === 'closing') {
+        if ($this->page === 'fees') {
             if ($requestedSection !== 'payment') {
                 $this->scrollToSettlementOnLoad = true;
             }
@@ -190,6 +208,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 ?? 'section-settlement-start';
         }
 
+        $this->page = 'fees';
         $this->activeTab = 'closing';
         $this->dispatch('reset-main-scroll');
         $this->pendingScrollSectionId = $sectionId;
@@ -210,6 +229,8 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
 
         $this->activeTab = $tab;
+        $this->page = $this->tabToCasePage($tab);
+        $this->redirect(route($this->caseShowRouteName(), [$this->notaryRequest, $this->page]), navigate: true);
     }
 
     public function updatedActiveTab(string $value): void
@@ -245,10 +266,44 @@ new #[Layout('components.layouts.app')] class extends Component {
         }
     }
 
+    public function refreshSigningStatus(): void
+    {
+        $this->refreshRequest();
+    }
+
+    public function refreshVideoStatus(): void
+    {
+        $sessions = $this->notaryRequest
+            ->videoSessions()
+            ->with('notarySigner')
+            ->whereNotNull('joined_at')
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->get();
+
+        foreach ($sessions as $session) {
+            $sessionId = (int) $session->id;
+
+            if (in_array($sessionId, $this->notifiedSessionIds, true)) {
+                continue;
+            }
+
+            $this->dispatch(
+                'signer-joined-video-room',
+                name: $session->notarySigner?->full_name ?? __('A signer'),
+            );
+
+            $this->notifiedSessionIds[] = $sessionId;
+        }
+
+        $this->refreshRequest();
+    }
+
     public function openVideoSessionWorkspace(): void
     {
+        $this->page = 'signers';
         $this->activeTab = 'session';
         $this->syncVideoPartiesIfReady(forceResend: false, notify: true, deliverSynchronously: true);
+        $this->redirect(route($this->caseShowRouteName(), [$this->notaryRequest, $this->page]), navigate: true);
     }
 
     public function openPaymentSection(): void
@@ -260,6 +315,44 @@ new #[Layout('components.layouts.app')] class extends Component {
     public function openSettlementSection(string $sectionId): void
     {
         $this->navigateToSettlementSection($sectionId);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function availablePages(): array
+    {
+        return ['document', 'signers', 'fees', 'history'];
+    }
+
+    private function normalizeCasePage(string $page): string
+    {
+        return in_array($page, $this->availablePages(), true) ? $page : 'document';
+    }
+
+    private function tabToCasePage(string $tab): string
+    {
+        return match ($tab) {
+            'parties', 'session' => 'signers',
+            'closing' => 'fees',
+            'audit' => 'history',
+            default => 'document',
+        };
+    }
+
+    private function casePageToTab(string $page): string
+    {
+        return match ($this->normalizeCasePage($page)) {
+            'signers' => 'parties',
+            'fees' => 'closing',
+            'history' => 'audit',
+            default => 'documents',
+        };
+    }
+
+    private function caseShowRouteName(): string
+    {
+        return Auth::user()?->role->value === 'notary' ? 'notary.requests.show' : 'notary-requests.show';
     }
 
     /**
@@ -323,8 +416,16 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     private function ensureActiveTabIsAvailable(): void
     {
+        if (in_array($this->page, $this->availablePages(), true)) {
+            $this->activeTab = $this->casePageToTab($this->page);
+
+            return;
+        }
+
         $availableTabs = $this->availableTabs();
         if (in_array($this->activeTab, $availableTabs, true)) {
+            $this->page = $this->tabToCasePage($this->activeTab);
+
             return;
         }
 
@@ -337,6 +438,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->activeTab = in_array($preferredTab, $availableTabs, true)
             ? $preferredTab
             : ($availableTabs[0] ?? 'documents');
+        $this->page = $this->tabToCasePage($this->activeTab);
     }
 
     public function with(): array
@@ -380,6 +482,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             'videoVerificationQueue' => (bool) config('docutrust.notary.require_video_session', true)
                 ? app(\App\Services\NotarySignerVideoInvitationService::class)->videoVerificationQueue($this->notaryRequest)
                 : ['total' => 0, 'verified_count' => 0, 'pending_count' => 0, 'complete' => false, 'next_party' => null, 'parties' => []],
+            'videoSessionStatus' => $this->videoSessionStatus,
             'viewerVideoParty' => (bool) config('docutrust.notary.require_video_session', true)
                 ? app(\App\Services\NotarySignerVideoInvitationService::class)->viewerVideoParty($this->notaryRequest, $user)
                 : null,
@@ -1716,6 +1819,41 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         // Payment emails now require an explicit recipient chosen by the attorney.
         // Opening the settlement tab should never auto-send a payment message.
+    }
+
+    /**
+     * @return Collection<int, array{
+     *     id: int,
+     *     signer_id: int|null,
+     *     signer_name: string,
+     *     signer_email: string,
+     *     joined_at: \Illuminate\Support\Carbon|null,
+     *     is_waiting: bool,
+     *     is_verified: bool,
+     *     session_url: string|null
+     * }>
+     */
+    #[Computed]
+    public function videoSessionStatus(): Collection
+    {
+        return $this->notaryRequest
+            ->videoSessions()
+            ->with('notarySigner')
+            ->get()
+            ->map(function (NotarySession $session): array {
+                return [
+                    'id' => (int) $session->id,
+                    'signer_id' => $session->notary_signer_id !== null ? (int) $session->notary_signer_id : null,
+                    'signer_name' => (string) ($session->notarySigner?->full_name ?? ''),
+                    'signer_email' => (string) ($session->notarySigner?->email ?? ''),
+                    'joined_at' => $session->joined_at,
+                    'is_waiting' => $session->joined_at !== null && ! in_array($session->status, ['completed', 'cancelled'], true),
+                    'is_verified' => $session->status === 'completed',
+                    'session_url' => $session->id !== null
+                        ? route($this->caseShowRouteName() === 'notary.requests.show' ? 'notary.requests.session.live' : 'notary-requests.session.live', [$this->notaryRequest, $session])
+                        : null,
+                ];
+            });
     }
 
     /**

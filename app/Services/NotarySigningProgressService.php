@@ -25,12 +25,19 @@ class NotarySigningProgressService
      *   total: int,
      *   completed: int,
      *   percent: int,
+     *   phase_label: string,
      *   summary: string,
      *   current_turn_name: string|null,
      *   all_client_signatures_complete: bool,
      *   video_verification_complete: bool,
      *   attorney_has_signed: bool,
      *   document_artifacts_ready: bool,
+     *   tracker_steps: list<array{
+     *     key: string,
+     *     label: string,
+     *     description: string,
+     *     state: string
+     *   }>,
      *   documents: list<array{
      *     document_id: int,
      *     title: string,
@@ -88,9 +95,6 @@ class NotarySigningProgressService
 
         $isSequential = collect($documentSummaries)->contains(fn (array $summary): bool => $summary['is_sequential']);
         $allClientSignaturesComplete = $this->notaryRequestWorkflowService->documentsReadyForSession($request);
-        $hasPendingDocuments = $request->documents->contains(
-            fn (Document $document): bool => $document->status === DocumentStatus::Pending
-        );
         $requireVideo = (bool) config('docutrust.notary.require_video_session', true);
         $videoVerificationComplete = ! $requireVideo || $this->notaryRequestWorkflowService->hasCompletedSession($request);
         $attorneyHasSigned = $this->notaryRequestWorkflowService->hasAttorneySignedAllDocuments($request);
@@ -99,7 +103,6 @@ class NotarySigningProgressService
         $phase = match (true) {
             $total === 0 => 'idle',
             ! $allClientSignaturesComplete => 'awaiting_signatures',
-            $allClientSignaturesComplete && $hasPendingDocuments => 'attorney_turn',
             ! $videoVerificationComplete => 'awaiting_video',
             ! $attorneyHasSigned => 'awaiting_attorney_signature',
             ! $documentArtifactsReady => 'finalizing',
@@ -120,12 +123,21 @@ class NotarySigningProgressService
             'total' => $total,
             'completed' => $completed,
             'percent' => $percent,
+            'phase_label' => $this->phaseLabel($phase),
             'summary' => $this->buildSummaryLabel($completed, $total, $currentTurnName, $phase),
             'current_turn_name' => $currentTurnName,
             'all_client_signatures_complete' => $allClientSignaturesComplete,
             'video_verification_complete' => $videoVerificationComplete,
             'attorney_has_signed' => $attorneyHasSigned,
             'document_artifacts_ready' => $documentArtifactsReady,
+            'tracker_steps' => $this->buildTrackerSteps(
+                phase: $phase,
+                total: $total,
+                allClientSignaturesComplete: $allClientSignaturesComplete,
+                videoVerificationComplete: $videoVerificationComplete,
+                attorneyHasSigned: $attorneyHasSigned,
+                documentArtifactsReady: $documentArtifactsReady,
+            ),
             'documents' => $documentSummaries,
         ];
     }
@@ -307,5 +319,78 @@ class NotarySigningProgressService
         }
 
         return $base.'. '.__('Waiting for remaining signatures.');
+    }
+
+    private function phaseLabel(string $phase): string
+    {
+        return match ($phase) {
+            'awaiting_signatures' => __('Waiting for signatures'),
+            'attorney_turn', 'awaiting_attorney_signature' => __('Your turn: sign the contract'),
+            'awaiting_video' => __('Video verification required'),
+            'finalizing' => __('Finalizing instrument'),
+            'document_ready' => __('Instrument ready'),
+            default => __('Document tracker'),
+        };
+    }
+
+    /**
+     * @return list<array{key: string, label: string, description: string, state: string}>
+     */
+    private function buildTrackerSteps(
+        string $phase,
+        int $total,
+        bool $allClientSignaturesComplete,
+        bool $videoVerificationComplete,
+        bool $attorneyHasSigned,
+        bool $documentArtifactsReady,
+    ): array {
+        return [
+            [
+                'key' => 'sent',
+                'label' => __('Sent to signers'),
+                'description' => __('The document has entered the signing workflow.'),
+                'state' => $total > 0 ? 'complete' : 'upcoming',
+            ],
+            [
+                'key' => 'signatures',
+                'label' => __('Waiting for signatures'),
+                'description' => __('Track each signer until their required action is complete.'),
+                'state' => match (true) {
+                    $allClientSignaturesComplete => 'complete',
+                    $phase === 'awaiting_signatures' => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'key' => 'video',
+                'label' => __('Video verification'),
+                'description' => __('Confirm signer identity on a live video call.'),
+                'state' => match (true) {
+                    $videoVerificationComplete => 'complete',
+                    $phase === 'awaiting_video' => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'key' => 'attorney',
+                'label' => __('Attorney signing'),
+                'description' => __('The attorney places and signs their notarial fields.'),
+                'state' => match (true) {
+                    $attorneyHasSigned => 'complete',
+                    in_array($phase, ['attorney_turn', 'awaiting_attorney_signature'], true) => 'current',
+                    default => 'upcoming',
+                },
+            ],
+            [
+                'key' => 'finalization',
+                'label' => __('Finalization'),
+                'description' => __('Generate the final PDF, certificate, hash, and seal artifacts.'),
+                'state' => match (true) {
+                    $documentArtifactsReady => 'complete',
+                    $phase === 'finalizing' => 'current',
+                    default => 'upcoming',
+                },
+            ],
+        ];
     }
 }

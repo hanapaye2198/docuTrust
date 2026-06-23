@@ -28,7 +28,7 @@ class NotaryCasePageDuplicateRenderTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertSame(1, substr_count($html, 'Case progress'), 'Expected one Case progress block in initial HTML.');
+        $this->assertSame(0, substr_count($html, 'Case progress'), 'Case progress sidebar should not render in the page-based layout.');
         $this->assertSame(1, substr_count($html, 'Video verification'), 'Expected one Video verification block in initial HTML.');
         $this->assertSame(1, substr_count($html, 'wire:key="case-workspace-'), 'Expected one case workspace grid.');
         $this->assertSame(1, substr_count($html, 'Verification queue'), 'Expected one verification queue block.');
@@ -49,10 +49,31 @@ class NotaryCasePageDuplicateRenderTest extends TestCase
 
         $html = $component->html();
 
-        $this->assertSame(1, substr_count($html, 'Case progress'), 'Livewire refresh duplicated Case progress.');
+        $this->assertSame(0, substr_count($html, 'Case progress'), 'Case progress sidebar should not reappear after Livewire refresh.');
         $this->assertSame(1, substr_count($html, 'Video verification'), 'Livewire refresh duplicated Video verification.');
         $this->assertSame(1, substr_count($html, 'wire:key="case-workspace-'), 'Livewire refresh duplicated case workspace grid.');
         $this->assertSame(1, substr_count($html, 'Verification queue'), 'Livewire refresh duplicated verification queue.');
+    }
+
+    public function test_repeated_tracker_refresh_does_not_render_document_page_tracker(): void
+    {
+        [$notary, $request] = $this->seedPendingSigningCase();
+
+        $this->actingAs($notary);
+
+        $component = LivewireVolt::test('notary-requests.show', [
+            'notaryRequest' => $request->fresh(),
+            'page' => 'document',
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $component->call('refreshSigningStatus');
+        }
+
+        $html = $component->html();
+
+        $this->assertSame(0, substr_count($html, 'data-live-signing-progress'), 'Document page should not render the live signing tracker.');
+        $this->assertSame(0, substr_count($html, 'data-tracker-signer-row'), 'Document page should not render tracker signer rows.');
     }
 
     public function test_notary_status_poll_source_avoids_dom_patch_before_livewire_refresh(): void
@@ -120,6 +141,31 @@ class NotaryCasePageDuplicateRenderTest extends TestCase
 
         app(NotarySignerVideoInvitationService::class)
             ->inviteAllSignersWhenReady($request->fresh(['signers', 'sessions', 'notary', 'documents.documentSigners']));
+
+        return [$notary, $request];
+    }
+
+    /**
+     * @return array{0: User, 1: NotaryRequest}
+     */
+    private function seedPendingSigningCase(): array
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::Submitted,
+        ]);
+
+        $document = Document::factory()->for($notary)->create([
+            'notary_request_id' => $request->id,
+            'status' => DocumentStatus::Pending,
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => 'Tracker Pending Signer',
+            'status' => DocumentSignerStatus::Pending,
+            'signing_order' => 1,
+        ]);
 
         return [$notary, $request];
     }

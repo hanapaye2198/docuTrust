@@ -6,68 +6,111 @@
                 <h2 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{{ __('Document') }}</h2>
                 <p class="text-sm text-zinc-600 dark:text-zinc-400">{{ __('One instrument per case: signers sign, video verification, attorney signature, then the sealed instrument is ready.') }}</p>
 
-                @if ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'awaiting_attorney_signature')
-                    <div class="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100">
-                        <div class="font-semibold">{{ __('Your turn: sign the contract') }}</div>
-                        <p class="mt-1 text-violet-800/90 dark:text-violet-200/90">{{ __('Signer legitimacy was confirmed on video. Place your attorney signature, then the system will generate the final PDF, certificate, and hash.') }}</p>
-                    </div>
-                @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'awaiting_video')
-                    @php
-                        $joinableVideoParties = collect($partiesForVideo ?? [])->filter(
-                            fn (array $party): bool => ($party['has_signed'] ?? false)
-                                && ($party['session_id'] ?? null)
-                                && in_array($party['session_status'] ?? '', ['scheduled', 'in_progress'], true)
-                        );
-                    @endphp
-                    <div class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-100">
-                        <div class="font-semibold">{{ __('Video verification required') }}</div>
-                        <p class="mt-1 text-indigo-800/90 dark:text-indigo-200/90">
-                            @if ($joinableVideoParties->isNotEmpty())
-                                {{ __('A signer may already be waiting in the video room. Join the call below or open the full video workspace.') }}
-                            @else
-                                {{ __('All signers have signed. Send video links, then complete a verification call with each party before you sign as attorney.') }}
-                            @endif
-                        </p>
-                        @if ($joinableVideoParties->isNotEmpty())
-                            <div class="mt-3">
-                                <flux:button
-                                    variant="primary"
-                                    size="sm"
-                                    type="button"
-                                    wire:click="setActiveTab('session')"
-                                >
-                                    {{ __('Open video workspace') }}
-                                </flux:button>
-                            </div>
-                        @else
-                            <div class="mt-3">
-                                <button
-                                    type="button"
-                                    wire:click="openVideoSessionWorkspace"
-                                    wire:loading.attr="disabled"
-                                    wire:target="openVideoSessionWorkspace,sendSignerVideoInvitations,syncVideoPartiesIfReady"
-                                    class="inline-flex items-center justify-center rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-600 dark:hover:bg-teal-500"
-                                >
-                                    {{ __('Send video links & open workspace') }}
-                                </button>
-                            </div>
-                        @endif
-                    </div>
-                @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'finalizing')
-                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                        <div class="font-semibold">{{ __('Finalizing instrument') }}</div>
-                        <p class="mt-1 text-amber-800/90 dark:text-amber-200/90">{{ __('Your signature is recorded. Generate or wait for the final PDF, completion certificate, and document hash below.') }}</p>
-                    </div>
-                @elseif ($isNotary && is_array($signingProgress) && ($signingProgress['phase'] ?? '') === 'document_ready')
-                    <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
-                        <div class="font-semibold">{{ __('Instrument ready') }}</div>
-                        <p class="mt-1 text-emerald-800/90 dark:text-emerald-200/90">{{ __('Signing, video verification, and attorney signature are complete. Continue on the Settlement tab for register entry and digital notarization.') }}</p>
-                    </div>
-                @endif
+                @php
+                    $attorneySignatureDocument = $requestDocuments->first();
+                    $attorneySignatureSigner = $attorneySignatureDocument?->documentSigners?->first(
+                        fn ($signer) => (int) $signer->user_id === (int) auth()->id()
+                    );
+                    $attorneySignatureFieldsReady = $attorneySignatureDocument !== null
+                        && $attorneySignatureSigner !== null
+                        && $attorneySignatureDocument->signatureFields
+                            ->where('signer_id', $attorneySignatureSigner->id)
+                            ->isNotEmpty();
+                    $attorneySignatureComplete = $attorneySignatureSigner !== null
+                        && $attorneySignatureSigner->status->isCompleted();
+                    $showAttorneySignatureCard = $isNotary
+                        && $attorneySignatureDocument !== null
+                        && ($signingProgress['video_verification_complete'] ?? false);
+                @endphp
 
-                @if ($isNotary && is_array($signingProgress) && ($signingProgress['visible'] ?? false))
-                    <div class="mt-5">
-                        @include('livewire.notary-requests.show.partials.signing-progress')
+                @if ($showAttorneySignatureCard)
+                    <div @class([
+                        'mt-5 overflow-hidden rounded-3xl border shadow-sm',
+                        'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/40 dark:bg-emerald-950/20' => $attorneySignatureComplete,
+                        'border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/40 dark:bg-indigo-950/20' => ! $attorneySignatureComplete,
+                    ])>
+                        <div class="p-5 sm:p-6 lg:p-7">
+                            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                                            {{ __('Attorney Signature') }}
+                                        </span>
+                                        @if ($attorneySignatureComplete)
+                                            <flux:badge color="emerald">{{ __('Signed') }}</flux:badge>
+                                        @elseif ($attorneySignatureFieldsReady)
+                                            <flux:badge color="indigo">{{ __('Ready to sign') }}</flux:badge>
+                                        @else
+                                            <flux:badge color="amber">{{ __('Needs attorney fields') }}</flux:badge>
+                                        @endif
+                                    </div>
+
+                                    <h3 class="mt-3 text-xl font-bold tracking-tight text-zinc-950 dark:text-white">
+                                        @if ($attorneySignatureComplete)
+                                            {{ __('Attorney signed the document') }}
+                                        @elseif ($attorneySignatureFieldsReady)
+                                            {{ __('Now sign the document as attorney') }}
+                                        @else
+                                            {{ __('Now add your attorney signature fields') }}
+                                        @endif
+                                    </h3>
+
+                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                                        @if ($attorneySignatureComplete)
+                                            {{ __('Your attorney signature is recorded. Continue with fees, payment, register, and final notarization.') }}
+                                        @elseif ($attorneySignatureFieldsReady)
+                                            {{ __('Video verification is complete and your fields are ready. Sign the instrument before moving to fees and register steps.') }}
+                                        @else
+                                            {{ __('Video verification is complete. Place your attorney signature and seal fields on the signed instrument, then sign it.') }}
+                                        @endif
+                                    </p>
+
+                                    <div class="mt-4 grid gap-2 text-xs text-zinc-600 dark:text-zinc-400 sm:grid-cols-3">
+                                        <div class="rounded-2xl bg-white/70 px-3 py-2 dark:bg-zinc-950/50">
+                                            <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Video') }}</div>
+                                            <div>{{ __('Completed') }}</div>
+                                        </div>
+                                        <div class="rounded-2xl bg-white/70 px-3 py-2 dark:bg-zinc-950/50">
+                                            <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Fields') }}</div>
+                                            <div>{{ $attorneySignatureFieldsReady ? __('Ready') : __('Not placed yet') }}</div>
+                                        </div>
+                                        <div class="rounded-2xl bg-white/70 px-3 py-2 dark:bg-zinc-950/50">
+                                            <div class="font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Signature') }}</div>
+                                            <div>
+                                                @if ($attorneySignatureComplete && $attorneySignatureSigner?->signed_at)
+                                                    {{ $attorneySignatureSigner->signed_at->timezone(config('docutrust.notary.timezone', 'Asia/Manila'))->format('M j, Y g:i A') }}
+                                                @else
+                                                    {{ $attorneySignatureComplete ? __('Signed') : __('Pending') }}
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @if (! $attorneySignatureComplete)
+                                    <div class="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+                                        @if ($attorneySignatureFieldsReady && $attorneySignatureSigner !== null)
+                                            <a href="{{ route('notary.sign.account.show', $attorneySignatureSigner->id) }}"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 sm:w-auto">
+                                                <svg class="size-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25 18 3m0 0 2.25 2.25M18 3v6m-8.25 9.75h-3a2.25 2.25 0 0 1-2.25-2.25v-9A2.25 2.25 0 0 1 6.75 5.25h4.5m0 13.5 7.5-7.5"/></svg>
+                                                {{ __('Sign document now') }}
+                                            </a>
+                                            <a href="{{ route('notary.documents.prepare', $attorneySignatureDocument) }}"
+                                               class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50 dark:border-indigo-900/40 dark:bg-zinc-900 dark:text-indigo-300 dark:hover:bg-indigo-950/40 sm:w-auto">
+                                                {{ __('Adjust fields') }}
+                                            </a>
+                                        @else
+                                            <a href="{{ route('notary.documents.prepare', $attorneySignatureDocument) }}"
+                                               class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 sm:w-auto">
+                                                {{ __('Prepare attorney fields') }}
+                                            </a>
+                                        @endif
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
                     </div>
                 @endif
 
@@ -142,23 +185,10 @@
                                                 $isAttorneySigningPhase = $isNotary && $document->documentSigners->contains(fn ($s) => (int) $s->user_id === (int) auth()->id() && $s->status->value === 'pending');
                                             @endphp
                                             @if ($isAttorneySigningPhase)
-                                                {{-- Attorney signing phase: show prepare/sign links --}}
-                                                <a
-                                                    href="{{ route('notary.documents.prepare', $document) }}"
-                                                    class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 sm:w-auto"
-                                                >
-                                                    {{ __('Prepare Attorney Fields') }}
-                                                </a>
-                                                @php
-                                                    $attorneySigner = $document->documentSigners->first(fn ($s) => (int) $s->user_id === (int) auth()->id());
-                                                @endphp
-                                                @if ($attorneySigner && $document->signatureFields->where('signer_id', $attorneySigner->id)->isNotEmpty())
-                                                    <a href="{{ route('notary.sign.account.show', $attorneySigner->id) }}"
-                                                       class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:w-auto">
-                                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"/></svg>
-                                                        {{ __('Sign Document') }}
-                                                    </a>
-                                                @endif
+                                                <span class="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300">
+                                                    <svg class="h-3 w-3 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
+                                                    {{ __('Attorney signature in progress') }}
+                                                </span>
                                             @else
                                                 <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300">
                                                     <svg class="h-3 w-3 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
@@ -166,32 +196,6 @@
                                                 </span>
                                             @endif
                                         @elseif ($document->status->value === 'completed')
-                                            @if ($isNotary && $canAttorneySign)
-                                                @php
-                                                    $attorneySigner = $document->documentSigners->first(fn ($s) => (int) $s->user_id === (int) auth()->id());
-                                                    $attorneyHasSigned = $attorneySigner && $attorneySigner->status->value === 'signed';
-                                                @endphp
-                                                @if (! $attorneyHasSigned)
-                                                    <a
-                                                        href="{{ route('notary.documents.prepare', $document) }}"
-                                                        class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:w-auto"
-                                                    >
-                                                        {{ __('Prepare Attorney Fields') }}
-                                                    </a>
-                                                    @if ($attorneySigner)
-                                                        <a href="{{ route('notary.sign.account.show', $attorneySigner->id) }}"
-                                                           class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300 dark:hover:bg-indigo-950/50 sm:w-auto">
-                                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"/></svg>
-                                                            {{ __('Open signing page') }}
-                                                        </a>
-                                                    @endif
-                                                @else
-                                                    <span class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
-                                                        <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
-                                                        {{ __('Attorney signed') }}
-                                                    </span>
-                                                @endif
-                                            @endif
                                             @if ($attorneyHasSigned ?? false)
                                                 @if (! ($artifactState['has_certificate'] ?? false))
                                                     <flux:button class="w-full sm:w-auto" variant="outline" type="button" wire:click="generateDocumentCertificate({{ $document->id }})">{{ __('Generate certificate') }}</flux:button>

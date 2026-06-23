@@ -237,6 +237,8 @@ class SignatureEngineTest extends TestCase
         $clientSigner = DocumentSigner::factory()->for($document)->create([
             'name' => 'Client Signer',
             'email' => 'client-signer@example.test',
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now(),
         ]);
         $notarySigner = NotarySigner::factory()->for($notaryRequest, 'notaryRequest')->create([
             'full_name' => $clientSigner->name,
@@ -300,7 +302,7 @@ class SignatureEngineTest extends TestCase
                     ],
                 ],
             ])
-            ->assertRedirect();
+            ->assertStatus(422);
 
         $this->assertDatabaseCount('signature_fields', 2);
         $this->assertDatabaseHas('signature_fields', ['id' => $clientField->id]);

@@ -47,7 +47,23 @@
             <flux:heading size="lg" class="!mb-2">{{ __('Attorney personal seal') }}</flux:heading>
             @if ($hasAttorneySealOnFile)
                 <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
-                    {{ __('Your personal seal is on file and ready for the official register entry.') }}
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <div class="font-semibold">{{ __('Seal uploaded') }}</div>
+                            <div class="mt-1 text-emerald-800 dark:text-emerald-100">
+                                {{ __('No upload is needed here. The seal from your trust profile will be applied to the notarized document.') }}
+                            </div>
+                        </div>
+
+                        @if ($canDigitalizeRequest)
+                            <flux:button variant="primary" type="button" wire:click="digitalizeRequest" wire:loading.attr="disabled" wire:target="digitalizeRequest">
+                                <span wire:loading.remove wire:target="digitalizeRequest">{{ __('Apply seal and certificate') }}</span>
+                                <span wire:loading wire:target="digitalizeRequest">{{ __('Processing...') }}</span>
+                            </flux:button>
+                        @else
+                            <flux:badge color="emerald">{{ __('Ready') }}</flux:badge>
+                        @endif
+                    </div>
                 </div>
             @else
                 <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
@@ -74,7 +90,11 @@
                 </div>
             @else
                 <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                    {{ __('Available after you sign the document, complete the register entry (with O.R. if a fee applies), collect payment, and upload your personal seal.') }}
+                    @if ($hasAttorneySealOnFile)
+                        {{ __('Available after you sign the document, complete the register entry (with O.R. if a fee applies), and collect payment.') }}
+                    @else
+                        {{ __('Available after you sign the document, complete the register entry (with O.R. if a fee applies), collect payment, and upload your personal seal.') }}
+                    @endif
                 </div>
             @endif
 
@@ -211,7 +231,7 @@
             @if ($canDigitalizeRequest)
                 <div class="mt-4">
                     <flux:button variant="primary" type="button" wire:click="digitalizeRequest" wire:loading.attr="disabled" wire:target="digitalizeRequest">
-                        <span wire:loading.remove wire:target="digitalizeRequest">{{ __('Apply digital notarization') }}</span>
+                        <span wire:loading.remove wire:target="digitalizeRequest">{{ __('Apply seal and certificate') }}</span>
                         <span wire:loading wire:target="digitalizeRequest">{{ __('Processing...') }}</span>
                     </flux:button>
                     <flux:error name="digitalizeRequest" />

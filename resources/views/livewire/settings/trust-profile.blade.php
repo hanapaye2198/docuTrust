@@ -503,32 +503,69 @@ new class extends Component {
                             canvas: null,
                             ctx: null,
                             drawing: false,
+                            lastPoint: null,
                             init() {
                                 this.canvas = this.$refs.pad;
                                 this.ctx = this.canvas.getContext('2d');
+                                this.resizeCanvas();
+                                window.addEventListener('resize', () => this.resizeCanvas());
+                            },
+                            resizeCanvas() {
+                                const rect = this.canvas.getBoundingClientRect();
+                                const ratio = window.devicePixelRatio || 1;
+                                this.canvas.width = Math.max(1, Math.round(rect.width * ratio));
+                                this.canvas.height = Math.max(1, Math.round(rect.height * ratio));
+                                this.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+                                this.configurePen();
+                            },
+                            configurePen() {
                                 this.ctx.strokeStyle = '#0f172a';
-                                this.ctx.lineWidth = 2;
+                                this.ctx.lineWidth = 1.6;
                                 this.ctx.lineCap = 'round';
+                                this.ctx.lineJoin = 'round';
+                            },
+                            point(e) {
+                                const rect = this.canvas.getBoundingClientRect();
+
+                                return {
+                                    x: e.clientX - rect.left,
+                                    y: e.clientY - rect.top,
+                                };
                             },
                             start(e) {
+                                e.preventDefault();
                                 this.drawing = true;
-                                const rect = this.canvas.getBoundingClientRect();
-                                const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                                const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                                this.canvas.setPointerCapture?.(e.pointerId);
+                                const point = this.point(e);
+                                this.lastPoint = point;
                                 this.ctx.beginPath();
-                                this.ctx.moveTo(x, y);
+                                this.ctx.moveTo(point.x, point.y);
                             },
                             draw(e) {
                                 if (!this.drawing) return;
                                 e.preventDefault();
-                                const rect = this.canvas.getBoundingClientRect();
-                                const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                                const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-                                this.ctx.lineTo(x, y);
+                                const point = this.point(e);
+                                const midPoint = {
+                                    x: (this.lastPoint.x + point.x) / 2,
+                                    y: (this.lastPoint.y + point.y) / 2,
+                                };
+                                this.ctx.quadraticCurveTo(this.lastPoint.x, this.lastPoint.y, midPoint.x, midPoint.y);
                                 this.ctx.stroke();
+                                this.lastPoint = point;
                             },
-                            end() { this.drawing = false; },
-                            clear() { this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); },
+                            end(e) {
+                                if (!this.drawing) return;
+                                this.drawing = false;
+                                this.lastPoint = null;
+                                this.canvas.releasePointerCapture?.(e.pointerId);
+                            },
+                            clear() {
+                                this.ctx.save();
+                                this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+                                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                                this.ctx.restore();
+                                this.configurePen();
+                            },
                             save() {
                                 $wire.set('drawnSignature', this.canvas.toDataURL('image/png'));
                                 $wire.call('saveDrawnSignature');
@@ -539,16 +576,12 @@ new class extends Component {
                         <p class="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">{{ __('Draw') }}</p>
                         <canvas
                             x-ref="pad"
-                            width="400"
-                            height="140"
-                            class="w-full touch-none rounded-lg bg-white dark:bg-zinc-950"
-                            @mousedown="start($event)"
-                            @mousemove="draw($event)"
-                            @mouseup="end()"
-                            @mouseleave="end()"
-                            @touchstart="start($event)"
-                            @touchmove="draw($event)"
-                            @touchend="end()"
+                            class="h-44 w-full touch-none rounded-lg bg-white dark:bg-zinc-950"
+                            @pointerdown="start($event)"
+                            @pointermove="draw($event)"
+                            @pointerup="end($event)"
+                            @pointercancel="end($event)"
+                            @pointerleave="end($event)"
                         ></canvas>
                         <div class="mt-2 flex gap-2">
                             <flux:button variant="ghost" size="sm" type="button" @click="clear()">{{ __('Clear') }}</flux:button>
