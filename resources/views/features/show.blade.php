@@ -18,6 +18,10 @@
         </a>
         <a href="{{ route('home') }}#features" class="btn-secondary">{{ __('Compare all features') }}</a>
       </div>
+      {{-- Animated hero illustration --}}
+      <div class="feature-hero-illustration">
+        @include('features.partials.hero-illustration', ['slug' => $feature['slug']])
+      </div>
     </div>
 
     <div class="feature-detail-grid">
