@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -343,6 +344,15 @@ class SignDocumentController extends Controller
 
             return redirect()->route('sign.show', $this->signerRouteToken($signer))
                 ->with('status', $captureResult->message);
+        } catch (InvalidArgumentException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
+
+            return redirect()->route('sign.show', $token)
+                ->with('error', $exception->getMessage());
         } catch (TrustAuthorizationRequiredException $exception) {
             if ($request->expectsJson()) {
                 return response()->json([
@@ -466,6 +476,15 @@ class SignDocumentController extends Controller
                 ? redirect()->to($redirectUrl)->with('status', $captureResult->message)
                 : redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signer->id])
                     ->with('status', $captureResult->message);
+        } catch (InvalidArgumentException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
+
+            return redirect()->route($this->authenticatedAccountRouteName('show'), ['signerId' => $signerId])
+                ->with('error', $exception->getMessage());
         } catch (TrustAuthorizationRequiredException $exception) {
             if ($request->expectsJson()) {
                 return response()->json([

@@ -23,6 +23,7 @@ use App\Services\DocumentPdfStampingService;
 use App\Services\PkiSignatureService;
 use App\Services\SignerCertificateService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use GdImage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
@@ -49,6 +50,29 @@ class SignatureEngineTest extends TestCase
         Storage::disk('local')->put($path, base64_decode($encoded, true));
 
         return $path;
+    }
+
+    private function transparentSignatureDataUrl(): string
+    {
+        $image = imagecreatetruecolor(300, 100);
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+
+        $transparent = imagecolorallocatealpha($image, 0, 0, 0, 127);
+        imagefilledrectangle($image, 0, 0, 300, 100, $transparent);
+        imagealphablending($image, true);
+
+        $black = imagecolorallocate($image, 26, 26, 26);
+        imageline($image, 40, 54, 260, 54, $black);
+
+        ob_start();
+        imagepng($image);
+        $binary = ob_get_clean();
+        imagedestroy($image);
+
+        $this->assertIsString($binary);
+
+        return 'data:image/png;base64,'.base64_encode($binary);
     }
 
     private function provisionSignerCrypto(DocumentSigner $signer): void
@@ -1058,6 +1082,49 @@ class SignatureEngineTest extends TestCase
             (string) $signer->signing_public_key,
         );
         $this->assertTrue($isValid);
+    }
+
+    public function test_signature_submission_reencodes_png_to_fixed_transparent_canvas(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/signature-transparent-source.pdf';
+        $this->putValidPdf($path);
+        $document = Document::factory()->for($user)->create(['status' => DocumentStatus::Pending, 'file_path' => $path]);
+        $signer = DocumentSigner::factory()->for($document)->create(['status' => DocumentSignerStatus::Pending]);
+        $field = SignatureField::query()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+            'position_data' => [
+                'x' => 0.1,
+                'y' => 0.1,
+                'width' => 0.2,
+                'height' => 0.05,
+            ],
+        ]);
+
+        $this->postJson(route('sign.signature.store', $signer), [
+            'signature_field_id' => $field->id,
+            'signature_image' => $this->transparentSignatureDataUrl(),
+        ])->assertOk();
+
+        $signature = Signature::query()->where('signature_field_id', $field->id)->first();
+        $this->assertNotNull($signature);
+        $this->assertIsString($signature->signature_path);
+        $this->assertStringEndsWith('.png', $signature->signature_path);
+        $this->assertTrue(Storage::disk('local')->exists($signature->signature_path));
+
+        $storedImage = imagecreatefrompng(Storage::disk('local')->path($signature->signature_path));
+        $this->assertInstanceOf(GdImage::class, $storedImage);
+        $this->assertSame(480, imagesx($storedImage));
+        $this->assertSame(160, imagesy($storedImage));
+
+        $background = imagecolorsforindex($storedImage, imagecolorat($storedImage, 0, 0));
+        $this->assertSame(127, $background['alpha']);
+
+        imagedestroy($storedImage);
     }
 
     public function test_remote_managed_field_submission_requires_active_trust_authorization(): void

@@ -137,6 +137,8 @@ function createSignViewSession(cfgEl) {
     let drawLastPoint = null;
     let drawStrokeSegmentCount = 0;
     let drawFrameId = null;
+    let drawPixelRatio = 1;
+    let drawSignatureDataUrl = '';
     let isSubmitting = false;
     let pdfDoc = null;
     let currentPage = 1;
@@ -1420,87 +1422,20 @@ function createSignViewSession(cfgEl) {
 
     function textToDataUrl(text) {
         const canvas = document.createElement('canvas');
-        canvas.width = 400;
-        canvas.height = 120;
+        canvas.width = 480;
+        canvas.height = 160;
         const fabricCanvas = new window.fabric.Canvas(canvas);
         const textNode = new window.fabric.Text(text, {
-            fontSize: 34,
+            fontSize: 52,
             fontFamily: 'Georgia, serif',
             fill: '#0f172a',
             originX: 'center',
             originY: 'center',
-            left: 200,
-            top: 60,
+            left: 240,
+            top: 80,
         });
         fabricCanvas.add(textNode);
-        return trimmedCanvasDataUrl(canvas, { mode: 'transparent', padding: 12 });
-    }
-
-    function trimmedCanvasDataUrl(sourceCanvas, options = {}) {
-        if (!sourceCanvas) {
-            return '';
-        }
-
-        const mode = options.mode || 'transparent';
-        const padding = Number.isFinite(options.padding) ? Math.max(0, Math.round(options.padding)) : 8;
-        const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) {
-            return sourceCanvas.toDataURL('image/png');
-        }
-
-        const { width, height } = sourceCanvas;
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const data = imageData.data;
-        let minX = width;
-        let minY = height;
-        let maxX = -1;
-        let maxY = -1;
-
-        for (let y = 0; y < height; y += 1) {
-            for (let x = 0; x < width; x += 1) {
-                const idx = ((y * width) + x) * 4;
-                const r = data[idx];
-                const g = data[idx + 1];
-                const b = data[idx + 2];
-                const a = data[idx + 3];
-                const hasInk = mode === 'light-bg' ? a > 0 && (r < 245 || g < 245 || b < 245) : a > 8;
-                if (!hasInk) {
-                    continue;
-                }
-
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x);
-                maxY = Math.max(maxY, y);
-            }
-        }
-
-        if (maxX < minX || maxY < minY) {
-            return sourceCanvas.toDataURL('image/png');
-        }
-
-        minX = Math.max(0, minX - padding);
-        minY = Math.max(0, minY - padding);
-        maxX = Math.min(width - 1, maxX + padding);
-        maxY = Math.min(height - 1, maxY + padding);
-
-        const trimmedWidth = Math.max(1, (maxX - minX) + 1);
-        const trimmedHeight = Math.max(1, (maxY - minY) + 1);
-        const outputCanvas = document.createElement('canvas');
-        outputCanvas.width = trimmedWidth;
-        outputCanvas.height = trimmedHeight;
-        const outputCtx = outputCanvas.getContext('2d');
-        if (!outputCtx) {
-            return sourceCanvas.toDataURL('image/png');
-        }
-
-        if (mode === 'light-bg') {
-            outputCtx.fillStyle = '#ffffff';
-            outputCtx.fillRect(0, 0, trimmedWidth, trimmedHeight);
-        }
-
-        outputCtx.drawImage(sourceCanvas, minX, minY, trimmedWidth, trimmedHeight, 0, 0, trimmedWidth, trimmedHeight);
-        return outputCanvas.toDataURL('image/png');
+        return canvas.toDataURL('image/png');
     }
 
     function submitSignatureField(fieldId, dataUrl, submittedValue = '') {
@@ -1559,11 +1494,11 @@ function createSignViewSession(cfgEl) {
         }
 
         drawContext.save();
-        drawContext.setTransform(1, 0, 0, 1, 0, 0);
-        drawContext.fillStyle = '#ffffff';
-        drawContext.fillRect(0, 0, drawCanvasEl.width, drawCanvasEl.height);
+        drawContext.setTransform(drawPixelRatio, 0, 0, drawPixelRatio, 0, 0);
+        drawContext.clearRect(0, 0, drawCanvasEl.width / drawPixelRatio, drawCanvasEl.height / drawPixelRatio);
         drawContext.restore();
         hasDrawnStroke = false;
+        drawSignatureDataUrl = '';
         pendingDrawPoints = [];
         drawLastPoint = null;
         drawStrokeSegmentCount = 0;
@@ -1580,34 +1515,59 @@ function createSignViewSession(cfgEl) {
         }
 
         const rect = drawCanvasEl.getBoundingClientRect();
-        const cssWidth = Math.max(320, Math.round(rect.width || 400));
-        const cssHeight = Math.max(160, Math.round(cssWidth / 2));
-        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        const cssWidth = Math.max(1, Math.round(rect.width || 480));
+        const cssHeight = Math.max(1, Math.round(rect.height || 160));
 
-        drawCanvasEl.width = Math.round(cssWidth * pixelRatio);
-        drawCanvasEl.height = Math.round(cssHeight * pixelRatio);
-        drawCanvasEl.style.width = `${cssWidth}px`;
-        drawCanvasEl.style.height = `${cssHeight}px`;
+        drawPixelRatio = window.devicePixelRatio || 1;
+        drawCanvasEl.width = Math.round(cssWidth * drawPixelRatio);
+        drawCanvasEl.height = Math.round(cssHeight * drawPixelRatio);
 
-        drawContext = drawCanvasEl.getContext('2d', { alpha: false, desynchronized: true });
-        drawContext.setTransform(1, 0, 0, 1, 0, 0);
-        drawContext.scale(pixelRatio, pixelRatio);
+        drawContext = drawCanvasEl.getContext('2d', { desynchronized: true });
+        drawContext.setTransform(drawPixelRatio, 0, 0, drawPixelRatio, 0, 0);
         drawContext.lineCap = 'round';
         drawContext.lineJoin = 'round';
-        drawContext.lineWidth = 2.5;
-        drawContext.strokeStyle = '#0f172a';
+        drawContext.lineWidth = 2;
+        drawContext.strokeStyle = '#1a1a1a';
 
         clearSignatureCanvas();
     }
 
     function signaturePoint(event) {
         const rect = drawCanvasRect || drawCanvasEl.getBoundingClientRect();
+        const scaleX = (drawCanvasEl.width / drawPixelRatio) / rect.width;
+        const scaleY = (drawCanvasEl.height / drawPixelRatio) / rect.height;
+
         return {
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top,
+            x: (event.clientX - rect.left) * scaleX,
+            y: (event.clientY - rect.top) * scaleY,
             pressure: typeof event.pressure === 'number' && event.pressure > 0 ? event.pressure : 0.5,
             pointerType: event.pointerType || 'mouse',
         };
+    }
+
+    function exportSignatureCanvasDataUrl() {
+        if (!drawCanvasEl) {
+            return '';
+        }
+
+        const outputCanvas = document.createElement('canvas');
+        outputCanvas.width = 480;
+        outputCanvas.height = 160;
+        const outputCtx = outputCanvas.getContext('2d');
+        if (!outputCtx) {
+            return drawCanvasEl.toDataURL('image/png');
+        }
+
+        const scale = Math.min(outputCanvas.width / drawCanvasEl.width, outputCanvas.height / drawCanvasEl.height);
+        const renderWidth = drawCanvasEl.width * scale;
+        const renderHeight = drawCanvasEl.height * scale;
+        const renderX = (outputCanvas.width - renderWidth) / 2;
+        const renderY = (outputCanvas.height - renderHeight) / 2;
+
+        outputCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+        outputCtx.drawImage(drawCanvasEl, renderX, renderY, renderWidth, renderHeight);
+
+        return outputCanvas.toDataURL('image/png');
     }
 
     function flushSignatureStroke() {
@@ -1703,13 +1663,14 @@ function createSignViewSession(cfgEl) {
         drawPointerId = null;
         drawCanvasRect = null;
         drawContext?.closePath();
+        drawSignatureDataUrl = exportSignatureCanvasDataUrl();
         drawLastPoint = null;
         drawCanvasEl.releasePointerCapture?.(event.pointerId);
         event.preventDefault();
     }
 
     function signatureDataUrl() {
-        return drawCanvasEl ? trimmedCanvasDataUrl(drawCanvasEl, { mode: 'light-bg', padding: 10 }) : '';
+        return drawSignatureDataUrl;
     }
 
     function showTab(name) {

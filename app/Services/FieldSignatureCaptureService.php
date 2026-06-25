@@ -10,13 +10,23 @@ use App\Models\Signature;
 use App\Models\SignatureField;
 use App\Trust\Authorization\TrustAuthorizationRequiredException;
 use App\Trust\Authorization\TrustAuthorizationSessionService;
+use GdImage;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use RuntimeException;
 
 class FieldSignatureCaptureService
 {
     use ResolvesSecureDisk;
+
+    private const SIGNATURE_IMAGE_WIDTH = 480;
+
+    private const SIGNATURE_IMAGE_HEIGHT = 160;
+
+    // NOTE: Signatures saved before this fix could be stored as JPEG (.jpg).
+    // Existing Signature records with signature_path ending in .jpg should be
+    // re-requested from the signer. Do NOT auto-delete old files.
 
     public function __construct(
         private readonly SignerKeyStore $signerKeyStore,
@@ -153,7 +163,7 @@ class FieldSignatureCaptureService
             return null;
         }
 
-        if (! preg_match('/^data:image\/(?P<type>png|jpeg|jpg|webp);base64,(?P<data>.+)$/', $dataUrl, $matches)) {
+        if (! preg_match('/^data:image\/(?P<type>png|jpeg|jpg);base64,(?P<data>.+)$/', $dataUrl, $matches)) {
             return null;
         }
 
@@ -162,11 +172,105 @@ class FieldSignatureCaptureService
             return null;
         }
 
-        $extension = $matches['type'] === 'jpeg' ? 'jpg' : (string) $matches['type'];
-        $path = 'signatures/'.Str::uuid()->toString().'.'.$extension;
-        Storage::disk($this->secureDiskName())->put($path, $binary);
+        $path = 'signatures/'.Str::uuid()->toString().'.png';
+        Storage::disk($this->secureDiskName())->put($path, $this->normalizeSignatureImage($binary));
 
         return $path;
+    }
+
+    private function normalizeSignatureImage(string $binary): string
+    {
+        if (strlen($binary) < 8) {
+            throw new InvalidArgumentException('Invalid signature image data.');
+        }
+
+        $isPng = substr($binary, 0, 4) === "\x89PNG";
+        $isJpeg = substr($binary, 0, 2) === "\xFF\xD8";
+
+        if (! $isPng && ! $isJpeg) {
+            throw new InvalidArgumentException('Signature image must be PNG or JPEG.');
+        }
+
+        if (strlen($binary) > 2 * 1024 * 1024) {
+            throw new InvalidArgumentException('Signature image must be under 2 MB.');
+        }
+
+        $src = $this->createImageFromBinary($binary, $isPng);
+        $dst = $this->createSignatureCanvas($isPng);
+
+        $srcWidth = imagesx($src);
+        $srcHeight = imagesy($src);
+        if ($srcWidth <= 0 || $srcHeight <= 0) {
+            imagedestroy($src);
+            imagedestroy($dst);
+
+            throw new RuntimeException('GD decoded an invalid signature image size.');
+        }
+
+        $scale = min(
+            self::SIGNATURE_IMAGE_WIDTH / $srcWidth,
+            self::SIGNATURE_IMAGE_HEIGHT / $srcHeight,
+            1.0,
+        );
+        $dstWidth = (int) round($srcWidth * $scale);
+        $dstHeight = (int) round($srcHeight * $scale);
+        $dstX = (int) round((self::SIGNATURE_IMAGE_WIDTH - $dstWidth) / 2);
+        $dstY = (int) round((self::SIGNATURE_IMAGE_HEIGHT - $dstHeight) / 2);
+
+        imagecopyresampled($dst, $src, $dstX, $dstY, 0, 0, $dstWidth, $dstHeight, $srcWidth, $srcHeight);
+        imagedestroy($src);
+
+        ob_start();
+        imagepng($dst);
+        $outputBinary = ob_get_clean();
+        imagedestroy($dst);
+
+        if (! is_string($outputBinary) || $outputBinary === '') {
+            throw new RuntimeException('GD could not encode the signature PNG.');
+        }
+
+        return $outputBinary;
+    }
+
+    private function createImageFromBinary(string $binary, bool $isPng): GdImage
+    {
+        $src = $isPng
+            ? @imagecreatefrompng('data://image/png;base64,'.base64_encode($binary))
+            : @imagecreatefromjpeg('data://image/jpeg;base64,'.base64_encode($binary));
+
+        if (! ($src instanceof GdImage)) {
+            throw new RuntimeException('GD could not open the submitted signature image.');
+        }
+
+        return $src;
+    }
+
+    private function createSignatureCanvas(bool $transparent): GdImage
+    {
+        $dst = imagecreatetruecolor(self::SIGNATURE_IMAGE_WIDTH, self::SIGNATURE_IMAGE_HEIGHT);
+        if (! ($dst instanceof GdImage)) {
+            throw new RuntimeException('GD could not create the signature canvas.');
+        }
+
+        imagealphablending($dst, false);
+        imagesavealpha($dst, true);
+
+        if ($transparent) {
+            $background = imagecolorallocatealpha($dst, 0, 0, 0, 127);
+        } else {
+            $background = imagecolorallocate($dst, 255, 255, 255);
+        }
+
+        if ($background === false) {
+            imagedestroy($dst);
+
+            throw new RuntimeException('GD could not allocate the signature background color.');
+        }
+
+        imagefilledrectangle($dst, 0, 0, self::SIGNATURE_IMAGE_WIDTH, self::SIGNATURE_IMAGE_HEIGHT, $background);
+        imagealphablending($dst, true);
+
+        return $dst;
     }
 
     private function deleteStoredSignatureIfReplaced(?Signature $existingSignature, ?string $newPath): void

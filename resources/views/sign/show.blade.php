@@ -378,7 +378,12 @@
                 </div>
                 <div class="p-6">
                     <div id="panel-draw" class="sign-panel">
-                        <canvas id="draw-canvas" width="400" height="200" class="w-full max-w-full touch-none select-none rounded-lg border border-zinc-200 bg-white dark:border-zinc-600"></canvas>
+                        <div
+                            style="position:relative; width:100%; height:160px; overflow:hidden;"
+                            class="rounded-lg border border-zinc-200 bg-white dark:border-zinc-600"
+                        >
+                            <canvas id="draw-canvas" style="position:absolute;inset:0;width:100%;height:100%;" class="touch-none select-none"></canvas>
+                        </div>
                         <button type="button" id="draw-clear" class="mt-3 inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
                             {{ __('Clear') }}
                         </button>
@@ -398,7 +403,7 @@
                         <input
                             id="upload-input"
                             type="file"
-                            accept="image/png,image/jpeg,image/webp"
+                            accept="image/png,image/jpeg"
                             class="mt-2 w-full text-sm text-zinc-600"
                         />
                     </div>

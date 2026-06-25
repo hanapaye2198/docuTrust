@@ -19,6 +19,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="{{ asset('images/docutrust-logo.png') }}" type="image/png">
 @include('layouts.partials.marketing-header-styles')
+@vite(['resources/css/app.css', 'resources/js/app.js'])
 <style>
 :root {
   --font-body: 'Source Sans 3', system-ui, sans-serif;
@@ -1548,33 +1549,7 @@ footer{
 </section>
 
 <!-- FEATURES -->
-<section class="features-section" id="features">
-  <div class="container">
-    <div class="section-head">
-      <div class="section-label reveal">Features</div>
-      <h2 class="section-title reveal">Everything You Need to Manage<br>Documents with Confidence</h2>
-      <p class="section-sub reveal">From legally binding signatures to audit-ready trails — one platform built for teams that cannot afford gaps in security or speed.</p>
-    </div>
-    <div class="features-grid">
-      @foreach (\App\Support\MarketingFeatures::all() as $marketingFeature)
-        <a
-          href="{{ route('features.show', $marketingFeature['slug']) }}"
-          class="feature-card reveal @if ($marketingFeature['featured']) featured @endif"
-        >
-          @if ($marketingFeature['badge'])
-            <div class="feature-badge">{{ $marketingFeature['badge'] }}</div>
-          @endif
-          <div class="feature-icon">
-            @include('features.partials.icon', ['icon' => $marketingFeature['icon']])
-          </div>
-          <h3>{{ $marketingFeature['title'] }}</h3>
-          <p>{{ $marketingFeature['summary'] }}</p>
-          <span class="feature-card-learn">{{ __('Learn more →') }}</span>
-        </a>
-      @endforeach
-    </div>
-  </div>
-</section>
+<livewire:landing.features-section />
 
 <!-- BLOCKCHAIN KPI -->
 <section class="blockchain-section" id="blockchain">
@@ -2088,6 +2063,7 @@ footer{
 </footer>
 
 @include('layouts.partials.marketing-header-scripts')
+@livewireScripts
 
 <script>
 const revealEls = document.querySelectorAll('.reveal');
