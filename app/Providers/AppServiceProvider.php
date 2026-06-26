@@ -158,7 +158,12 @@ class AppServiceProvider extends ServiceProvider
                 continue;
             }
 
-            event(new SignerSessionUpdated($signer));
+            try {
+                event(new SignerSessionUpdated($signer));
+            } catch (\Throwable) {
+                // Broadcasting is best-effort — a missing Reverb server must not
+                // interrupt the signing workflow or crash the request.
+            }
         }
     }
 }

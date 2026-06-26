@@ -198,11 +198,11 @@ class FieldSignatureCaptureService
         $src = $this->createImageFromBinary($binary, $isPng);
         $dst = $this->createSignatureCanvas($isPng);
 
-        $srcWidth = imagesx($src);
-        $srcHeight = imagesy($src);
+        $srcWidth = \imagesx($src);
+        $srcHeight = \imagesy($src);
         if ($srcWidth <= 0 || $srcHeight <= 0) {
-            imagedestroy($src);
-            imagedestroy($dst);
+            \imagedestroy($src);
+            \imagedestroy($dst);
 
             throw new RuntimeException('GD decoded an invalid signature image size.');
         }
@@ -217,13 +217,13 @@ class FieldSignatureCaptureService
         $dstX = (int) round((self::SIGNATURE_IMAGE_WIDTH - $dstWidth) / 2);
         $dstY = (int) round((self::SIGNATURE_IMAGE_HEIGHT - $dstHeight) / 2);
 
-        imagecopyresampled($dst, $src, $dstX, $dstY, 0, 0, $dstWidth, $dstHeight, $srcWidth, $srcHeight);
-        imagedestroy($src);
+        \imagecopyresampled($dst, $src, $dstX, $dstY, 0, 0, $dstWidth, $dstHeight, $srcWidth, $srcHeight);
+        \imagedestroy($src);
 
         ob_start();
-        imagepng($dst);
+        \imagepng($dst);
         $outputBinary = ob_get_clean();
-        imagedestroy($dst);
+        \imagedestroy($dst);
 
         if (! is_string($outputBinary) || $outputBinary === '') {
             throw new RuntimeException('GD could not encode the signature PNG.');
@@ -235,8 +235,8 @@ class FieldSignatureCaptureService
     private function createImageFromBinary(string $binary, bool $isPng): GdImage
     {
         $src = $isPng
-            ? @imagecreatefrompng('data://image/png;base64,'.base64_encode($binary))
-            : @imagecreatefromjpeg('data://image/jpeg;base64,'.base64_encode($binary));
+            ? @\imagecreatefrompng('data://image/png;base64,'.base64_encode($binary))
+            : @\imagecreatefromjpeg('data://image/jpeg;base64,'.base64_encode($binary));
 
         if (! ($src instanceof GdImage)) {
             throw new RuntimeException('GD could not open the submitted signature image.');
@@ -247,28 +247,28 @@ class FieldSignatureCaptureService
 
     private function createSignatureCanvas(bool $transparent): GdImage
     {
-        $dst = imagecreatetruecolor(self::SIGNATURE_IMAGE_WIDTH, self::SIGNATURE_IMAGE_HEIGHT);
+        $dst = \imagecreatetruecolor(self::SIGNATURE_IMAGE_WIDTH, self::SIGNATURE_IMAGE_HEIGHT);
         if (! ($dst instanceof GdImage)) {
             throw new RuntimeException('GD could not create the signature canvas.');
         }
 
-        imagealphablending($dst, false);
-        imagesavealpha($dst, true);
+        \imagealphablending($dst, false);
+        \imagesavealpha($dst, true);
 
         if ($transparent) {
-            $background = imagecolorallocatealpha($dst, 0, 0, 0, 127);
+            $background = \imagecolorallocatealpha($dst, 0, 0, 0, 127);
         } else {
-            $background = imagecolorallocate($dst, 255, 255, 255);
+            $background = \imagecolorallocate($dst, 255, 255, 255);
         }
 
         if ($background === false) {
-            imagedestroy($dst);
+            \imagedestroy($dst);
 
             throw new RuntimeException('GD could not allocate the signature background color.');
         }
 
-        imagefilledrectangle($dst, 0, 0, self::SIGNATURE_IMAGE_WIDTH, self::SIGNATURE_IMAGE_HEIGHT, $background);
-        imagealphablending($dst, true);
+        \imagefilledrectangle($dst, 0, 0, self::SIGNATURE_IMAGE_WIDTH, self::SIGNATURE_IMAGE_HEIGHT, $background);
+        \imagealphablending($dst, true);
 
         return $dst;
     }

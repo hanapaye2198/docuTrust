@@ -12,6 +12,7 @@ use App\Models\DocumentSigner;
 use App\Models\User;
 use App\Services\DocumentNotificationService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -32,6 +33,10 @@ class DocumentSignersManager extends Component
     public string $roleType = TemplateRoleType::Signer->value;
 
     public string $signingWorkflow = Document::SIGNING_WORKFLOW_SEQUENTIAL;
+
+    public bool $workflowOrdered = true;
+
+    public ?int $addingToOrder = null;
 
     public ?int $editingSignerId = null;
 
@@ -56,6 +61,16 @@ class DocumentSignersManager extends Component
         $document = $this->resolveDocument();
         $this->authorize('update', $document);
         $this->signingWorkflow = $document->signingWorkflow();
+        $this->workflowOrdered = $this->signingWorkflow === Document::SIGNING_WORKFLOW_SEQUENTIAL;
+    }
+
+    public function updatedWorkflowOrdered(): void
+    {
+        $this->signingWorkflow = $this->workflowOrdered
+            ? Document::SIGNING_WORKFLOW_SEQUENTIAL
+            : Document::SIGNING_WORKFLOW_PARALLEL;
+
+        $this->saveSigningWorkflow();
     }
 
     public function addSigner(): void
@@ -120,6 +135,122 @@ class DocumentSignersManager extends Component
         $this->dispatch('document-updated');
     }
 
+    public function addSignerToOrder(int $order): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Draft) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'name'          => ['required', 'string', 'max:255'],
+            'email'         => ['required', 'email', 'max:255'],
+            'signingMethod' => ['required', 'in:'.$this->allowedSigningMethods()],
+            'roleType'      => ['required', 'in:'.$this->allowedRoleTypes()],
+        ]);
+
+        $normalizedEmail = strtolower($validated['email']);
+        $signingMethod   = SigningMethod::from((string) $validated['signingMethod']);
+        $roleType        = TemplateRoleType::from((string) $validated['roleType']);
+
+        $exists = $document->documentSigners()
+            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
+            ->exists();
+
+        if ($exists) {
+            $this->addError('email', __('This email is already a participant for this document.'));
+            return;
+        }
+
+        $linkedUserId = $this->resolveSignerUserId($document, $normalizedEmail, $signingMethod, $roleType);
+        if ($this->roleTypeRequiresLinkedUser($roleType, $signingMethod) && $linkedUserId === null) {
+            $this->addError('signingMethod', __('This signer method requires an existing verified DocuTrust account in your organization.'));
+            return;
+        }
+
+        $document->documentSigners()->create([
+            'role_type'      => $roleType,
+            'name'           => $validated['name'],
+            'email'          => $normalizedEmail,
+            'signing_method' => $signingMethod,
+            'user_id'        => $linkedUserId,
+            'access_token'   => (string) Str::uuid(),
+            'status'         => DocumentSignerStatus::Pending,
+            'signing_order'  => $this->signingWorkflow === Document::SIGNING_WORKFLOW_SEQUENTIAL ? $order : null,
+            'expires_at'     => null,
+        ]);
+
+        $this->ensureContactForSigner($document->user_id, $validated['name'], $normalizedEmail);
+        $this->forgetResolvedDocument();
+        $this->reset('name', 'email');
+        $this->signingMethod   = SigningMethod::EmailLink->value;
+        $this->roleType        = TemplateRoleType::Signer->value;
+        $this->contactSuggestions = [];
+        $this->addingToOrder   = null;
+        $this->dispatch('document-updated');
+    }
+
+    public function startAddingToOrder(int $order): void
+    {
+        $this->addingToOrder = $order;
+        $this->reset('name', 'email');
+        $this->signingMethod = SigningMethod::EmailLink->value;
+        $this->roleType      = TemplateRoleType::Signer->value;
+        $this->contactSuggestions = [];
+    }
+
+    public function cancelAddingToOrder(): void
+    {
+        $this->addingToOrder = null;
+        $this->reset('name', 'email');
+        $this->contactSuggestions = [];
+    }
+
+    public function includeMe(): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Draft) {
+            return;
+        }
+
+        $user = Auth::user();
+        $normalizedEmail = strtolower($user->email);
+
+        $exists = $document->documentSigners()
+            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
+            ->exists();
+
+        if ($exists) {
+            $this->addError('email', __('You are already a participant.'));
+
+            return;
+        }
+
+        $nextOrder = (int) $document->documentSigners()->max('signing_order') + 1;
+
+        $document->documentSigners()->create([
+            'role_type'      => TemplateRoleType::Signer,
+            'name'           => $user->name,
+            'email'          => $normalizedEmail,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id'        => $user->id,
+            'access_token'   => (string) Str::uuid(),
+            'status'         => DocumentSignerStatus::Pending,
+            'signing_order'  => $this->signingWorkflow === Document::SIGNING_WORKFLOW_SEQUENTIAL
+                ? ($nextOrder > 0 ? $nextOrder : 1)
+                : null,
+            'expires_at' => null,
+        ]);
+
+        $this->ensureContactForSigner($document->user_id, $user->name, $normalizedEmail);
+        $this->forgetResolvedDocument();
+        $this->dispatch('document-updated');
+    }
+
     public function saveSigningWorkflow(): void
     {
         $document = $this->resolveDocument();
@@ -154,10 +285,6 @@ class DocumentSignersManager extends Component
         $this->authorize('update', $document);
 
         if ($document->status !== DocumentStatus::Draft) {
-            return;
-        }
-
-        if ($document->signingWorkflow() !== Document::SIGNING_WORKFLOW_SEQUENTIAL) {
             return;
         }
 
@@ -460,14 +587,27 @@ class DocumentSignersManager extends Component
             return;
         }
 
-        $document->documentSigners()
+        // Group signers by their current signing_order, then assign new contiguous
+        // group numbers (1, 2, 3…) while keeping all members of a group together.
+        // This preserves co-signers (multiple signers sharing one order step).
+        $signers = $document->documentSigners()
             ->orderBy('signing_order')
             ->orderBy('id')
-            ->get()
-            ->values()
-            ->each(function (DocumentSigner $signer, int $index): void {
-                $signer->update(['signing_order' => $index + 1]);
-            });
+            ->get();
+
+        $newOrder = 1;
+        $prevOrder = null;
+
+        foreach ($signers as $signer) {
+            $currentOrder = $signer->signing_order;
+
+            if ($prevOrder !== null && $currentOrder !== $prevOrder) {
+                $newOrder++;
+            }
+
+            $signer->update(['signing_order' => $newOrder]);
+            $prevOrder = $currentOrder;
+        }
     }
 
     private function allowedSigningMethods(): string

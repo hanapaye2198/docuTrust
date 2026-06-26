@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -37,6 +38,10 @@ class AddSecurityHeaders
             }
         }
 
+        foreach ($this->reverbOrigins() as $origin) {
+            $connectSrc .= " {$origin}";
+        }
+
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-XSS-Protection', '1; mode=block');
@@ -60,6 +65,7 @@ class AddSecurityHeaders
             'Content-Security-Policy',
             "default-src 'self'; ".
             "script-src {$scriptSrc}; ".
+            "worker-src 'self' blob:; ".
             "style-src {$styleSrc}; ".
             "img-src 'self' data: https://images.unsplash.com https://api.qrserver.com; ".
             "font-src {$fontSrc}; ".
@@ -87,6 +93,35 @@ class AddSecurityHeaders
     private function enotaryPermissionsPolicy(): string
     {
         return 'camera=(self "https://8x8.vc" "https://meet.jit.si"), microphone=(self "https://8x8.vc" "https://meet.jit.si"), display-capture=(self "https://8x8.vc" "https://meet.jit.si"), geolocation=(self)';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function reverbOrigins(): array
+    {
+        $host = (string) Config::get('broadcasting.connections.reverb.options.host');
+        $scheme = (string) Config::get('broadcasting.connections.reverb.options.scheme', 'https');
+        $port = (int) Config::get('broadcasting.connections.reverb.options.port', $scheme === 'https' ? 443 : 80);
+
+        if ($host === '') {
+            return [];
+        }
+
+        $httpOrigin = sprintf('%s://%s', $scheme, $host);
+        $wsScheme = $scheme === 'https' ? 'wss' : 'ws';
+        $wsOrigin = sprintf('%s://%s', $wsScheme, $host);
+        // Also allow the secure variant — pusher-js falls back to wss:// even
+        // when the configured scheme is http (e.g. dev with self-signed certs).
+        $wssOrigin = sprintf('wss://%s', $host);
+
+        if (($scheme === 'https' && $port !== 443) || ($scheme === 'http' && $port !== 80)) {
+            $httpOrigin .= ":{$port}";
+            $wsOrigin .= ":{$port}";
+            $wssOrigin .= ":{$port}";
+        }
+
+        return array_values(array_unique([$httpOrigin, $wsOrigin, $wssOrigin]));
     }
 
     /**
