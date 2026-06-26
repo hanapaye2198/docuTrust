@@ -15,6 +15,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class DocumentSignersManager extends Component
@@ -28,7 +29,7 @@ class DocumentSignersManager extends Component
 
     public string $email = '';
 
-    public string $signingMethod = SigningMethod::EmailLink->value;
+    public string $signingMethod = SigningMethod::AccountVerified->value;
 
     public string $roleType = TemplateRoleType::Signer->value;
 
@@ -44,7 +45,7 @@ class DocumentSignersManager extends Component
 
     public string $editingEmail = '';
 
-    public string $editingSigningMethod = SigningMethod::EmailLink->value;
+    public string $editingSigningMethod = SigningMethod::AccountVerified->value;
 
     public string $editingRoleType = TemplateRoleType::Signer->value;
 
@@ -52,6 +53,11 @@ class DocumentSignersManager extends Component
      * @var array<int, array{id: int, name: string, email: string}>
      */
     public array $contactSuggestions = [];
+
+    /**
+     * @var array<int, array{id: int, name: string, email: string}>
+     */
+    public array $verifiedContactSuggestions = [];
 
     public bool $suppressContactLookup = false;
 
@@ -129,9 +135,10 @@ class DocumentSignersManager extends Component
         $this->forgetResolvedDocument();
 
         $this->reset('name', 'email');
-        $this->signingMethod = SigningMethod::EmailLink->value;
+        $this->signingMethod = SigningMethod::AccountVerified->value;
         $this->roleType = TemplateRoleType::Signer->value;
         $this->contactSuggestions = [];
+        $this->verifiedContactSuggestions = [];
         $this->dispatch('document-updated');
     }
 
@@ -188,6 +195,7 @@ class DocumentSignersManager extends Component
         $this->signingMethod   = SigningMethod::EmailLink->value;
         $this->roleType        = TemplateRoleType::Signer->value;
         $this->contactSuggestions = [];
+        $this->verifiedContactSuggestions = [];
         $this->addingToOrder   = null;
         $this->dispatch('document-updated');
     }
@@ -196,7 +204,7 @@ class DocumentSignersManager extends Component
     {
         $this->addingToOrder = $order;
         $this->reset('name', 'email');
-        $this->signingMethod = SigningMethod::EmailLink->value;
+        $this->signingMethod = SigningMethod::AccountVerified->value;
         $this->roleType      = TemplateRoleType::Signer->value;
         $this->contactSuggestions = [];
     }
@@ -244,6 +252,55 @@ class DocumentSignersManager extends Component
                 ? ($nextOrder > 0 ? $nextOrder : 1)
                 : null,
             'expires_at' => null,
+        ]);
+
+        $this->ensureContactForSigner($document->user_id, $user->name, $normalizedEmail);
+        $this->forgetResolvedDocument();
+        $this->dispatch('document-updated');
+    }
+
+    /**
+     * Handle the 'add-verified-signer' event dispatched from the parent
+     * create page's Advanced Settings invite search.
+     */
+    #[On('add-verified-signer')]
+    public function addVerifiedSignerFromInvite(int $userId): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        if ($document->status !== DocumentStatus::Draft) {
+            return;
+        }
+
+        $user = User::query()
+            ->whereNotNull('email_verified_at')
+            ->findOrFail($userId);
+
+        $normalizedEmail = strtolower($user->email);
+
+        $exists = $document->documentSigners()
+            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
+            ->exists();
+
+        if ($exists) {
+            return; // silently skip — already a participant
+        }
+
+        $nextOrder = (int) $document->documentSigners()->max('signing_order') + 1;
+
+        $document->documentSigners()->create([
+            'role_type'      => TemplateRoleType::Signer,
+            'name'           => $user->name,
+            'email'          => $normalizedEmail,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id'        => $user->id,
+            'access_token'   => (string) Str::uuid(),
+            'status'         => DocumentSignerStatus::Pending,
+            'signing_order'  => $this->signingWorkflow === Document::SIGNING_WORKFLOW_SEQUENTIAL
+                ? ($nextOrder > 0 ? $nextOrder : 1)
+                : null,
+            'expires_at'     => null,
         ]);
 
         $this->ensureContactForSigner($document->user_id, $user->name, $normalizedEmail);
@@ -355,13 +412,19 @@ class DocumentSignersManager extends Component
         $this->dispatch('document-updated');
     }
 
+    public function updatedSigningMethod(): void
+    {
+        $this->verifiedContactSuggestions = [];
+        $this->contactSuggestions = [];
+    }
+
     public function updatedName(): void
     {
         if ($this->suppressContactLookup) {
             return;
         }
 
-        $this->refreshContactSuggestions();
+        $this->refreshVerifiedContactSuggestions();
     }
 
     public function updatedEmail(): void
@@ -370,7 +433,7 @@ class DocumentSignersManager extends Component
             return;
         }
 
-        $this->refreshContactSuggestions();
+        $this->refreshVerifiedContactSuggestions();
     }
 
     public function selectContact(int $contactId): void
@@ -391,6 +454,57 @@ class DocumentSignersManager extends Component
         } finally {
             $this->suppressContactLookup = false;
         }
+    }
+
+    public function selectVerifiedContact(int $userId): void
+    {
+        $document = $this->resolveDocument();
+        $this->authorize('update', $document);
+
+        $this->suppressContactLookup = true;
+
+        try {
+            $user = User::query()
+                ->whereNotNull('email_verified_at')
+                ->findOrFail($userId);
+
+            $this->verifiedContactSuggestions = [];
+            $this->name = $user->name;
+            $this->email = $user->email;
+            $this->signingMethod = SigningMethod::AccountVerified->value;
+        } finally {
+            $this->suppressContactLookup = false;
+        }
+    }
+
+    protected function refreshVerifiedContactSuggestions(): void
+    {
+        $term = trim($this->name) !== '' ? trim($this->name) : trim($this->email);
+
+        if (strlen($term) < 2) {
+            $this->verifiedContactSuggestions = [];
+
+            return;
+        }
+
+        $document = $this->resolveDocument();
+        $like = '%'.$term.'%';
+
+        $this->verifiedContactSuggestions = User::query()
+            ->whereNotNull('email_verified_at')
+            ->where(function ($q) use ($like): void {
+                $q->where('name', 'like', $like)
+                  ->orWhere('email', 'like', $like);
+            })
+            ->orderBy('name')
+            ->limit(8)
+            ->get()
+            ->map(fn (User $u) => [
+                'id'    => $u->id,
+                'name'  => $u->name,
+                'email' => $u->email,
+            ])
+            ->all();
     }
 
     /**
@@ -627,7 +741,6 @@ class DocumentSignersManager extends Component
         }
 
         return User::query()
-            ->where('organization_id', $document->organization_id)
             ->whereRaw('LOWER(email) = ?', [strtolower($email)])
             ->whereNotNull('email_verified_at')
             ->value('id');

@@ -2,6 +2,7 @@
 
 use App\Enums\DocumentStatus;
 use App\Models\Document;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -90,6 +91,41 @@ new #[Layout('components.layouts.app')] class extends Component {
         if ($this->savedDocumentId > 0 && trim($this->title) !== '') {
             Document::whereKey($this->savedDocumentId)->update(['title' => $this->title]);
         }
+    }
+
+    /**
+     * Search for verified DocuTrust users in the same organization.
+     * Called from Alpine.js in the Advanced Settings invite search.
+     *
+     * @return array<int, array{id: int, name: string, email: string}>
+     */
+    public function searchVerifiedUsersForInvite(string $term): array
+    {
+        if ($this->savedDocumentId === 0 || strlen(trim($term)) < 2) {
+            return [];
+        }
+
+        $doc = Document::findOrFail($this->savedDocumentId);
+        $this->authorize('update', $doc);
+
+        $like = '%'.trim($term).'%';
+
+        return User::query()
+            ->whereNotNull('email_verified_at')
+            ->where(function ($q) use ($like): void {
+                $q->where('name', 'like', $like)
+                  ->orWhere('email', 'like', $like);
+            })
+            ->orderBy('name')
+            ->limit(8)
+            ->get()
+            ->map(fn (User $u) => [
+                'id'    => $u->id,
+                'name'  => $u->name,
+                'email' => $u->email,
+            ])
+            ->values()
+            ->all();
     }
 
     public function goToCanvas(): void
@@ -219,6 +255,17 @@ new #[Layout('components.layouts.app')] class extends Component {
                     </div>
                 @endif
 
+                {{-- Template shortcut --}}
+                @if (! $documentSaved)
+                    <p class="text-center text-xs text-zinc-400 dark:text-zinc-500">
+                        {{ __('Have a template?') }}
+                        <a href="{{ route('templates.index') }}" wire:navigate
+                           class="font-medium text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300">
+                            {{ __('Start from a template →') }}
+                        </a>
+                    </p>
+                @endif
+
                 {{-- Uploaded file row --}}
                 @if ($documentSaved)
                     <div class="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800/40">
@@ -335,6 +382,117 @@ new #[Layout('components.layouts.app')] class extends Component {
                             <flux:textarea wire:model="emailMessage" rows="3"
                                 placeholder="{{ __('Email message (optional)') }}" />
                             <flux:error name="emailMessage" />
+
+                            {{-- Invite verified DocuTrust accounts --}}
+                            <div>
+                                <p class="mb-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Invite verified accounts') }}</p>
+
+                                @if ($documentSaved)
+                                    <div x-data="{
+                                        term: '',
+                                        results: [],
+                                        selected: [],
+                                        loading: false,
+                                        focused: false,
+                                        async search() {
+                                            if (this.term.length < 2) { this.results = []; return; }
+                                            this.loading = true;
+                                            try {
+                                                const res = await $wire.searchVerifiedUsersForInvite(this.term);
+                                                const selectedIds = this.selected.map(s => s.id);
+                                                this.results = (res ?? []).filter(u => !selectedIds.includes(u.id));
+                                            } finally { this.loading = false; }
+                                        },
+                                        pick(user) {
+                                            this.selected.push(user);
+                                            $wire.dispatch('add-verified-signer', { userId: user.id });
+                                            this.term = '';
+                                            this.results = [];
+                                            $nextTick(() => this.$refs.searchInput.focus());
+                                        },
+                                        remove(userId) {
+                                            this.selected = this.selected.filter(s => s.id !== userId);
+                                        }
+                                    }" class="relative">
+
+                                        {{-- Input box with chips --}}
+                                        <div
+                                            @click="$refs.searchInput.focus()"
+                                            :class="focused ? 'ring-2 ring-teal-500 border-teal-500' : 'border-zinc-200 dark:border-zinc-700'"
+                                            class="flex min-h-[42px] cursor-text flex-wrap items-center gap-1.5 rounded-xl border bg-white px-3 py-2 transition dark:bg-zinc-900">
+
+                                            {{-- Selected chips --}}
+                                            <template x-for="user in selected" :key="user.id">
+                                                <span class="inline-flex items-center gap-1 rounded-full bg-teal-100 py-0.5 pl-2 pr-1 text-xs font-medium text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
+                                                    <span x-text="user.name"></span>
+                                                    <button type="button"
+                                                        @click.stop="remove(user.id)"
+                                                        class="flex h-4 w-4 items-center justify-center rounded-full hover:bg-teal-200 dark:hover:bg-teal-800">
+                                                        <svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+                                                        </svg>
+                                                    </button>
+                                                </span>
+                                            </template>
+
+                                            {{-- Search input --}}
+                                            <input
+                                                x-ref="searchInput"
+                                                type="text"
+                                                x-model="term"
+                                                @input.debounce.300ms="search()"
+                                                @focus="focused = true"
+                                                @blur="focused = false; setTimeout(() => results = [], 200)"
+                                                placeholder="{{ __('Search name or email…') }}"
+                                                class="min-w-[140px] flex-1 bg-transparent text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+                                            />
+
+                                            <svg x-show="loading" class="h-4 w-4 shrink-0 animate-spin text-teal-500" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                            </svg>
+                                        </div>
+
+                                        {{-- Dropdown results --}}
+                                        <ul x-show="results.length > 0" x-transition
+                                            class="absolute left-0 right-0 top-full z-30 mt-1 max-h-56 overflow-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+                                            role="listbox">
+                                            <template x-for="user in results" :key="user.id">
+                                                <li>
+                                                    <button type="button"
+                                                        @mousedown.prevent="pick(user)"
+                                                        class="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-teal-50 dark:hover:bg-teal-900/20">
+                                                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-sm font-bold uppercase text-teal-700 dark:bg-teal-900/40 dark:text-teal-300"
+                                                            x-text="user.name.charAt(0)"></span>
+                                                        <div class="min-w-0 flex-1">
+                                                            <p class="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50" x-text="user.name"></p>
+                                                            <p class="truncate text-xs text-zinc-500 dark:text-zinc-400" x-text="user.email"></p>
+                                                        </div>
+                                                        <span class="flex shrink-0 items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
+                                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75"/>
+                                                            </svg>
+                                                            {{ __('Verified') }}
+                                                        </span>
+                                                    </button>
+                                                </li>
+                                            </template>
+                                        </ul>
+
+                                        <p x-show="term.length >= 2 && results.length === 0 && !loading"
+                                           class="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">
+                                            {{ __('No verified accounts found.') }}
+                                        </p>
+                                    </div>
+                                @else
+                                    <div class="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800/50">
+                                        <svg class="h-4 w-4 shrink-0 text-zinc-300 dark:text-zinc-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
+                                        </svg>
+                                        <span class="text-sm text-zinc-400 dark:text-zinc-500">{{ __('Upload a document first to search verified accounts.') }}</span>
+                                    </div>
+                                @endif
+                            </div>
                         </div>
 
                         {{-- Audit trail --}}

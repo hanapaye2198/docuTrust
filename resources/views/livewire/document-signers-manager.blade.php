@@ -249,34 +249,55 @@
 
         {{-- ── Add participant form ── --}}
         <form wire:submit="addSigner" class="space-y-2">
-            <div class="grid gap-2 sm:grid-cols-3">
-                <flux:input
-                    wire:model.live.debounce.300ms="name"
-                    type="text"
-                    autocomplete="off"
-                    placeholder="{{ __('Name') }}"
-                    required
-                />
-                <flux:input
-                    wire:model.blur="email"
-                    type="email"
-                    autocomplete="off"
-                    placeholder="{{ __('Email') }}"
-                    x-on:blur="
-                        const n = $wire.name.trim();
-                        const e = $wire.email.trim();
-                        if (n && e && e.includes('@')) {
-                            $wire.call('addSigner');
-                        }
-                    "
-                    required
-                />
-                <flux:select wire:model="roleType">
-                    <option value="{{ \App\Enums\TemplateRoleType::Signer->value }}">{{ __('Signer') }}</option>
-                    <option value="{{ \App\Enums\TemplateRoleType::Approver->value }}">{{ __('Approver') }}</option>
-                    <option value="{{ \App\Enums\TemplateRoleType::Recipient->value }}">{{ __('Recipient') }}</option>
-                </flux:select>
+
+            <div class="relative">
+                <div class="grid gap-2 sm:grid-cols-3">
+                    <flux:input
+                        wire:model.live.debounce.300ms="name"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="{{ __('Name') }}"
+                        required
+                    />
+                    <flux:input
+                        wire:model.live.debounce.300ms="email"
+                        type="email"
+                        autocomplete="off"
+                        placeholder="{{ __('DocuTrust email') }}"
+                        required
+                    />
+                    <flux:select wire:model="roleType">
+                        <option value="{{ \App\Enums\TemplateRoleType::Signer->value }}">{{ __('Signer') }}</option>
+                        <option value="{{ \App\Enums\TemplateRoleType::Approver->value }}">{{ __('Approver') }}</option>
+                        <option value="{{ \App\Enums\TemplateRoleType::Recipient->value }}">{{ __('Recipient') }}</option>
+                    </flux:select>
+                </div>
+
+                {{-- Verified user autocomplete (always active) --}}
+                @if (count($verifiedContactSuggestions) > 0)
+                    <ul class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-xl border border-teal-200 bg-white py-1 text-sm shadow-lg dark:border-teal-800 dark:bg-zinc-900" role="listbox">
+                        @foreach ($verifiedContactSuggestions as $suggestion)
+                            <li wire:key="vc-{{ $suggestion['id'] }}">
+                                <button type="button"
+                                    class="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-teal-50 dark:hover:bg-teal-900/20"
+                                    wire:click="selectVerifiedContact({{ $suggestion['id'] }})">
+                                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold uppercase text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
+                                        {{ mb_substr($suggestion['name'], 0, 1) }}
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="truncate font-medium text-zinc-900 dark:text-zinc-50">{{ $suggestion['name'] }}</p>
+                                        <p class="truncate text-xs text-zinc-500 dark:text-zinc-400">{{ $suggestion['email'] }}</p>
+                                    </div>
+                                    <span class="ml-auto shrink-0 rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
+                                        {{ __('Verified') }}
+                                    </span>
+                                </button>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
             </div>
+
             <flux:error name="name" />
             <flux:error name="email" />
             <flux:error name="roleType" />
