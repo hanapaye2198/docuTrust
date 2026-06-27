@@ -67,6 +67,10 @@ class SignDocumentController extends Controller
 
     public function showAuthenticated(int $signerId): View|Response|RedirectResponse
     {
+        if (! Auth::check()) {
+            return redirect()->guest(route('login'));
+        }
+
         $signer = $this->resolveAuthenticatedSigner($signerId, $this->signerDetailRelations());
 
         return $this->renderSignView($signer, true);
