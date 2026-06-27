@@ -16,7 +16,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         $userId = Auth::id();
 
         $requests = DocumentSigner::query()
-            ->with(['document.user', 'document.documentSigners'])
+            ->with(['document.user'])
             ->where('user_id', $userId)
             ->whereHas('document', fn ($q) => $q->whereIn('status', [
                 DocumentStatus::Pending,

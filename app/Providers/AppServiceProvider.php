@@ -160,9 +160,13 @@ class AppServiceProvider extends ServiceProvider
 
             try {
                 event(new SignerSessionUpdated($signer));
-            } catch (\Throwable) {
-                // Broadcasting is best-effort — a missing Reverb server must not
-                // interrupt the signing workflow or crash the request.
+            } catch (\Illuminate\Broadcasting\BroadcastException|\RuntimeException $e) {
+                // Broadcasting is best-effort — a missing or unreachable Reverb
+                // server must not interrupt the signing workflow.
+                \Illuminate\Support\Facades\Log::warning('Broadcast failed for signer session', [
+                    'signer_id' => $signer->id,
+                    'error'     => $e->getMessage(),
+                ]);
             }
         }
     }

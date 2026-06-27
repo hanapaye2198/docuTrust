@@ -52,11 +52,6 @@ class DocumentSignersManager extends Component
     /**
      * @var array<int, array{id: int, name: string, email: string}>
      */
-    public array $contactSuggestions = [];
-
-    /**
-     * @var array<int, array{id: int, name: string, email: string}>
-     */
     public array $verifiedContactSuggestions = [];
 
     public bool $suppressContactLookup = false;
@@ -137,7 +132,6 @@ class DocumentSignersManager extends Component
         $this->reset('name', 'email');
         $this->signingMethod = SigningMethod::AccountVerified->value;
         $this->roleType = TemplateRoleType::Signer->value;
-        $this->contactSuggestions = [];
         $this->verifiedContactSuggestions = [];
         $this->dispatch('document-updated');
     }
@@ -192,9 +186,8 @@ class DocumentSignersManager extends Component
         $this->ensureContactForSigner($document->user_id, $validated['name'], $normalizedEmail);
         $this->forgetResolvedDocument();
         $this->reset('name', 'email');
-        $this->signingMethod   = SigningMethod::EmailLink->value;
+        $this->signingMethod   = SigningMethod::AccountVerified->value;
         $this->roleType        = TemplateRoleType::Signer->value;
-        $this->contactSuggestions = [];
         $this->verifiedContactSuggestions = [];
         $this->addingToOrder   = null;
         $this->dispatch('document-updated');
@@ -206,14 +199,12 @@ class DocumentSignersManager extends Component
         $this->reset('name', 'email');
         $this->signingMethod = SigningMethod::AccountVerified->value;
         $this->roleType      = TemplateRoleType::Signer->value;
-        $this->contactSuggestions = [];
     }
 
     public function cancelAddingToOrder(): void
     {
         $this->addingToOrder = null;
         $this->reset('name', 'email');
-        $this->contactSuggestions = [];
     }
 
     public function includeMe(): void
@@ -415,7 +406,6 @@ class DocumentSignersManager extends Component
     public function updatedSigningMethod(): void
     {
         $this->verifiedContactSuggestions = [];
-        $this->contactSuggestions = [];
     }
 
     public function updatedName(): void
@@ -434,26 +424,6 @@ class DocumentSignersManager extends Component
         }
 
         $this->refreshVerifiedContactSuggestions();
-    }
-
-    public function selectContact(int $contactId): void
-    {
-        $document = $this->resolveDocument();
-        $this->authorize('update', $document);
-
-        $this->suppressContactLookup = true;
-
-        try {
-            $contact = Contact::query()
-                ->where('user_id', $document->user_id)
-                ->findOrFail($contactId);
-
-            $this->contactSuggestions = [];
-            $this->name = $contact->name;
-            $this->email = $contact->email;
-        } finally {
-            $this->suppressContactLookup = false;
-        }
     }
 
     public function selectVerifiedContact(int $userId): void
@@ -530,37 +500,6 @@ class DocumentSignersManager extends Component
             'phone' => null,
             'company' => null,
         ]);
-    }
-
-    protected function refreshContactSuggestions(): void
-    {
-        $term = trim($this->name) !== '' ? trim($this->name) : trim($this->email);
-
-        if (strlen($term) < 2) {
-            $this->contactSuggestions = [];
-
-            return;
-        }
-
-        $document = $this->resolveDocument();
-
-        $like = '%'.$term.'%';
-
-        $this->contactSuggestions = Contact::query()
-            ->where('user_id', $document->user_id)
-            ->where(function ($query) use ($like): void {
-                $query->where('name', 'like', $like)
-                    ->orWhere('email', 'like', $like);
-            })
-            ->orderBy('name')
-            ->limit(8)
-            ->get()
-            ->map(fn (Contact $contact) => [
-                'id' => $contact->id,
-                'name' => $contact->name,
-                'email' => $contact->email,
-            ])
-            ->all();
     }
 
     public function removeSigner(int $signerId): void
@@ -715,6 +654,14 @@ class DocumentSignersManager extends Component
 
         foreach ($signers as $signer) {
             $currentOrder = $signer->signing_order;
+
+            // Null signing_order signers (e.g. after parallel→sequential transition)
+            // each get their own isolated order slot so they never collapse into group 1.
+            if ($currentOrder === null) {
+                $signer->update(['signing_order' => $newOrder++]);
+                $prevOrder = null;
+                continue;
+            }
 
             if ($prevOrder !== null && $currentOrder !== $prevOrder) {
                 $newOrder++;
