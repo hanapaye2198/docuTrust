@@ -34,6 +34,16 @@ class DocumentSignerAccountSeeder extends Seeder
             'name' => 'Doc Signer Two',
             'mobile' => '+639171000102',
         ],
+        [
+            'email' => 'hannah18.panaligan@gmail.com',
+            'name' => 'Hannah Panaligan',
+            'mobile' => '+639171000103',
+        ],
+        [
+            'email' => 'arniansd2nd@gmail.com',
+            'name' => 'Arnians D2nd',
+            'mobile' => '+639171000104',
+        ],
     ];
 
     public function run(): void
