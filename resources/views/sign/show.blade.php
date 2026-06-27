@@ -85,7 +85,7 @@
 @endphp
 
 <x-layouts.guest-simple>
-    <div class="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:py-12">
+    <div class="flex min-h-screen flex-col gap-6 px-4 py-6 sm:px-6 lg:px-10">
 
         {{-- ── Top bar ── --}}
         <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -339,7 +339,7 @@
                 </p>
             @endif
 
-            <div class="ui-panel overflow-auto rounded-3xl p-5 sm:p-6">
+            <div class="ui-panel overflow-auto rounded-2xl p-4 sm:p-5">
                 {{-- Toolbar row --}}
                 <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     {{-- Page navigation --}}
@@ -379,7 +379,7 @@
                 </p>
                 <div
                     id="pdf-shell"
-                    class="relative inline-block min-h-[200px] min-w-[200px] overflow-hidden rounded-xl shadow-xl shadow-zinc-950/15 ring-1 ring-zinc-300/70 dark:shadow-black/50 dark:ring-zinc-600/80"
+                    class="relative block w-full min-h-[200px] overflow-hidden rounded-xl shadow-xl shadow-zinc-950/15 ring-1 ring-zinc-300/70 dark:shadow-black/50 dark:ring-zinc-600/80"
                 >
                     <div
                         id="pdf-loading-indicator"
