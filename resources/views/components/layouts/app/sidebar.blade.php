@@ -1,9 +1,20 @@
 @php
+    use App\Enums\DocumentSignerStatus;
+    use App\Enums\DocumentStatus;
+    use App\Enums\SigningMethod;
     use App\Enums\UserRole;
+    use App\Models\DocumentSigner;
     use App\Services\TrustProfile\TrustProfileService;
     $navRole = auth()->user()->role;
     $navUser = auth()->user();
     $navRoleLabel = app(TrustProfileService::class)->summary($navUser)['role_label'];
+
+    // Count pending sign requests for the current user
+    $pendingSignRequestCount = DocumentSigner::query()
+        ->where('user_id', $navUser->id)
+        ->where('status', DocumentSignerStatus::Pending)
+        ->whereHas('document', fn ($q) => $q->where('status', DocumentStatus::Pending))
+        ->count();
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -247,6 +258,26 @@
                         :tooltip="__('Documents')"
                         wire:navigate
                     >{{ __('Documents') }}</flux:sidebar.item>
+
+                    {{-- Sign Requests — only shown when user has pending signatures --}}
+                    @if ($pendingSignRequestCount > 0 || request()->routeIs('sign-requests.*'))
+                        <flux:sidebar.item
+                            icon="pencil-square"
+                            :href="route('sign-requests.index')"
+                            :current="request()->routeIs('sign-requests.*')"
+                            :tooltip="__('Sign Requests')"
+                            wire:navigate
+                        >
+                            <span class="flex w-full items-center justify-between">
+                                {{ __('Sign Requests') }}
+                                @if ($pendingSignRequestCount > 0)
+                                    <span class="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-teal-500 px-1.5 text-[10px] font-bold text-white">
+                                        {{ $pendingSignRequestCount > 99 ? '99+' : $pendingSignRequestCount }}
+                                    </span>
+                                @endif
+                            </span>
+                        </flux:sidebar.item>
+                    @endif
 
                     <flux:sidebar.item
                         icon="user-group"

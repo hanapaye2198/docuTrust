@@ -205,6 +205,7 @@ Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(funct
 
         Volt::route('documents', 'documents.index')->name('documents.index');
         Volt::route('documents/create', 'documents.create')->name('documents.create');
+        Volt::route('sign-requests', 'sign-requests.index')->name('sign-requests.index');
         Volt::route('documents/{document}', 'documents.show')->name('documents.show');
 
         Route::get('documents/{document}/stream', DocumentStreamController::class)->name('documents.stream');
