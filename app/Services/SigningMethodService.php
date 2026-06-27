@@ -36,7 +36,10 @@ class SigningMethodService
     public function signerEntryUrl(DocumentSigner $signer): string
     {
         return match ($signer->signingMethod()) {
-            SigningMethod::AccountVerified => route('sign.account.show', ['signerId' => $signer->id]),
+            // AccountVerified signers log into their own DocuTrust account.
+            // The email just points them to the app — the dashboard notifies
+            // them of pending documents once they are logged in.
+            SigningMethod::AccountVerified => rtrim((string) config('app.url'), '/'),
             default => route('sign.show', $this->publicSigningToken($signer)),
         };
     }

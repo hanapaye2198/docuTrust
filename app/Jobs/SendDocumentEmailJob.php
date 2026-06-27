@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\SigningMethod;
 use App\Mail\DocumentCompletedMail;
 use App\Mail\DocumentSignedMail;
 use App\Mail\NotaryDocumentSignerSignedMail;
@@ -65,6 +66,7 @@ class SendDocumentEmailJob implements ShouldQueue
                         customSubject: $document->email_subject,
                         customMessage: $document->email_message,
                         participantRoleType: $signer->roleType()->value,
+                        isAccountVerified: $signer->signingMethod() === SigningMethod::AccountVerified,
                     )
                 );
 

@@ -29,6 +29,22 @@ class DocumentNotificationService
 
         foreach ($document->documentSigners as $signer) {
             $this->sendSignerInvitationIfEligible($document, $signer);
+
+            // For AccountVerified signers who have a linked user account,
+            // create an in-app notification so they see a prompt on login.
+            if ($signer->signingMethod() === SigningMethod::AccountVerified
+                && $signer->user_id !== null
+                && $signer->requiresAction()
+            ) {
+                $this->createInAppNotification(
+                    $signer->user_id,
+                    'document.sign_requested',
+                    __(':sender requests your signature on ":title". Open your documents to sign.', [
+                        'sender' => $document->user?->name ?? __('Someone'),
+                        'title'  => $document->title,
+                    ])
+                );
+            }
         }
 
         $this->createInAppNotification(

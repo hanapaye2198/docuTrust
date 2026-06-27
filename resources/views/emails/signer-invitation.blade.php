@@ -15,30 +15,69 @@
                 </tr>
                 <tr>
                     <td style="padding:24px;">
-                        <p style="margin:0 0 12px 0;font-size:18px;font-weight:700;">{{ $participantRoleType === 'approver' ? __('You are invited to approve a document') : __('You are invited to sign a document') }}</p>
-                        <p style="margin:0 0 8px 0;font-size:14px;color:#4b5563;">{{ __('Document: :title', ['title' => $documentTitle]) }}</p>
-                        <p style="margin:0 0 20px 0;font-size:14px;color:#4b5563;">{{ __('Sent by: :name', ['name' => $senderName]) }}</p>
-                        @if (is_string($customMessage) && trim($customMessage) !== '')
-                            <div style="margin:0 0 20px 0;padding:14px 16px;border-radius:10px;background:#f8fafc;border:1px solid #e5e7eb;font-size:14px;line-height:1.6;color:#334155;">{!! nl2br(e($customMessage)) !!}</div>
-                        @endif
-                        <p style="margin:0 0 20px 0;">
-                            <a href="{{ $signUrl }}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:700;">{{ $participantRoleType === 'approver' ? __('Review and Approve Securely') : __('Review and Sign Securely') }}</a>
-                        </p>
-                        @if ($requiresDocumentPassword)
-                            <div style="margin:0 0 20px 0;padding:14px 16px;border-radius:10px;background:#fff7ed;border:1px solid #fdba74;">
-                                <p style="margin:0 0 8px 0;font-size:13px;font-weight:700;color:#9a3412;">{{ __('This document requires a password before you can view or sign it.') }}</p>
-                                @if (is_string($documentPasswordHint) && $documentPasswordHint !== '')
-                                    <p style="margin:0;font-size:13px;color:#7c2d12;">{{ __('Password hint: :hint', ['hint' => $documentPasswordHint]) }}</p>
-                                @else
-                                    <p style="margin:0;font-size:13px;color:#7c2d12;">{{ __('Ask the sender for the document password if it was not shared with you separately.') }}</p>
-                                @endif
+
+                        @if ($isAccountVerified)
+                            {{-- Account-verified flow: simple notification, no token link --}}
+                            <p style="margin:0 0 12px 0;font-size:18px;font-weight:700;">
+                                {{ $participantRoleType === 'approver' ? __('You have a document waiting for your approval') : __('You have a document waiting for your signature') }}
+                            </p>
+                            <p style="margin:0 0 8px 0;font-size:14px;color:#4b5563;">{{ __('Document: :title', ['title' => $documentTitle]) }}</p>
+                            <p style="margin:0 0 20px 0;font-size:14px;color:#4b5563;">{{ __('Sent by: :name', ['name' => $senderName]) }}</p>
+
+                            @if (is_string($customMessage) && trim($customMessage) !== '')
+                                <div style="margin:0 0 20px 0;padding:14px 16px;border-radius:10px;background:#f8fafc;border:1px solid #e5e7eb;font-size:14px;line-height:1.6;color:#334155;">{!! nl2br(e($customMessage)) !!}</div>
+                            @endif
+
+                            {{-- Account-verified call to action --}}
+                            <div style="margin:0 0 20px 0;padding:16px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;">
+                                <p style="margin:0 0 8px 0;font-size:14px;font-weight:700;color:#166534;">{{ __('How to sign this document:') }}</p>
+                                <ol style="margin:0;padding-left:18px;font-size:14px;color:#15803d;line-height:1.8;">
+                                    <li>{{ __('Open your DocuTrust account') }}</li>
+                                    <li>{{ __('You will see a notification for this document') }}</li>
+                                    <li>{{ __('Click on it to review and sign') }}</li>
+                                </ol>
                             </div>
+
+                            <p style="margin:0 0 20px 0;">
+                                <a href="{{ $signUrl }}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:700;font-size:15px;">
+                                    {{ __('Open DocuTrust') }}
+                                </a>
+                            </p>
+
+                            <p style="margin:0;font-size:13px;color:#4b5563;">{{ __('Use your DocuTrust account to sign this document. Sign in if you are not already logged in.') }}</p>
+
+                        @else
+                            {{-- Email-link flow: direct token link --}}
+                            <p style="margin:0 0 12px 0;font-size:18px;font-weight:700;">{{ $participantRoleType === 'approver' ? __('You are invited to approve a document') : __('You are invited to sign a document') }}</p>
+                            <p style="margin:0 0 8px 0;font-size:14px;color:#4b5563;">{{ __('Document: :title', ['title' => $documentTitle]) }}</p>
+                            <p style="margin:0 0 20px 0;font-size:14px;color:#4b5563;">{{ __('Sent by: :name', ['name' => $senderName]) }}</p>
+
+                            @if (is_string($customMessage) && trim($customMessage) !== '')
+                                <div style="margin:0 0 20px 0;padding:14px 16px;border-radius:10px;background:#f8fafc;border:1px solid #e5e7eb;font-size:14px;line-height:1.6;color:#334155;">{!! nl2br(e($customMessage)) !!}</div>
+                            @endif
+
+                            <p style="margin:0 0 20px 0;">
+                                <a href="{{ $signUrl }}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:700;">{{ $participantRoleType === 'approver' ? __('Review and Approve Securely') : __('Review and Sign Securely') }}</a>
+                            </p>
+
+                            @if ($requiresDocumentPassword)
+                                <div style="margin:0 0 20px 0;padding:14px 16px;border-radius:10px;background:#fff7ed;border:1px solid #fdba74;">
+                                    <p style="margin:0 0 8px 0;font-size:13px;font-weight:700;color:#9a3412;">{{ __('This document requires a password before you can view or sign it.') }}</p>
+                                    @if (is_string($documentPasswordHint) && $documentPasswordHint !== '')
+                                        <p style="margin:0;font-size:13px;color:#7c2d12;">{{ __('Password hint: :hint', ['hint' => $documentPasswordHint]) }}</p>
+                                    @else
+                                        <p style="margin:0;font-size:13px;color:#7c2d12;">{{ __('Ask the sender for the document password if it was not shared with you separately.') }}</p>
+                                    @endif
+                                </div>
+                            @endif
+
+                            <p style="margin:0 0 8px 0;font-size:13px;color:#4b5563;">{{ __('Expiration notice: this secure signing link may expire based on sender settings.') }}</p>
+                            @if ($expiresAt)
+                                <p style="margin:0 0 8px 0;font-size:13px;color:#4b5563;">{{ __('Link expiration: :date', ['date' => $expiresAt]) }}</p>
+                            @endif
+                            <p style="margin:0;font-size:13px;color:#4b5563;">{{ __('Security note: access this document only from trusted devices and networks.') }}</p>
                         @endif
-                        <p style="margin:0 0 8px 0;font-size:13px;color:#4b5563;">{{ __('Expiration notice: this secure signing link may expire based on sender settings.') }}</p>
-                        @if ($expiresAt)
-                            <p style="margin:0 0 8px 0;font-size:13px;color:#4b5563;">{{ __('Link expiration: :date', ['date' => $expiresAt]) }}</p>
-                        @endif
-                        <p style="margin:0;font-size:13px;color:#4b5563;">{{ __('Security note: access this document only from trusted devices and networks.') }}</p>
+
                     </td>
                 </tr>
                 <tr>
