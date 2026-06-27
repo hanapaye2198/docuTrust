@@ -2,6 +2,8 @@
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\SigningMethod;
+use App\Enums\TemplateRoleType;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\SignerCertificate;
@@ -47,9 +49,16 @@ new #[Layout('components.layouts.app')] class extends Component {
      * @return array{
      *   total_documents: int,
      *   by_status: array<string, int>,
+     *   signer_statuses: array<string, int>,
+     *   signer_roles: array<string, int>,
+     *   signing_methods: array<string, int>,
      *   total_signers: int,
      *   signed_signers: int,
-     *   pending_signers: int
+     *   approved_signers: int,
+     *   pending_signers: int,
+     *   notified_signers: int,
+     *   expiring_links: int,
+     *   expired_links: int
      * }
      */
     private function cachedDashboardStats(): array
@@ -73,9 +82,48 @@ new #[Layout('components.layouts.app')] class extends Component {
                 ->groupBy('status')
                 ->pluck('aggregate', 'status');
 
+            $roleCounts = DocumentSigner::query()
+                ->when(! $global, fn ($query) => $query->whereHas(
+                    'document',
+                    fn ($documentQuery) => $documentQuery->where('organization_id', $organizationId)
+                ))
+                ->selectRaw('role_type, COUNT(*) as aggregate')
+                ->groupBy('role_type')
+                ->pluck('aggregate', 'role_type');
+
+            $methodCounts = DocumentSigner::query()
+                ->when(! $global, fn ($query) => $query->whereHas(
+                    'document',
+                    fn ($documentQuery) => $documentQuery->where('organization_id', $organizationId)
+                ))
+                ->selectRaw('signing_method, COUNT(*) as aggregate')
+                ->groupBy('signing_method')
+                ->pluck('aggregate', 'signing_method');
+
+            $expiringLinks = DocumentSigner::query()
+                ->when(! $global, fn ($query) => $query->whereHas(
+                    'document',
+                    fn ($documentQuery) => $documentQuery->where('organization_id', $organizationId)
+                ))
+                ->whereIn('status', [DocumentSignerStatus::Pending, DocumentSignerStatus::Notified])
+                ->whereBetween('expires_at', [now(), now()->addDays(2)])
+                ->count();
+
+            $expiredLinks = DocumentSigner::query()
+                ->when(! $global, fn ($query) => $query->whereHas(
+                    'document',
+                    fn ($documentQuery) => $documentQuery->where('organization_id', $organizationId)
+                ))
+                ->whereIn('status', [DocumentSignerStatus::Pending, DocumentSignerStatus::Notified])
+                ->whereNotNull('expires_at')
+                ->where('expires_at', '<', now())
+                ->count();
+
             $totalDocuments = (int) $statusCounts->sum();
             $pendingSigners = (int) ($signerCounts[DocumentSignerStatus::Pending->value] ?? 0);
+            $notifiedSigners = (int) ($signerCounts[DocumentSignerStatus::Notified->value] ?? 0);
             $signedSigners = (int) ($signerCounts[DocumentSignerStatus::Signed->value] ?? 0);
+            $approvedSigners = (int) ($signerCounts[DocumentSignerStatus::Approved->value] ?? 0);
 
             return [
                 'total_documents' => $totalDocuments,
@@ -87,9 +135,29 @@ new #[Layout('components.layouts.app')] class extends Component {
                     DocumentStatus::Cancelled->value => (int) ($statusCounts[DocumentStatus::Cancelled->value] ?? 0),
                     DocumentStatus::Archived->value => (int) ($statusCounts[DocumentStatus::Archived->value] ?? 0),
                 ],
-                'total_signers' => $pendingSigners + $signedSigners,
+                'signer_statuses' => [
+                    DocumentSignerStatus::Pending->value => $pendingSigners,
+                    DocumentSignerStatus::Notified->value => $notifiedSigners,
+                    DocumentSignerStatus::Signed->value => $signedSigners,
+                    DocumentSignerStatus::Approved->value => $approvedSigners,
+                ],
+                'signer_roles' => [
+                    TemplateRoleType::Signer->value => (int) ($roleCounts[TemplateRoleType::Signer->value] ?? 0),
+                    TemplateRoleType::Approver->value => (int) ($roleCounts[TemplateRoleType::Approver->value] ?? 0),
+                    TemplateRoleType::Recipient->value => (int) ($roleCounts[TemplateRoleType::Recipient->value] ?? 0),
+                ],
+                'signing_methods' => [
+                    SigningMethod::EmailLink->value => (int) ($methodCounts[SigningMethod::EmailLink->value] ?? 0),
+                    SigningMethod::AccountVerified->value => (int) ($methodCounts[SigningMethod::AccountVerified->value] ?? 0),
+                    SigningMethod::PkiCertificate->value => (int) ($methodCounts[SigningMethod::PkiCertificate->value] ?? 0),
+                ],
+                'total_signers' => (int) $signerCounts->sum(),
                 'signed_signers' => $signedSigners,
+                'approved_signers' => $approvedSigners,
                 'pending_signers' => $pendingSigners,
+                'notified_signers' => $notifiedSigners,
+                'expiring_links' => $expiringLinks,
+                'expired_links' => $expiredLinks,
             ];
         });
     }
@@ -198,6 +266,52 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 
     #[Computed]
+    public function notifiedSigners(): int
+    {
+        return $this->cachedDashboardStats()['notified_signers'];
+    }
+
+    #[Computed]
+    public function approvedSigners(): int
+    {
+        return $this->cachedDashboardStats()['approved_signers'];
+    }
+
+    #[Computed]
+    public function actionableSigners(): int
+    {
+        return $this->pendingSigners + $this->notifiedSigners;
+    }
+
+    #[Computed]
+    public function expiringLinks(): int
+    {
+        return $this->cachedDashboardStats()['expiring_links'];
+    }
+
+    #[Computed]
+    public function expiredLinks(): int
+    {
+        return $this->cachedDashboardStats()['expired_links'];
+    }
+
+    #[Computed]
+    public function pendingApprovers(): int
+    {
+        $roles = $this->cachedDashboardStats()['signer_roles'];
+
+        if (($roles[TemplateRoleType::Approver->value] ?? 0) === 0) {
+            return 0;
+        }
+
+        return DocumentSigner::query()
+            ->where('role_type', TemplateRoleType::Approver)
+            ->whereIn('status', [DocumentSignerStatus::Pending, DocumentSignerStatus::Notified])
+            ->whereHas('document', fn ($query) => $this->scopeDocumentRelationQuery($query))
+            ->count();
+    }
+
+    #[Computed]
     public function declinedDocuments(): int
     {
         return $this->cachedDashboardStats()['by_status'][DocumentStatus::Declined->value];
@@ -259,6 +373,64 @@ new #[Layout('components.layouts.app')] class extends Component {
         ];
     }
 
+    /**
+     * @return array{labels: list<string>, values: list<int>, colors: list<string>}
+     */
+    #[Computed]
+    public function signingMethodChartPayload(): array
+    {
+        $methods = $this->cachedDashboardStats()['signing_methods'];
+
+        return [
+            'labels' => [
+                __('Email link'),
+                __('Account verified'),
+                __('PKI certificate'),
+            ],
+            'values' => [
+                $methods[SigningMethod::EmailLink->value] ?? 0,
+                $methods[SigningMethod::AccountVerified->value] ?? 0,
+                $methods[SigningMethod::PkiCertificate->value] ?? 0,
+            ],
+            'colors' => ['#6366f1', '#14b8a6', '#f59e0b'],
+        ];
+    }
+
+    /**
+     * @return array{labels: list<string>, completedValues: list<int>, pendingValues: list<int>}
+     */
+    #[Computed]
+    public function signerTrendChartPayload(): array
+    {
+        $now = now();
+        $labels = [];
+        $completedValues = [];
+        $pendingValues = [];
+
+        for ($i = 5; $i >= 0; $i--) {
+            $week = $now->copy()->startOfWeek()->subWeeks($i);
+            $labels[] = $week->format('M j');
+
+            $completedValues[] = DocumentSigner::query()
+                ->whereIn('status', [DocumentSignerStatus::Signed, DocumentSignerStatus::Approved])
+                ->whereBetween('signed_at', [$week->copy()->startOfWeek(), $week->copy()->endOfWeek()])
+                ->whereHas('document', fn ($query) => $this->scopeDocumentRelationQuery($query))
+                ->count();
+
+            $pendingValues[] = DocumentSigner::query()
+                ->whereIn('status', [DocumentSignerStatus::Pending, DocumentSignerStatus::Notified])
+                ->whereBetween('created_at', [$week->copy()->startOfWeek(), $week->copy()->endOfWeek()])
+                ->whereHas('document', fn ($query) => $this->scopeDocumentRelationQuery($query))
+                ->count();
+        }
+
+        return [
+            'labels' => $labels,
+            'completedValues' => $completedValues,
+            'pendingValues' => $pendingValues,
+        ];
+    }
+
     #[Computed]
     public function recentDocuments()
     {
@@ -285,6 +457,44 @@ new #[Layout('components.layouts.app')] class extends Component {
         return $this->scopeDocumentsQuery(Document::query())
             ->latest('created_at')
             ->limit(5)
+            ->get();
+    }
+
+    #[Computed]
+    public function expiringSignerRequests()
+    {
+        return DocumentSigner::query()
+            ->with('document')
+            ->whereIn('status', [DocumentSignerStatus::Pending, DocumentSignerStatus::Notified])
+            ->whereBetween('expires_at', [now(), now()->addDays(2)])
+            ->whereHas('document', fn ($query) => $this->scopeDocumentRelationQuery($query))
+            ->orderBy('expires_at')
+            ->limit(4)
+            ->get();
+    }
+
+    #[Computed]
+    public function pendingApprovalRequests()
+    {
+        return DocumentSigner::query()
+            ->with('document')
+            ->where('role_type', TemplateRoleType::Approver)
+            ->whereIn('status', [DocumentSignerStatus::Pending, DocumentSignerStatus::Notified])
+            ->whereHas('document', fn ($query) => $this->scopeDocumentRelationQuery($query)->where('status', DocumentStatus::Pending))
+            ->oldest('created_at')
+            ->limit(4)
+            ->get();
+    }
+
+    #[Computed]
+    public function draftDocumentsMissingFields()
+    {
+        return $this->scopeDocumentsQuery(Document::query())
+            ->where('status', DocumentStatus::Draft)
+            ->whereHas('documentSigners', fn ($query) => $query->where('role_type', TemplateRoleType::Signer))
+            ->whereDoesntHave('signatureFields')
+            ->latest('updated_at')
+            ->limit(4)
             ->get();
     }
 
@@ -389,127 +599,118 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<x-admin.page class="h-full flex-1 font-sans">
+<x-admin.page gap="gap-5" class="relative isolate min-h-full !py-3 font-sans sm:!py-4">
+    <div class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.14),transparent_30%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.22),transparent_34%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.20),transparent_30%)]"></div>
 
     {{-- ── 1. Page Header ── --}}
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <div class="flex items-center gap-3">
-                <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-                    {{ $this->headerGreeting }}, {{ auth()->user()?->name ?? __('Welcome') }}
+    <section
+        x-data="{
+            greeting: @js($this->headerGreeting),
+            dateLabel: @js(now()->format('l, F j, Y')),
+            timeLabel: @js(now()->format('g:i A')),
+            init() {
+                const updateGreeting = () => {
+                    const now = new Date();
+                    const hour = now.getHours();
+                    this.greeting = hour >= 5 && hour < 12
+                        ? @js(__('Good morning'))
+                        : (hour >= 12 && hour < 18 ? @js(__('Good afternoon')) : @js(__('Good evening')));
+                    this.dateLabel = new Intl.DateTimeFormat(undefined, {
+                        weekday: 'long',
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                    }).format(now);
+                    this.timeLabel = new Intl.DateTimeFormat(undefined, {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                    }).format(now);
+                };
+
+                updateGreeting();
+                window.setInterval(updateGreeting, 60000);
+            },
+        }"
+        class="rounded-2xl border border-zinc-200/80 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-zinc-950 sm:px-5"
+    >
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+                <h1 class="truncate text-xl font-bold tracking-tight text-zinc-950 dark:text-white">
+                    <span x-text="greeting">{{ $this->headerGreeting }}</span>, {{ auth()->user()?->name ?? __('Welcome') }}
                 </h1>
-                @if ($this->headerGreetingIcon === 'sun')
-                    <svg class="h-6 w-6 text-amber-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1.5m0 15V21m6.364-14.364-1.06 1.06M6.696 17.304l-1.06 1.06M21 12h-1.5m-15 0H3m15.364 5.304-1.06-1.06M6.696 6.696l-1.06-1.06M16.5 12a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z"/>
-                    </svg>
-                @else
-                    <svg class="h-6 w-6 text-indigo-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9 9 0 0 1 11.998 2.25a9 9 0 1 0 9.754 12.752Z"/>
-                    </svg>
-                @endif
+                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    {{ __('Your signing command center is ready.') }}
+                </p>
             </div>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __("Here's what's happening with your documents today.") }}
-            </p>
+
+            <div class="flex shrink-0 flex-wrap items-center gap-2">
+                <span class="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">
+                    <span x-text="dateLabel">{{ now()->format('l, F j, Y') }}</span>
+                </span>
+                <span class="inline-flex items-center rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:bg-white/10 dark:text-zinc-300" x-text="timeLabel">
+                    {{ now()->format('g:i A') }}
+                </span>
+            </div>
         </div>
-        <div class="text-sm font-medium text-zinc-400 dark:text-zinc-500">
-            {{ now()->format('l, F j, Y') }}
-        </div>
-    </div>
+    </section>
 
     {{-- ── 2. Stat Cards Row (Lunoz style: icon right, big number, small label, badge) ── --}}
-    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-
-        {{-- Total Documents --}}
-        <div class="group relative rounded-xl bg-white p-6 shadow-sm transition-shadow duration-200 hover:shadow-md dark:bg-zinc-900">
-            <div class="flex items-start justify-between">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Total Documents') }}</p>
-                    <p class="mt-2 text-3xl font-bold tabular-nums text-zinc-900 dark:text-white">{{ $this->totalDocuments }}</p>
-                    <div class="mt-2">
-                        <span class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400">
-                            {{ $this->completionRate }}% {{ __('completed') }}
-                        </span>
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        @foreach ([
+            [
+                'label' => __('Total Documents'),
+                'value' => $this->totalDocuments,
+                'meta' => $this->completionRate.'% '.__('completed'),
+                'accent' => 'from-indigo-500 to-blue-500',
+                'tone' => 'text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-500/10',
+            ],
+            [
+                'label' => __('Completed'),
+                'value' => $this->completedDocuments,
+                'meta' => $this->completionRate.'%',
+                'accent' => 'from-emerald-500 to-teal-500',
+                'tone' => 'text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10',
+            ],
+            [
+                'label' => __('Pending'),
+                'value' => $this->pendingDocuments,
+                'meta' => $this->pendingRate.'% '.__('of total'),
+                'accent' => 'from-amber-500 to-orange-500',
+                'tone' => 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/10',
+            ],
+            [
+                'label' => __('Rejected'),
+                'value' => $this->rejectedDocuments,
+                'meta' => __('declined'),
+                'accent' => 'from-rose-500 to-pink-500',
+                'tone' => 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/10',
+            ],
+        ] as $stat)
+            <div class="group relative overflow-hidden rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/70 backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-zinc-200/80 dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
+                <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r {{ $stat['accent'] }}"></div>
+                <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0">
+                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ $stat['label'] }}</p>
+                        <p class="mt-3 text-3xl font-bold tabular-nums tracking-tight text-zinc-950 dark:text-white">{{ $stat['value'] }}</p>
+                    </div>
+                    <div class="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br {{ $stat['accent'] }} text-sm font-black text-white shadow-lg shadow-zinc-900/10">
+                        {{ mb_substr($stat['label'], 0, 1) }}
                     </div>
                 </div>
-                <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/30">
-                    <svg class="h-6 w-6 text-indigo-400 dark:text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/>
-                    </svg>
-                </div>
+                <span class="mt-4 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $stat['tone'] }}">
+                    {{ $stat['meta'] }}
+                </span>
             </div>
-        </div>
-
-        {{-- Completed --}}
-        <div class="group relative rounded-xl bg-white p-6 shadow-sm transition-shadow duration-200 hover:shadow-md dark:bg-zinc-900">
-            <div class="flex items-start justify-between">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Completed') }}</p>
-                    <p class="mt-2 text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $this->completedDocuments }}</p>
-                    <div class="mt-2">
-                        <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12.577 4.878a.75.75 0 0 1 .919-.53l4.78 1.281a.75.75 0 0 1 .531.919l-1.281 4.78a.75.75 0 0 1-1.449-.387l.81-3.022a19.407 19.407 0 0 0-5.594 5.203.75.75 0 0 1-1.139.093L7 10.06l-4.72 4.72a.75.75 0 0 1-1.06-1.06l5.25-5.25a.75.75 0 0 1 1.06 0l3.046 3.046a20.902 20.902 0 0 1 5.441-5.185l-2.523.676a.75.75 0 0 1-.919-.53Z" clip-rule="evenodd"/></svg>
-                            {{ $this->completionRate }}%
-                        </span>
-                    </div>
-                </div>
-                <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/30">
-                    <svg class="h-6 w-6 text-emerald-400 dark:text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
-        {{-- Pending --}}
-        <div class="group relative rounded-xl bg-white p-6 shadow-sm transition-shadow duration-200 hover:shadow-md dark:bg-zinc-900">
-            <div class="flex items-start justify-between">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Pending') }}</p>
-                    <p class="mt-2 text-3xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $this->pendingDocuments }}</p>
-                    <div class="mt-2">
-                        <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
-                            {{ $this->pendingRate }}% {{ __('of total') }}
-                        </span>
-                    </div>
-                </div>
-                <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/30">
-                    <svg class="h-6 w-6 text-amber-400 dark:text-amber-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
-        {{-- Rejected --}}
-        <div class="group relative rounded-xl bg-white p-6 shadow-sm transition-shadow duration-200 hover:shadow-md dark:bg-zinc-900">
-            <div class="flex items-start justify-between">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Rejected') }}</p>
-                    <p class="mt-2 text-3xl font-bold tabular-nums text-rose-600 dark:text-rose-400">{{ $this->rejectedDocuments }}</p>
-                    <div class="mt-2">
-                        <span class="inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
-                            {{ __('declined') }}
-                        </span>
-                    </div>
-                </div>
-                <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-950/30">
-                    <svg class="h-6 w-6 text-rose-400 dark:text-rose-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
+        @endforeach
     </div>
 
     {{-- ── 3. Quick Action Cards ── --}}
-    <div class="grid gap-5 sm:grid-cols-2">
+    <div class="grid gap-4 lg:grid-cols-2">
 
         {{-- Upload & send --}}
         <a href="{{ route('documents.create') }}"
            wire:navigate
-           class="group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 p-6 shadow-sm transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 dark:from-blue-700 dark:to-indigo-800">
+           class="group relative overflow-hidden rounded-3xl border border-blue-400/20 bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 p-5 shadow-xl shadow-blue-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-blue-500/20 dark:border-blue-300/10 dark:from-blue-600 dark:via-indigo-700 dark:to-zinc-950 sm:p-6">
             <span class="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/5 transition-transform duration-300 group-hover:scale-110"></span>
             <span class="pointer-events-none absolute -bottom-6 -left-6 h-24 w-24 rounded-full bg-white/5"></span>
 
@@ -535,7 +736,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         {{-- Verify signatures --}}
         <a href="{{ route('verify.index') }}"
            wire:navigate
-           class="group relative overflow-hidden rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 p-6 shadow-sm transition-all duration-200 hover:shadow-lg hover:shadow-teal-500/10 dark:from-teal-600 dark:to-emerald-700">
+           class="group relative overflow-hidden rounded-3xl border border-teal-300/25 bg-gradient-to-br from-teal-500 via-emerald-500 to-emerald-700 p-5 shadow-xl shadow-teal-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-teal-500/20 dark:border-teal-300/10 dark:from-teal-500 dark:via-emerald-700 dark:to-zinc-950 sm:p-6">
             <span class="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/5 transition-transform duration-300 group-hover:scale-110"></span>
             <span class="pointer-events-none absolute -bottom-6 -left-6 h-24 w-24 rounded-full bg-white/5"></span>
 
@@ -560,24 +761,211 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     </div>
 
-    {{-- ── 4. Activity Chart ── --}}
-    <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
+    @php
+        $signerTrendPayload = $this->signerTrendChartPayload;
+        $signerTrendMax = max([
+            1,
+            ...$signerTrendPayload['completedValues'],
+            ...$signerTrendPayload['pendingValues'],
+        ]);
+        $signingMethodPayload = $this->signingMethodChartPayload;
+        $signingMethodTotal = array_sum($signingMethodPayload['values']);
+        $signingMethodStops = [];
+        $signingMethodCursor = 0;
+
+        foreach ($signingMethodPayload['values'] as $methodIndex => $methodValue) {
+            if ($signingMethodTotal <= 0 || $methodValue <= 0) {
+                continue;
+            }
+
+            $start = $signingMethodCursor;
+            $signingMethodCursor += ($methodValue / $signingMethodTotal) * 100;
+            $signingMethodStops[] = "{$signingMethodPayload['colors'][$methodIndex]} {$start}% {$signingMethodCursor}%";
+        }
+
+        $signingMethodGradient = $signingMethodStops === []
+            ? '#e4e4e7'
+            : 'conic-gradient('.implode(', ', $signingMethodStops).')';
+        $activityPayload = $this->activityChartPayload;
+        $activityMax = max([
+            1,
+            ...$activityPayload['weeklyValues'],
+            ...$activityPayload['monthlyValues'],
+        ]);
+    @endphp
+
+    {{-- ── 4. Signer Operations ── --}}
+    <div class="space-y-5">
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
+                <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Needs signature') }}</p>
+                <p class="mt-2 text-3xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $this->actionableSigners }}</p>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Pending or notified signer actions') }}</p>
+            </div>
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
+                <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Pending approvers') }}</p>
+                <p class="mt-2 text-3xl font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{{ $this->pendingApprovers }}</p>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Approvals blocking signer flow') }}</p>
+            </div>
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
+                <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Links expiring') }}</p>
+                <p class="mt-2 text-3xl font-bold tabular-nums text-orange-600 dark:text-orange-400">{{ $this->expiringLinks }}</p>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Signer links expiring within 48 hours') }}</p>
+            </div>
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
+                <p class="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Expired links') }}</p>
+                <p class="mt-2 text-3xl font-bold tabular-nums text-rose-600 dark:text-rose-400">{{ $this->expiredLinks }}</p>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Pending signers with stale access') }}</p>
+            </div>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-5">
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20 sm:p-6 lg:col-span-3">
+                <div class="mb-5">
+                    <h3 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Signer completion trend') }}</h3>
+                    <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('Completed versus newly pending signer actions over the last 6 weeks') }}</p>
+                </div>
+                <div class="relative h-64" wire:ignore>
+                    <canvas id="docutrust-signer-trend-chart" class="absolute inset-0 z-10 h-full w-full" data-chart="@json($signerTrendPayload)"></canvas>
+                    <div data-chart-fallback="docutrust-signer-trend-chart" class="absolute inset-0 z-0 flex items-end gap-2 overflow-hidden rounded-2xl border-b border-zinc-200 bg-gradient-to-b from-zinc-50/70 to-white px-2 pb-8 dark:border-zinc-800 dark:from-white/[0.03] dark:to-transparent sm:gap-3">
+                        @foreach ($signerTrendPayload['labels'] as $trendIndex => $trendLabel)
+                            @php
+                                $completedHeight = max(6, (int) round((($signerTrendPayload['completedValues'][$trendIndex] ?? 0) / $signerTrendMax) * 160));
+                                $pendingHeight = max(6, (int) round((($signerTrendPayload['pendingValues'][$trendIndex] ?? 0) / $signerTrendMax) * 160));
+                            @endphp
+                            <div class="flex min-w-0 flex-1 flex-col items-center gap-2">
+                                <div class="flex h-44 items-end gap-1.5">
+                                    <div class="w-3 rounded-t bg-emerald-400/80 dark:bg-emerald-500" style="height: {{ $completedHeight }}px"></div>
+                                    <div class="w-3 rounded-t bg-amber-400/80 dark:bg-amber-500" style="height: {{ $pendingHeight }}px"></div>
+                                </div>
+                                <span class="truncate text-[10px] font-medium text-zinc-400 dark:text-zinc-500">{{ $trendLabel }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                    <div data-chart-fallback="docutrust-signer-trend-chart" class="absolute right-2 top-1 z-0 flex gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-emerald-400"></span>{{ __('Completed') }}</span>
+                        <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-amber-400"></span>{{ __('New pending') }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20 sm:p-6 lg:col-span-2">
+                <div class="mb-5">
+                    <h3 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Signing methods') }}</h3>
+                    <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('How participants are asked to sign') }}</p>
+                </div>
+                <div class="relative flex h-64 items-center justify-center" wire:ignore>
+                    <canvas id="docutrust-signing-method-chart" class="absolute inset-0 z-10 mx-auto h-full w-full max-w-[260px]" data-chart="@json($signingMethodPayload)"></canvas>
+                    <div data-chart-fallback="docutrust-signing-method-chart" class="absolute inset-0 z-0 flex items-center justify-center">
+                        <div class="relative flex size-40 items-center justify-center rounded-full" style="background: {{ $signingMethodGradient }};">
+                            <div class="flex size-24 flex-col items-center justify-center rounded-full bg-white text-center shadow-sm dark:bg-zinc-900">
+                                <span class="text-2xl font-bold tabular-nums text-zinc-900 dark:text-white">{{ $signingMethodTotal }}</span>
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{{ __('Signers') }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div data-chart-fallback="docutrust-signing-method-chart" class="absolute bottom-0 left-0 right-0 z-0 grid gap-1.5 text-xs">
+                        @foreach ($signingMethodPayload['labels'] as $methodIndex => $methodLabel)
+                            <div class="flex items-center justify-between gap-3 rounded-xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-1.5 dark:border-white/10 dark:bg-white/5">
+                                <span class="flex min-w-0 items-center gap-2 text-zinc-600 dark:text-zinc-300">
+                                    <span class="size-2.5 shrink-0 rounded-full" style="background-color: {{ $signingMethodPayload['colors'][$methodIndex] }}"></span>
+                                    <span class="truncate">{{ $methodLabel }}</span>
+                                </span>
+                                <span class="font-bold tabular-nums text-zinc-900 dark:text-white">{{ $signingMethodPayload['values'][$methodIndex] ?? 0 }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-3">
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
+                <h3 class="text-sm font-bold text-zinc-900 dark:text-white">{{ __('Expiring signer links') }}</h3>
+                <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{{ __('Follow up before access expires') }}</p>
+                <div class="mt-4 space-y-2">
+                    @forelse ($this->expiringSignerRequests as $signer)
+                        <a href="{{ route('documents.show', $signer->document) }}" wire:navigate class="block rounded-2xl border border-orange-100 bg-orange-50/70 px-3 py-2.5 transition hover:-translate-y-0.5 hover:bg-orange-50 dark:border-orange-900/30 dark:bg-orange-950/20">
+                            <p class="truncate text-sm font-semibold text-orange-800 dark:text-orange-200">{{ $signer->name }}</p>
+                            <p class="truncate text-xs text-orange-700 dark:text-orange-300">{{ $signer->document?->title }}</p>
+                            <p class="mt-1 text-xs text-orange-600 dark:text-orange-400">{{ __('Expires') }} {{ $signer->expires_at?->diffForHumans() }}</p>
+                        </a>
+                    @empty
+                        <p class="py-4 text-center text-xs text-zinc-400 dark:text-zinc-500">{{ __('No signer links expiring soon.') }}</p>
+                    @endforelse
+                </div>
+            </div>
+
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
+                <h3 class="text-sm font-bold text-zinc-900 dark:text-white">{{ __('Waiting on approvers') }}</h3>
+                <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{{ __('Approvals that may block signing') }}</p>
+                <div class="mt-4 space-y-2">
+                    @forelse ($this->pendingApprovalRequests as $approver)
+                        <a href="{{ route('documents.show', $approver->document) }}" wire:navigate class="block rounded-2xl border border-indigo-100 bg-indigo-50/70 px-3 py-2.5 transition hover:-translate-y-0.5 hover:bg-indigo-50 dark:border-indigo-900/30 dark:bg-indigo-950/20">
+                            <p class="truncate text-sm font-semibold text-indigo-800 dark:text-indigo-200">{{ $approver->name }}</p>
+                            <p class="truncate text-xs text-indigo-700 dark:text-indigo-300">{{ $approver->document?->title }}</p>
+                            <p class="mt-1 text-xs text-indigo-600 dark:text-indigo-400">{{ $approver->created_at?->diffForHumans() }}</p>
+                        </a>
+                    @empty
+                        <p class="py-4 text-center text-xs text-zinc-400 dark:text-zinc-500">{{ __('No pending approvals.') }}</p>
+                    @endforelse
+                </div>
+            </div>
+
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
+                <h3 class="text-sm font-bold text-zinc-900 dark:text-white">{{ __('Drafts missing fields') }}</h3>
+                <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{{ __('Prepared signers still need document fields') }}</p>
+                <div class="mt-4 space-y-2">
+                    @forelse ($this->draftDocumentsMissingFields as $document)
+                        <a href="{{ route('documents.prepare', $document) }}" wire:navigate class="block rounded-2xl border border-teal-100 bg-teal-50/70 px-3 py-2.5 transition hover:-translate-y-0.5 hover:bg-teal-50 dark:border-teal-900/30 dark:bg-teal-950/20">
+                            <p class="truncate text-sm font-semibold text-teal-800 dark:text-teal-200">{{ $document->title }}</p>
+                            <p class="mt-1 text-xs text-teal-600 dark:text-teal-400">{{ __('Updated') }} {{ $document->updated_at?->diffForHumans() }}</p>
+                        </a>
+                    @empty
+                        <p class="py-4 text-center text-xs text-zinc-400 dark:text-zinc-500">{{ __('No drafts are missing fields.') }}</p>
+                    @endforelse
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ── 5. Activity Chart ── --}}
+    <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20 sm:p-6">
         <div class="mb-5 flex items-center justify-between">
             <div>
                 <h3 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Activity trend') }}</h3>
                 <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('Average created per week and total created per month (last 6 months)') }}</p>
             </div>
         </div>
-        <div wire:ignore>
-            <canvas id="docutrust-activity-chart" class="max-h-80 w-full" data-chart="@json($this->activityChartPayload)"></canvas>
+        <div class="relative h-72" wire:ignore>
+            <canvas id="docutrust-activity-chart" class="absolute inset-0 z-10 h-full w-full" data-chart="@json($activityPayload)"></canvas>
+            <div data-chart-fallback="docutrust-activity-chart" class="absolute inset-0 z-0 flex items-end gap-2 overflow-hidden rounded-2xl border-b border-zinc-200 bg-gradient-to-b from-zinc-50/70 to-white px-2 pb-8 dark:border-zinc-800 dark:from-white/[0.03] dark:to-transparent sm:gap-3">
+                @foreach ($activityPayload['labels'] as $activityIndex => $activityLabel)
+                    @php
+                        $monthlyHeight = max(8, (int) round((($activityPayload['monthlyValues'][$activityIndex] ?? 0) / $activityMax) * 190));
+                        $weeklyHeight = max(8, (int) round((($activityPayload['weeklyValues'][$activityIndex] ?? 0) / $activityMax) * 190));
+                    @endphp
+                    <div class="flex min-w-0 flex-1 flex-col items-center gap-2">
+                        <div class="flex h-52 items-end gap-1.5">
+                            <div class="w-5 rounded-t bg-teal-400/70 dark:bg-teal-500" style="height: {{ $monthlyHeight }}px"></div>
+                            <div class="w-3 rounded-t bg-indigo-400/80 dark:bg-indigo-500" style="height: {{ $weeklyHeight }}px"></div>
+                        </div>
+                        <span class="truncate text-[10px] font-medium text-zinc-400 dark:text-zinc-500">{{ $activityLabel }}</span>
+                    </div>
+                @endforeach
+            </div>
+            <div data-chart-fallback="docutrust-activity-chart" class="absolute right-2 top-1 z-0 flex gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+                <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-teal-400"></span>{{ __('Created / month') }}</span>
+                <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-indigo-400"></span>{{ __('Avg / week') }}</span>
+            </div>
         </div>
     </div>
 
-    {{-- ── 5. Two-Column: Status Overview + Signer Completion & Certificates ── --}}
-    <div class="grid gap-5 lg:grid-cols-5">
+    {{-- ── 6. Two-Column: Status Overview + Signer Completion & Certificates ── --}}
+    <div class="grid gap-4 lg:grid-cols-5">
 
         {{-- Left: Status overview with progress bars (Lunoz style) --}}
-        <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900 lg:col-span-3">
+        <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20 sm:p-6 lg:col-span-3">
             <div class="mb-6">
                 <h2 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Status overview') }}</h2>
                 <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('Document distribution across all states') }}</p>
@@ -598,7 +986,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                 </span>
                             </div>
                         </div>
-                        <div class="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                        <div class="h-2.5 w-full overflow-hidden rounded-full bg-zinc-100 ring-1 ring-zinc-200/70 dark:bg-zinc-800 dark:ring-white/10">
                             <div class="h-full rounded-full transition-all duration-500" style="width: {{ $segment['percentage'] }}%; background-color: {{ $segment['color'] }}"></div>
                         </div>
                     </div>
@@ -617,10 +1005,10 @@ new #[Layout('components.layouts.app')] class extends Component {
         </div>
 
         {{-- Right: Signer completion + Certificate stats --}}
-        <div class="flex flex-col gap-5 lg:col-span-2">
+        <div class="flex flex-col gap-4 lg:col-span-2">
 
             {{-- Signer completion ring --}}
-            <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20 sm:p-6">
                 <h2 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Signer progress') }}</h2>
                 <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('Signed vs total requests') }}</p>
 
@@ -637,15 +1025,15 @@ new #[Layout('components.layouts.app')] class extends Component {
                     </div>
 
                     <div class="flex flex-1 flex-col gap-2.5">
-                        <div class="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800">
+                        <div class="flex items-center justify-between rounded-xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-2 dark:border-white/10 dark:bg-white/5">
                             <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Total') }}</span>
                             <span class="text-sm font-bold text-zinc-900 dark:text-white">{{ $this->totalSigners }}</span>
                         </div>
-                        <div class="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 dark:bg-emerald-950/30">
+                        <div class="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2 dark:border-emerald-500/20 dark:bg-emerald-500/10">
                             <span class="text-xs font-medium text-emerald-600 dark:text-emerald-400">{{ __('Signed') }}</span>
                             <span class="text-sm font-bold text-emerald-700 dark:text-emerald-300">{{ $this->signedSigners }}</span>
                         </div>
-                        <div class="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 dark:bg-amber-950/20">
+                        <div class="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2 dark:border-amber-500/20 dark:bg-amber-500/10">
                             <span class="text-xs font-medium text-amber-600 dark:text-amber-400">{{ __('Pending') }}</span>
                             <span class="text-sm font-bold text-amber-700 dark:text-amber-300">{{ $this->pendingSigners }}</span>
                         </div>
@@ -653,7 +1041,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 </div>
 
                 <div class="mt-4">
-                    <div class="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                    <div class="h-2.5 w-full overflow-hidden rounded-full bg-zinc-100 ring-1 ring-zinc-200/70 dark:bg-zinc-800 dark:ring-white/10">
                         <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {{ $this->signerCompletionRate }}%"></div>
                     </div>
                     <p class="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">
@@ -664,14 +1052,14 @@ new #[Layout('components.layouts.app')] class extends Component {
 
             {{-- Certificate stats --}}
             <div class="grid grid-cols-2 gap-4">
-                <div class="rounded-xl bg-white p-5 shadow-sm dark:bg-zinc-900">
+                <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
                     <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
                         <svg class="h-4.5 w-4.5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>
                     </div>
                     <p class="mt-3 text-2xl font-bold tabular-nums text-zinc-900 dark:text-white">{{ $this->totalActiveCertificates }}</p>
                     <p class="mt-0.5 text-xs font-medium text-zinc-400 dark:text-zinc-500">{{ __('Active certs') }}</p>
                 </div>
-                <div class="rounded-xl bg-white p-5 shadow-sm dark:bg-zinc-900">
+                <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
                     <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 dark:bg-rose-950/30">
                         <svg class="h-4.5 w-4.5 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.249-8.25-3.286Zm0 13.036h.008v.008H12v-.008Z"/></svg>
                     </div>
@@ -681,12 +1069,12 @@ new #[Layout('components.layouts.app')] class extends Component {
             </div>
 
             {{-- Recent revocations --}}
-            <div class="rounded-xl bg-white p-5 shadow-sm dark:bg-zinc-900">
+            <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20">
                 <h4 class="text-sm font-bold text-zinc-900 dark:text-white">{{ __('Recent revocations') }}</h4>
                 <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{{ __('Latest certificate trust changes') }}</p>
                 <div class="mt-3 space-y-2">
                     @forelse ($this->recentRevokedCertificates as $certificate)
-                        <div class="rounded-lg border border-rose-100 bg-rose-50/60 px-3 py-2.5 dark:border-rose-900/30 dark:bg-rose-950/20">
+                        <div class="rounded-2xl border border-rose-100 bg-rose-50/70 px-3 py-2.5 dark:border-rose-900/30 dark:bg-rose-950/20">
                             <p class="text-sm font-medium text-rose-800 dark:text-rose-200">{{ $certificate->documentSigner?->name ?? __('Unknown signer') }}</p>
                             <p class="mt-0.5 text-xs text-rose-600 dark:text-rose-300">{{ $certificate->documentSigner?->document?->title ?? '-' }}</p>
                             <p class="mt-0.5 text-xs text-rose-500 dark:text-rose-400">{{ $certificate->revocation_reason ?? __('No reason recorded') }}</p>
@@ -701,37 +1089,37 @@ new #[Layout('components.layouts.app')] class extends Component {
     </div>
 
     {{-- ── 6. Recent Documents Table (Lunoz clean table style) ── --}}
-    <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
+    <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20 sm:p-6">
         <div class="mb-5 flex items-center justify-between">
             <div>
                 <h3 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Recent documents') }}</h3>
                 <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('Your latest document activity') }}</p>
             </div>
             <a href="{{ route('documents.index') }}" wire:navigate
-               class="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition-colors hover:bg-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-950/50">
+               class="rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 transition-colors hover:bg-indigo-100 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/15">
                 {{ __('View all') }}
             </a>
         </div>
 
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto rounded-2xl border border-zinc-100 bg-white/60 dark:border-white/10 dark:bg-white/[0.03]">
             <table class="w-full text-left">
                 <thead>
-                    <tr class="border-b border-zinc-100 dark:border-zinc-800">
-                        <th class="pb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Title') }}</th>
-                        <th class="pb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Status') }}</th>
-                        <th class="pb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Signers') }}</th>
-                        <th class="pb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Created') }}</th>
+                    <tr class="border-b border-zinc-100 bg-zinc-50/80 dark:border-white/10 dark:bg-white/[0.03]">
+                        <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Title') }}</th>
+                        <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Status') }}</th>
+                        <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Signers') }}</th>
+                        <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{{ __('Created') }}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-50 dark:divide-zinc-800/50">
                     @forelse ($this->recentDocuments as $document)
                         <tr class="group transition-colors hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
-                            <td class="py-3.5 pr-4">
+                            <td class="px-4 py-3.5">
                                 <a href="{{ route('documents.show', $document) }}" wire:navigate class="text-sm font-medium text-zinc-800 transition-colors group-hover:text-indigo-600 dark:text-zinc-200 dark:group-hover:text-indigo-400">
                                     {{ $document->title }}
                                 </a>
                             </td>
-                            <td class="py-3.5 pr-4">
+                            <td class="px-4 py-3.5">
                                 @php
                                     $statusColors = [
                                         'completed' => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
@@ -747,10 +1135,10 @@ new #[Layout('components.layouts.app')] class extends Component {
                                     {{ ucfirst($document->status->value) }}
                                 </span>
                             </td>
-                            <td class="py-3.5 pr-4">
+                            <td class="px-4 py-3.5">
                                 <span class="text-sm tabular-nums text-zinc-500 dark:text-zinc-400">{{ $document->document_signers_count }}</span>
                             </td>
-                            <td class="py-3.5">
+                            <td class="px-4 py-3.5">
                                 <span class="text-sm text-zinc-400 dark:text-zinc-500">{{ $document->created_at?->diffForHumans() }}</span>
                             </td>
                         </tr>
@@ -767,7 +1155,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     </div>
 
     {{-- ── 7. Most Active Signers ── --}}
-    <div class="rounded-xl bg-white p-6 shadow-sm dark:bg-zinc-900">
+    <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20 sm:p-6">
         <div class="mb-5">
             <h3 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Most active signers') }}</h3>
             <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('Top signers by completed requests') }}</p>
@@ -775,9 +1163,9 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         <div class="space-y-3">
             @forelse ($this->mostActiveSigners as $index => $signer)
-                <div class="flex items-center gap-4 rounded-lg bg-zinc-50 px-4 py-3 transition-colors hover:bg-zinc-100/80 dark:bg-zinc-800/50 dark:hover:bg-zinc-800">
+                <div class="flex flex-col gap-3 rounded-2xl border border-zinc-100 bg-zinc-50/80 px-4 py-3 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.07] sm:flex-row sm:items-center sm:gap-4">
                     {{-- Rank --}}
-                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400">
+                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-600 ring-1 ring-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/20">
                         {{ $index + 1 }}
                     </div>
 
@@ -790,7 +1178,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                     </div>
 
                     {{-- Stats --}}
-                    <div class="flex items-center gap-3">
+                    <div class="flex flex-wrap items-center gap-3">
                         <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
                             {{ $signer->signed_requests }} {{ __('signed') }}
                         </span>

@@ -252,6 +252,14 @@
 
                 @if ($navUser->canAccessSigningWorkspace())
                     <flux:sidebar.item
+                        icon="chart-bar"
+                        :href="route('signing.dashboard')"
+                        :current="request()->routeIs('signing.dashboard')"
+                        :tooltip="__('Signing Dashboard')"
+                        wire:navigate
+                    >{{ __('Dashboard') }}</flux:sidebar.item>
+
+                    <flux:sidebar.item
                         icon="layout-grid"
                         :href="route('documents.index')"
                         :current="request()->routeIs('documents.*')"

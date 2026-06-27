@@ -202,6 +202,7 @@ Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(funct
     });
 
     Route::middleware(['workspace:signing'])->group(function () {
+        Volt::route('signing-dashboard', 'pages.dashboard')->name('signing.dashboard');
         Volt::route('contacts', 'contacts.index')->name('contacts.index');
 
         Volt::route('documents', 'documents.index')->name('documents.index');

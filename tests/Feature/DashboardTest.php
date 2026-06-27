@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\DocumentSignerStatus;
 use App\Enums\DocumentStatus;
+use App\Enums\SigningMethod;
+use App\Enums\TemplateRoleType;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\User;
@@ -22,6 +24,7 @@ class DashboardTest extends TestCase
 
     public function test_authenticated_users_can_visit_the_dashboard(): void
     {
+        /** @var User $user */
         $user = User::factory()->create();
         $this->actingAs($user);
 
@@ -35,6 +38,7 @@ class DashboardTest extends TestCase
 
     public function test_dashboard_shows_analytics_sections_and_counts(): void
     {
+        /** @var User $user */
         $user = User::factory()->create();
         $this->actingAs($user);
 
@@ -56,14 +60,101 @@ class DashboardTest extends TestCase
             ->assertSee('Rejected')
             ->assertSee('Active certs')
             ->assertSee('Revoked')
+            ->assertSee('Needs signature')
+            ->assertSee('Pending approvers')
+            ->assertSee('Links expiring')
+            ->assertSee('Signer completion trend')
+            ->assertSee('Signing methods')
+            ->assertSee('Expiring signer links')
+            ->assertSee('Drafts missing fields')
             ->assertSee('Activity trend')
             ->assertSee('Recent documents')
             ->assertSee('Most active signers')
             ->assertSee('data-chart=', false);
     }
 
+    public function test_signing_workspace_sidebar_links_to_the_signer_dashboard(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->signer()->create();
+        $this->actingAs($user);
+
+        $this->get(route('documents.index'))
+            ->assertOk()
+            ->assertSee(route('signing.dashboard', absolute: false), false)
+            ->assertSee(__('Dashboard'));
+
+        $this->get(route('signing.dashboard'))
+            ->assertOk()
+            ->assertSee(__('Signer completion trend'))
+            ->assertSee(__('Signing methods'));
+    }
+
+    public function test_signing_dashboard_scopes_signer_action_queue_to_the_users_organization(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+        /** @var User $otherUser */
+        $otherUser = User::factory()->create();
+        $this->actingAs($user);
+
+        $ownExpiringDocument = Document::factory()->for($user)->create([
+            'title' => 'Tenant Contract',
+            'status' => DocumentStatus::Pending,
+        ]);
+
+        DocumentSigner::factory()->for($ownExpiringDocument)->create([
+            'name' => 'Alice Tenant',
+            'status' => DocumentSignerStatus::Pending,
+            'expires_at' => now()->addDay(),
+            'signing_method' => SigningMethod::AccountVerified,
+        ]);
+
+        $ownApprovalDocument = Document::factory()->for($user)->create([
+            'title' => 'Board Approval Packet',
+            'status' => DocumentStatus::Pending,
+        ]);
+
+        DocumentSigner::factory()->for($ownApprovalDocument)->create([
+            'name' => 'Approver One',
+            'role_type' => TemplateRoleType::Approver,
+            'status' => DocumentSignerStatus::Notified,
+        ]);
+
+        $ownDraft = Document::factory()->for($user)->create([
+            'title' => 'Missing Fields Draft',
+            'status' => DocumentStatus::Draft,
+        ]);
+
+        DocumentSigner::factory()->for($ownDraft)->create([
+            'role_type' => TemplateRoleType::Signer,
+        ]);
+
+        $otherDocument = Document::factory()->for($otherUser)->create([
+            'title' => 'Other Tenant Contract',
+            'status' => DocumentStatus::Pending,
+        ]);
+
+        DocumentSigner::factory()->for($otherDocument)->create([
+            'name' => 'Outside Signer',
+            'status' => DocumentSignerStatus::Pending,
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $this->get(route('admin.signing.dashboard'))
+            ->assertOk()
+            ->assertSee('Tenant Contract')
+            ->assertSee('Alice Tenant')
+            ->assertSee('Board Approval Packet')
+            ->assertSee('Approver One')
+            ->assertSee('Missing Fields Draft')
+            ->assertDontSee('Other Tenant Contract')
+            ->assertDontSee('Outside Signer');
+    }
+
     public function test_documents_page_includes_breadcrumb_in_layout(): void
     {
+        /** @var User $user */
         $user = User::factory()->create();
         $this->actingAs($user);
 
@@ -74,6 +165,7 @@ class DashboardTest extends TestCase
 
     public function test_authenticated_users_can_visit_the_verify_placeholder(): void
     {
+        /** @var User $user */
         $user = User::factory()->create();
         $this->actingAs($user);
 
