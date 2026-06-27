@@ -126,7 +126,11 @@ class DocumentNotificationService
             return;
         }
 
-        if ($signer->signingMethod() !== SigningMethod::EmailLink) {
+        // Send invitation for EmailLink and AccountVerified signers.
+        // AccountVerified signers receive an email with a link to their DocuTrust
+        // account login page (sign.account.show) rather than a public token URL.
+        $method = $signer->signingMethod();
+        if (! in_array($method, [SigningMethod::EmailLink, SigningMethod::AccountVerified], true)) {
             return;
         }
 

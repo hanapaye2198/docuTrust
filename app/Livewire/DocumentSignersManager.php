@@ -620,9 +620,10 @@ class DocumentSignersManager extends Component
 
         $signer = $document->documentSigners()->whereKey($signerId)->firstOrFail();
 
+        $method = $signer->signingMethod();
         if (! $signer->requiresAction()
             || $signer->status !== DocumentSignerStatus::Pending
-            || $signer->signingMethod() !== SigningMethod::EmailLink) {
+            || ! in_array($method, [SigningMethod::EmailLink, SigningMethod::AccountVerified], true)) {
             return;
         }
 
