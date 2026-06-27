@@ -92,6 +92,7 @@ Route::middleware(['signed', 'throttle:signing-links'])->group(function () {
 
 Route::middleware(['auth', 'role:super_admin,notary_admin,client'])->group(function () {
     Route::get('/account-sign/{signerId}', [SignDocumentController::class, 'showAuthenticated'])->name('sign.account.show');
+    Route::get('/account-sign/{signerId}/switch', [SignDocumentController::class, 'switchAccount'])->name('sign.account.switch');
     Route::post('/account-sign/{signerId}/unlock', [SignDocumentController::class, 'unlockAuthenticated'])->name('sign.account.unlock');
     Route::get('/account-sign/{signerId}/pdf', [SignDocumentController::class, 'streamAuthenticatedPdf'])->name('sign.account.document.pdf');
     Route::get('/account-sign/{signerId}/signature-image/{signatureField}', [SignDocumentController::class, 'streamAuthenticatedSignatureImage'])->name('sign.account.signature.image');

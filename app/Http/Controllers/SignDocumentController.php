@@ -65,13 +65,49 @@ class SignDocumentController extends Controller
         return $this->renderSignView($signer, false);
     }
 
+    public function switchAccount(int $signerId, Request $request): RedirectResponse
+    {
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        // Store the intended URL in the fresh session so Laravel redirects
+        // back here automatically after the user logs in with the correct account.
+        $request->session()->put('url.intended', route('sign.account.show', ['signerId' => $signerId]));
+
+        return redirect()->route('login');
+    }
+
     public function showAuthenticated(int $signerId): View|Response|RedirectResponse
     {
+        // Case 1: Not logged in → redirect to login, return here after
         if (! Auth::check()) {
-            return redirect()->guest(route('login'));
+            return redirect()->guest(route('sign.account.show', ['signerId' => $signerId]));
         }
 
-        $signer = $this->resolveAuthenticatedSigner($signerId, $this->signerDetailRelations());
+        // Load the signer without user filter first so we can give a better error
+        $signer = DocumentSigner::query()
+            ->whereKey($signerId)
+            ->whereHas('document', function ($query): void {
+                $query->whereIn('status', [DocumentStatus::Pending, DocumentStatus::Completed]);
+            })
+            ->first();
+
+        if ($signer === null) {
+            return $this->invalidLinkResponse();
+        }
+
+        // Case 2: Logged in as the wrong account
+        if ($signer->user_id !== Auth::id()) {
+            return response()->view('sign.wrong-account', [
+                'signerEmail'  => $signer->email,
+                'currentEmail' => Auth::user()?->email,
+                'signerId'     => $signerId,
+            ]);
+        }
+
+        // Case 3: Correct account — load full relations and render
+        $signer->load($this->signerDetailRelations());
 
         return $this->renderSignView($signer, true);
     }
