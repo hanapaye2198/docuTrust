@@ -764,50 +764,50 @@
         <g class="fh-float">
             {{-- Step 1: Auth --}}
             <g class="fh-s1">
-                <rect x="392" y="154" width="68" height="92" rx="18"
+                <rect x="398" y="154" width="54" height="92" rx="15"
                       fill="var(--color-background-info)" stroke="var(--color-border-info)"/>
-                <rect x="412" y="174" width="28" height="28" rx="8"
+                <rect x="411" y="174" width="28" height="28" rx="8"
                       fill="var(--color-text-info)" opacity=".68"/>
-                <text x="426" y="226" text-anchor="middle" class="fh-sans fh-info"   font-size="12" font-weight="800">Auth</text>
-                <text x="426" y="240" text-anchor="middle" class="fh-mono fh-muted"  font-size="9">SAD</text>
+                <text x="425" y="226" text-anchor="middle" class="fh-sans fh-info"   font-size="10" font-weight="800">Auth</text>
+                <text x="425" y="240" text-anchor="middle" class="fh-mono fh-muted"  font-size="8">SAD</text>
             </g>
             {{-- Connector 1→2 --}}
-            <path class="fh-draw fh-info-stroke" d="M460 200 H476" stroke-width="3" stroke-linecap="round"/>
+            <path class="fh-draw fh-info-stroke" d="M452 200 H464" stroke-width="3" stroke-linecap="round"/>
             {{-- Step 2: Hash --}}
             <g class="fh-s2">
-                <rect x="476" y="154" width="68" height="92" rx="18"
+                <rect x="464" y="154" width="54" height="92" rx="15"
                       fill="var(--color-background-info)" stroke="var(--color-border-info)"/>
-                <rect x="496" y="174" width="28" height="28" rx="8"
+                <rect x="477" y="174" width="28" height="28" rx="8"
                       fill="var(--color-text-info)" opacity=".68"/>
-                <text x="510" y="226" text-anchor="middle" class="fh-sans fh-info"   font-size="12" font-weight="800">Hash</text>
-                <text x="510" y="240" text-anchor="middle" class="fh-mono fh-muted"  font-size="9">256</text>
+                <text x="491" y="226" text-anchor="middle" class="fh-sans fh-info"   font-size="10" font-weight="800">Hash</text>
+                <text x="491" y="240" text-anchor="middle" class="fh-mono fh-muted"  font-size="8">256</text>
             </g>
             {{-- Connector 2→3 --}}
-            <path class="fh-draw fh-info-stroke" d="M544 200 H560" stroke-width="3" stroke-linecap="round"/>
+            <path class="fh-draw fh-info-stroke" d="M518 200 H530" stroke-width="3" stroke-linecap="round"/>
             {{-- Step 3: Sign (HSM) --}}
             <g class="fh-s3">
-                <rect x="560" y="154" width="68" height="92" rx="18"
+                <rect x="530" y="154" width="54" height="92" rx="15"
                       fill="var(--color-background-info)" stroke="var(--color-border-info)"/>
-                <rect x="580" y="174" width="28" height="28" rx="8"
+                <rect x="543" y="174" width="28" height="28" rx="8"
                       fill="var(--color-text-info)" opacity=".68"/>
-                <text x="594" y="226" text-anchor="middle" class="fh-sans fh-info"   font-size="12" font-weight="800">Sign</text>
-                <text x="594" y="240" text-anchor="middle" class="fh-mono fh-muted"  font-size="9">HSM</text>
+                <text x="557" y="226" text-anchor="middle" class="fh-sans fh-info"   font-size="10" font-weight="800">Sign</text>
+                <text x="557" y="240" text-anchor="middle" class="fh-mono fh-muted"  font-size="8">HSM</text>
             </g>
             {{-- Connector 3→4 --}}
-            <path class="fh-draw fh-success-stroke" d="M628 200 H644" stroke-width="3" stroke-linecap="round"/>
+            <path class="fh-draw fh-success-stroke" d="M584 200 H596" stroke-width="3" stroke-linecap="round"/>
             {{-- Step 4: Embed (success) --}}
             <g class="fh-s4">
-                <rect x="644" y="154" width="68" height="92" rx="18"
+                <rect x="596" y="154" width="54" height="92" rx="15"
                       fill="var(--color-background-success)" stroke="var(--color-border-success)"/>
-                <rect x="664" y="174" width="28" height="28" rx="8"
+                <rect x="609" y="174" width="28" height="28" rx="8"
                       fill="var(--color-text-success)" opacity=".68"/>
-                <text x="678" y="226" text-anchor="middle" class="fh-sans fh-success" font-size="12" font-weight="800">Embed</text>
-                <text x="678" y="240" text-anchor="middle" class="fh-mono fh-muted"   font-size="9">LTV</text>
+                <text x="623" y="226" text-anchor="middle" class="fh-sans fh-success" font-size="10" font-weight="800">Embed</text>
+                <text x="623" y="240" text-anchor="middle" class="fh-mono fh-muted"   font-size="8">LTV</text>
             </g>
             {{-- TSA footer bar --}}
-            <rect x="392" y="268" width="320" height="30" rx="12" class="fh-soft"/>
-            <text x="552" y="288" text-anchor="middle"
-                  class="fh-mono fh-muted" font-size="10">GlobalSign TSA · OCSP · CRL validation</text>
+            <rect x="398" y="268" width="252" height="30" rx="12" class="fh-soft"/>
+            <text x="524" y="288" text-anchor="middle"
+                  class="fh-mono fh-muted" font-size="8">GlobalSign TSA · OCSP · CRL validation</text>
         </g>
         @break
 

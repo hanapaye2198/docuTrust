@@ -322,11 +322,6 @@ new class extends Component {
                         @if ($feature['badge'])
                             <div class="feature-badge">{{ $feature['badge'] }}</div>
                         @endif
-                        <div class="feature-icon">
-                            <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="{{ $this->iconPath($feature['icon']) }}" />
-                            </svg>
-                        </div>
                         <h3>{{ $feature['name'] }}</h3>
                         <p>{{ $feature['description'] }}</p>
                         </button>

@@ -38,6 +38,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     {
         $this->authorize('view', $document);
         $this->document = $document->load([
+            'documentHash',
             'documentSigners',
             'signatureFields',
             'signatures.signerCertificate',
@@ -51,6 +52,7 @@ new #[Layout('components.layouts.app')] class extends Component {
     public function refreshDocument(): void
     {
         $this->document->refresh()->load([
+            'documentHash',
             'documentSigners',
             'signatureFields',
             'signatures.signerCertificate',
@@ -202,7 +204,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
 }; ?>
 
-<div class="mx-auto flex h-full w-full max-w-7xl flex-1 flex-col gap-8">
+<div class="flex h-full w-full max-w-none flex-1 flex-col gap-8">
     @if (session('status'))
         <div
             class="flex items-start gap-3 rounded-2xl border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-white px-4 py-3 text-sm text-emerald-900 shadow-sm dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-zinc-900 dark:text-emerald-100"
@@ -253,6 +255,57 @@ new #[Layout('components.layouts.app')] class extends Component {
             {{ $message }}
         </div>
     @enderror
+
+    @if ($document->status === DocumentStatus::Completed)
+        @php
+            $documentHash = $document->documentHash;
+            $verifyIdentifier = $documentHash?->hash ?? (string) $document->id;
+        @endphp
+
+        <div class="ui-panel p-6">
+            <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Verification proof') }}</h2>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Use this SHA-256 hash and blockchain transaction to verify the completed PDF has not been changed.') }}</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <flux:button variant="outline" :href="route('verify.index', ['documentIdentifier' => $verifyIdentifier])">
+                        {{ __('Verify document') }}
+                    </flux:button>
+                    <flux:button variant="outline" :href="route('signed-documents.index')" wire:navigate>
+                        {{ __('Completed documents') }}
+                    </flux:button>
+                </div>
+            </div>
+
+            <div class="mt-5 grid gap-4 lg:grid-cols-3">
+                <div class="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/40 lg:col-span-2">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('SHA-256 document hash') }}</p>
+                    @if ($documentHash !== null)
+                        <p class="mt-2 break-all font-mono text-sm text-zinc-900 dark:text-zinc-100">{{ $documentHash->hash }}</p>
+                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Created: :date', ['date' => $documentHash->created_at?->toDateTimeString() ?? '-']) }}</p>
+                    @else
+                        <p class="mt-2 text-sm font-medium text-amber-700 dark:text-amber-300">{{ __('Hash pending') }}</p>
+                        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('The final artifact job has not stored a verification hash yet. Downloading the signed PDF can trigger final artifact preparation.') }}</p>
+                    @endif
+                </div>
+
+                <div class="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Blockchain anchor') }}</p>
+                    @if ($documentHash?->transaction_id)
+                        <p class="mt-2 break-all font-mono text-sm text-zinc-900 dark:text-zinc-100">{{ $documentHash->transaction_id }}</p>
+                        <p class="mt-2 text-xs font-semibold uppercase tracking-wider text-teal-600 dark:text-teal-400">{{ __('Anchored') }}</p>
+                    @elseif ($documentHash !== null)
+                        <p class="mt-2 text-sm font-medium text-amber-700 dark:text-amber-300">{{ __('Transaction pending') }}</p>
+                        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('The hash exists, but no blockchain transaction is recorded yet.') }}</p>
+                    @else
+                        <p class="mt-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Not available yet') }}</p>
+                        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('A blockchain transaction can be stored after the document hash is generated.') }}</p>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if ($document->status === DocumentStatus::Draft)
         <div class="ui-panel p-6">

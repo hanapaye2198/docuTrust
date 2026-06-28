@@ -171,33 +171,70 @@ new #[Layout('components.layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="flex w-full min-w-0 flex-col gap-4 p-1">
+<div class="relative isolate flex w-full min-w-0 flex-col gap-5">
+    <div class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_28%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.18),transparent_32%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_28%)]"></div>
 
     {{-- ── Breadcrumb + title ── --}}
-    <div>
-        <div class="flex items-center gap-2 text-sm text-zinc-400 dark:text-zinc-500">
-            <a href="{{ route('documents.index') }}" wire:navigate
-               class="transition hover:text-zinc-700 dark:hover:text-zinc-300">{{ __('Documents') }}</a>
-            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
-            <span class="text-zinc-600 dark:text-zinc-400">{{ __('Prepare Documents') }}</span>
+    <div class="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-sm shadow-zinc-200/70 backdrop-blur dark:border-white/10 dark:bg-zinc-950/70 dark:shadow-black/20 sm:p-6">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="min-w-0">
+                <div class="flex items-center gap-2 text-sm text-zinc-400 dark:text-zinc-500">
+                    <a href="{{ route('documents.index') }}" wire:navigate
+                       class="transition hover:text-zinc-700 dark:hover:text-zinc-300">{{ __('Documents') }}</a>
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
+                    <span class="text-zinc-600 dark:text-zinc-400">{{ __('Prepare Documents') }}</span>
+                </div>
+                <h1 class="mt-2 text-2xl font-bold tracking-tight text-zinc-950 dark:text-white sm:text-3xl">
+                    {{ __('Prepare Document') }}
+                </h1>
+                <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                    {{ __('Upload a PDF, add participants, protect access, then place signing fields on the document canvas.') }}
+                </p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-2 dark:border-white/10 dark:bg-white/5 sm:min-w-80">
+                <div class="rounded-xl bg-white px-3 py-3 text-center shadow-sm dark:bg-zinc-900/80">
+                    <p class="text-sm font-bold text-teal-600 dark:text-teal-300">1</p>
+                    <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{{ __('Upload') }}</p>
+                </div>
+                <div class="rounded-xl bg-white px-3 py-3 text-center shadow-sm dark:bg-zinc-900/80">
+                    <p class="text-sm font-bold text-blue-600 dark:text-blue-300">2</p>
+                    <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{{ __('Signers') }}</p>
+                </div>
+                <div class="rounded-xl bg-white px-3 py-3 text-center shadow-sm dark:bg-zinc-900/80">
+                    <p class="text-sm font-bold text-indigo-600 dark:text-indigo-300">3</p>
+                    <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{{ __('Prepare') }}</p>
+                </div>
+            </div>
         </div>
-        <h1 class="mt-1.5 text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-2xl">
-            {{ __('Prepare Document') }}
-        </h1>
     </div>
 
     {{-- ── Single card ── --}}
-    <div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-xl shadow-zinc-200/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/80 dark:shadow-black/20">
 
         {{-- ── Upload Documents for Signature ── --}}
-        <div class="px-6 py-5">
-            <h2 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ __('Upload Documents for Signature') }}</h2>
-            <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Max 50 MB file size and 1,000 pages for each individual document.') }}</p>
+        <div class="px-5 py-5 sm:px-6">
+            <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div>
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-teal-600 dark:text-teal-300">{{ __('Document upload') }}</p>
+                            <h2 class="mt-1 text-lg font-bold tracking-tight text-zinc-950 dark:text-white">{{ __('Upload Documents for Signature') }}</h2>
+                            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Add the PDF that signers will review and complete.') }}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2 text-[11px] font-semibold">
+                            <span class="rounded-full bg-teal-50 px-2.5 py-1 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">{{ __('PDF only') }}</span>
+                            <span class="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{{ __('Max 50 MB') }}</span>
+                            <span class="rounded-full bg-indigo-50 px-2.5 py-1 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">{{ __('1,000 pages') }}</span>
+                        </div>
+                    </div>
 
-            <div class="mt-3 space-y-3">
+            <div class="mt-4 space-y-3">
                 @if (! $documentSaved)
                     <div
                         x-data="{ progress: 0, dragging: false }"
+                        class="relative overflow-hidden rounded-3xl border-2 border-dashed border-blue-200 bg-gradient-to-br from-blue-50 via-white to-teal-50 px-5 py-7 text-center shadow-[0_18px_48px_-28px_rgba(37,99,235,0.45)] transition dark:border-blue-900/60 dark:from-blue-950/30 dark:via-zinc-950 dark:to-teal-950/20 sm:py-9"
+                        x-bind:class="dragging ? 'border-blue-500 bg-blue-50/90 ring-4 ring-blue-100 dark:border-blue-400 dark:ring-blue-950/50' : ''"
                         x-on:livewire-upload-start="progress = 0"
                         x-on:livewire-upload-finish="progress = 0"
                         x-on:livewire-upload-error="progress = 0"
@@ -212,42 +249,48 @@ new #[Layout('components.layouts.app')] class extends Component {
                             }
                         "
                     >
-                        {{-- Drop zone (hidden while uploading) --}}
-                        <label
-                            wire:loading.remove wire:target="file"
-                            x-bind:class="dragging
-                                ? 'border-teal-500 bg-teal-50/80 dark:border-teal-500 dark:bg-teal-900/20'
-                                : 'border-zinc-300 bg-zinc-50/60 hover:border-teal-400 hover:bg-teal-50/30 dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-teal-600 dark:hover:bg-teal-900/10'"
-                            class="group relative flex cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed px-5 py-6 transition"
-                        >
-                            <svg class="h-5 w-5 shrink-0 text-zinc-400 transition group-hover:text-teal-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/>
-                            </svg>
-                            <span class="text-sm font-medium text-zinc-600 dark:text-zinc-300">
-                                <span class="text-teal-600 dark:text-teal-400">{{ __('Upload') }}</span>
-                                {{ __('or Drop File') }}
+                        <div class="pointer-events-none absolute -left-8 -top-8 size-24 rounded-full bg-blue-200/50 blur-2xl dark:bg-blue-500/10"></div>
+                        <div class="pointer-events-none absolute -bottom-10 -right-10 size-28 rounded-full bg-teal-200/60 blur-2xl dark:bg-teal-500/10"></div>
+
+                        <div class="pointer-events-none absolute inset-x-4 top-3 flex justify-center">
+                            <span class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-700 shadow-sm dark:border-blue-800/60 dark:bg-zinc-900/80 dark:text-blue-300">
+                                <flux:icon.sparkles class="size-3.5" />
+                                {{ __('Ready for signing workflow') }}
                             </span>
-                            <input x-ref="docFile" type="file" wire:model="file" accept="application/pdf,.pdf"
-                                   class="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
-                        </label>
+                        </div>
+
+                        <div class="relative mx-auto mt-7 flex size-16 items-center justify-center rounded-3xl bg-white text-blue-600 shadow-sm ring-1 ring-blue-100 dark:bg-zinc-900 dark:text-blue-400 dark:ring-blue-900/60">
+                            <span class="absolute inset-0 rounded-3xl bg-blue-400/20 animate-ping"></span>
+                            <flux:icon.cloud-arrow-up class="relative size-9" />
+                        </div>
+
+                        <p class="mt-5 text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                            {{ __('Drop PDF here') }}
+                        </p>
+                        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+                            {{ __('or') }}
+                            <button type="button" class="font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400" x-on:click="$refs.docFile.click()">{{ __('browse your files') }}</button>
+                        </p>
+                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('PDF only · up to 50 MB · encrypted in transit') }}</p>
+                        <input x-ref="docFile" type="file" wire:model="file" accept="application/pdf,.pdf" class="sr-only" />
 
                         {{-- Progress card (visible only while uploading) --}}
                         <div wire:loading wire:target="file"
-                             class="overflow-hidden rounded-xl border border-teal-200 bg-white dark:border-teal-800 dark:bg-zinc-900">
-                            <div class="px-4 pt-4 pb-3">
+                             class="relative mx-auto mt-5 max-w-md overflow-hidden rounded-2xl border border-blue-200 bg-white/90 text-left shadow-sm dark:border-blue-900/50 dark:bg-zinc-950/70">
+                            <div class="p-4">
                                 <div class="flex items-end justify-between gap-4">
                                     <div>
-                                        <p class="text-xs font-semibold uppercase tracking-widest text-teal-600 dark:text-teal-400">{{ __('Upload progress') }}</p>
+                                        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{{ __('Upload progress') }}</p>
                                         <p class="mt-0.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
                                             <span x-text="progress > 0 ? '{{ __('Uploading document…') }}' : '{{ __('Preparing upload…') }}'"></span>
                                         </p>
                                     </div>
-                                    <div class="text-2xl font-semibold tabular-nums text-teal-600 dark:text-teal-400"
+                                    <div class="text-2xl font-semibold tabular-nums text-blue-700 dark:text-blue-300"
                                          x-text="(progress > 0 ? progress : 0) + '%'"></div>
                                 </div>
-                                <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-teal-100 dark:bg-teal-900/40">
-                                    <div class="h-full rounded-full bg-gradient-to-r from-teal-400 via-teal-500 to-teal-600 transition-all duration-300"
-                                         :style="'width: ' + Math.max(progress, 6) + '%'"></div>
+                                <div class="mt-3 h-3 overflow-hidden rounded-full bg-blue-100 dark:bg-blue-950/50">
+                                    <div class="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-teal-500 transition-all duration-300"
+                                         :style="'width: ' + Math.max(progress, 8) + '%'"></div>
                                 </div>
                                 <p class="mt-2 text-xs text-zinc-400 dark:text-zinc-500">{{ __('Please keep this page open until the upload finishes.') }}</p>
                             </div>
@@ -268,30 +311,69 @@ new #[Layout('components.layouts.app')] class extends Component {
 
                 {{-- Uploaded file row --}}
                 @if ($documentSaved)
-                    <div class="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800/40">
-                        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-red-100 dark:bg-red-900/30">
-                            <svg class="h-3.5 w-3.5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M7.5 2.25A.75.75 0 0 1 8.25 3v.75h7.5V3a.75.75 0 0 1 1.5 0v.75H18A2.25 2.25 0 0 1 20.25 6v.75H3.75V6A2.25 2.25 0 0 1 6 3.75h.75V3a.75.75 0 0 1 .75-.75ZM3.75 9h16.5v10.5A2.25 2.25 0 0 1 18 21.75H6A2.25 2.25 0 0 1 3.75 19.5V9Z"/>
-                            </svg>
+                    <div class="flex min-h-32 items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                        <span class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm ring-1 ring-emerald-100 dark:bg-zinc-950 dark:text-emerald-400 dark:ring-emerald-900/50">
+                            <flux:icon.document-text class="size-7" />
                         </span>
-                        <span class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                            {{ $file?->getClientOriginalName() ?? $title }}
-                        </span>
-                        <span class="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">{{ __('Uploaded') }}</span>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                                {{ $file?->getClientOriginalName() ?? $title }}
+                            </p>
+                            <p class="text-xs text-emerald-700 dark:text-emerald-300">{{ __('PDF uploaded and ready for participants.') }}</p>
+                        </div>
+                        <span class="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm dark:bg-emerald-500/10 dark:text-emerald-300">{{ __('Uploaded') }}</span>
                     </div>
                 @endif
 
                 <flux:error name="file" />
             </div>
 
+                </div>
+
+                <aside class="rounded-3xl border border-zinc-200/80 bg-zinc-50/80 p-5 dark:border-white/10 dark:bg-white/[0.04]">
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">{{ __('What happens next') }}</p>
+                    <div class="mt-4 space-y-3">
+                        <div class="flex gap-3">
+                            <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">1</span>
+                            <div>
+                                <p class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Add participants') }}</p>
+                                <p class="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ __('Choose signers, approvers, and recipients after upload.') }}</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">2</span>
+                            <div>
+                                <p class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Secure access') }}</p>
+                                <p class="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ __('Optionally add a shared document password and hint.') }}</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">3</span>
+                            <div>
+                                <p class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Place fields') }}</p>
+                                <p class="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ __('Prepare signature, name, date, and checkbox fields on the canvas.') }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+
         </div>
 
-        <div class="border-t border-zinc-100 dark:border-zinc-800"></div>
+        <div class="border-t border-zinc-100 dark:border-white/10"></div>
 
         {{-- ── Participants ── --}}
-        <div class="px-6 py-5">
-            <h2 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ __('Participants') }}</h2>
-            <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Who needs to sign, approve, or receive a copy of this document?') }}</p>
+        <div class="px-5 py-5 sm:px-6">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">{{ __('Participants') }}</p>
+                    <h2 class="mt-1 text-lg font-bold tracking-tight text-zinc-950 dark:text-white">{{ __('Who needs to act?') }}</h2>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ __('Add signers, approvers, or recipients for this document.') }}</p>
+                </div>
+                <span class="inline-flex w-fit items-center rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
+                    {{ $documentSaved ? __('Ready') : __('Upload required') }}
+                </span>
+            </div>
 
             <div class="mt-3">
                 @if ($documentSaved)
@@ -308,59 +390,70 @@ new #[Layout('components.layouts.app')] class extends Component {
                         wire:key="signers-{{ $savedDocumentId }}"
                     />
                 @else
-                    <p class="py-2 text-sm text-zinc-400 dark:text-zinc-500">{{ __('Upload a document above to add participants.') }}</p>
+                    <div class="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/70 px-4 py-6 text-center dark:border-white/10 dark:bg-white/[0.03]">
+                        <flux:icon.user-group class="mx-auto size-8 text-zinc-300 dark:text-zinc-600" />
+                        <p class="mt-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Upload a document above to add participants.') }}</p>
+                    </div>
                 @endif
             </div>
         </div>
 
-        <div class="border-t border-zinc-100 dark:border-zinc-800"></div>
+        <div class="border-t border-zinc-100 dark:border-white/10"></div>
 
         {{-- ── Document Password ── --}}
-        <div class="px-6 py-5">
-            <h2 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ __('Document Password') }}</h2>
-            <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Password should be given to all signers to view and sign the document.') }}</p>
+        <div class="px-5 py-5 sm:px-6">
+            <div class="rounded-3xl border border-zinc-200/80 bg-zinc-50/70 p-5 dark:border-white/10 dark:bg-white/[0.03]">
+                <div class="flex items-start gap-3">
+                    <span class="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                        <flux:icon.lock-closed class="size-5" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ __('Document Password') }}</h2>
+                        <p class="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ __('Optional. Share this password with signers so only invited participants can view and sign the document.') }}</p>
+                    </div>
+                </div>
 
-            <div class="mt-3">
-                <flux:input
-                    wire:model="accessPassword"
-                    type="password"
-                    autocomplete="new-password"
-                    placeholder="{{ __('Document password') }}"
-                    viewable
-                />
-                <flux:error name="accessPassword" />
-                <p class="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{{ __('Password should be given to all signers to view and sign the document.') }}</p>
-            </div>
-
-            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                <div>
+                <div class="mt-4">
                     <flux:input
-                        wire:model="accessPasswordConfirmation"
+                        wire:model="accessPassword"
                         type="password"
                         autocomplete="new-password"
-                        placeholder="{{ __('Confirm password') }}"
+                        placeholder="{{ __('Document password') }}"
+                        viewable
                     />
-                    <flux:error name="accessPasswordConfirmation" />
+                    <flux:error name="accessPassword" />
                 </div>
-                <div>
-                    <flux:input
-                        wire:model="accessPasswordHint"
-                        type="text"
-                        placeholder="{{ __('Password hint (optional)') }}"
-                    />
-                    <flux:error name="accessPasswordHint" />
+
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <flux:input
+                            wire:model="accessPasswordConfirmation"
+                            type="password"
+                            autocomplete="new-password"
+                            placeholder="{{ __('Confirm password') }}"
+                        />
+                        <flux:error name="accessPasswordConfirmation" />
+                    </div>
+                    <div>
+                        <flux:input
+                            wire:model="accessPasswordHint"
+                            type="text"
+                            placeholder="{{ __('Password hint (optional)') }}"
+                        />
+                        <flux:error name="accessPasswordHint" />
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="border-t border-zinc-100 dark:border-zinc-800"></div>
+        <div class="border-t border-zinc-100 dark:border-white/10"></div>
 
         {{-- ── Advanced settings (collapsible) ── --}}
         <div>
             <button
                 type="button"
                 wire:click="$toggle('advancedOpen')"
-                class="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                class="flex w-full items-center justify-between px-5 py-4 text-left transition hover:bg-zinc-50 dark:hover:bg-white/[0.03] sm:px-6"
             >
                 <span class="text-sm font-semibold text-zinc-700 dark:text-zinc-300">{{ __('Advanced settings') }}</span>
                 <svg class="h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 {{ $advancedOpen ? 'rotate-180' : '' }}"
@@ -370,7 +463,7 @@ new #[Layout('components.layouts.app')] class extends Component {
             </button>
 
             @if ($advancedOpen)
-                <div class="border-t border-zinc-100 px-6 py-5 dark:border-zinc-800">
+                <div class="border-t border-zinc-100 px-5 py-5 dark:border-white/10 sm:px-6">
                     <div class="space-y-5">
 
                         {{-- Invitation email --}}
@@ -419,7 +512,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                         <div
                                             @click="$refs.searchInput.focus()"
                                             :class="focused ? 'ring-2 ring-teal-500 border-teal-500' : 'border-zinc-200 dark:border-zinc-700'"
-                                            class="flex min-h-[42px] cursor-text flex-wrap items-center gap-1.5 rounded-xl border bg-white px-3 py-2 transition dark:bg-zinc-900">
+                                            class="flex min-h-[42px] cursor-text flex-wrap items-center gap-1.5 rounded-2xl border bg-white px-3 py-2 transition dark:bg-zinc-900">
 
                                             {{-- Selected chips --}}
                                             <template x-for="user in selected" :key="user.id">
@@ -516,7 +609,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         </div>
 
         {{-- ── Bottom actions ── --}}
-        <div class="flex items-center justify-between border-t border-zinc-100 px-6 py-4 dark:border-zinc-800">
+        <div class="flex flex-col-reverse gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-4 dark:border-white/10 dark:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <flux:button
                 variant="ghost"
                 :href="$documentSaved ? route('documents.show', $savedDocumentId) : route('documents.index')"

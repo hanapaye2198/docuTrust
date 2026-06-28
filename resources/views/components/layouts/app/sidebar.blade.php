@@ -267,6 +267,14 @@
                         wire:navigate
                     >{{ __('Documents') }}</flux:sidebar.item>
 
+                    <flux:sidebar.item
+                        icon="document-check"
+                        :href="route('signed-documents.index')"
+                        :current="request()->routeIs('signed-documents.*')"
+                        :tooltip="__('Completed Documents')"
+                        wire:navigate
+                    >{{ __('Completed Documents') }}</flux:sidebar.item>
+
                     {{-- Sign Requests — only shown when user has pending signatures --}}
                     @if ($pendingSignRequestCount > 0 || request()->routeIs('sign-requests.*'))
                         <flux:sidebar.item

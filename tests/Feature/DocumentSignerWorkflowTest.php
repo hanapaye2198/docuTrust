@@ -935,6 +935,53 @@ class DocumentSignerWorkflowTest extends TestCase
             ->assertSee('Sign');
     }
 
+    public function test_sign_requests_index_shows_modern_request_inbox(): void
+    {
+        $owner = User::factory()->create();
+        $linkedUser = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+
+        $pendingDocument = Document::factory()->for($owner)->create([
+            'title' => 'Pending Service Agreement',
+            'status' => DocumentStatus::Pending,
+            'sent_at' => now()->subHour(),
+        ]);
+        $completedDocument = Document::factory()->for($owner)->create([
+            'title' => 'Signed Lease Addendum',
+            'status' => DocumentStatus::Completed,
+            'sent_at' => now()->subDays(2),
+        ]);
+
+        DocumentSigner::factory()->for($pendingDocument)->create([
+            'name' => $linkedUser->name,
+            'email' => $linkedUser->email,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+            'status' => DocumentSignerStatus::Pending,
+            'expires_at' => now()->addDay(),
+        ]);
+        DocumentSigner::factory()->for($completedDocument)->create([
+            'name' => $linkedUser->name,
+            'email' => $linkedUser->email,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+            'status' => DocumentSignerStatus::Signed,
+            'signed_at' => now()->subDay(),
+        ]);
+
+        $this->actingAs($linkedUser)
+            ->withSession([AuthSession::TWO_FACTOR_PASSED => true])
+            ->get(route('sign-requests.index'))
+            ->assertOk()
+            ->assertSee('Signing inbox')
+            ->assertSee('Active queue')
+            ->assertSee('Pending Service Agreement')
+            ->assertSee('Signed Lease Addendum')
+            ->assertSee('Expires soon')
+            ->assertSee('Account verified');
+    }
+
     public function test_document_cannot_be_sent_when_account_verified_signer_is_not_linked(): void
     {
         Storage::fake('local');

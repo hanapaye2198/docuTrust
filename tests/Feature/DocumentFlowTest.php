@@ -34,6 +34,19 @@ class DocumentFlowTest extends TestCase
             ->assertSee('Lease agreement');
     }
 
+    public function test_authenticated_user_can_view_modern_document_upload_ui(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('documents.create'))
+            ->assertOk()
+            ->assertSee(__('Drop PDF here'))
+            ->assertSee(__('What happens next'))
+            ->assertSee(__('PDF only · up to 50 MB · encrypted in transit'));
+    }
+
     public function test_user_cannot_view_another_users_document(): void
     {
         $owner = User::factory()->create();

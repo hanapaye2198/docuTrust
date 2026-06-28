@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -12,6 +13,7 @@ final class PublicPdfStream
      */
     public static function inlineResponse(?string $relativePath, ?string $diskName = null): StreamedResponse
     {
+        /** @var FilesystemAdapter $disk */
         $disk = Storage::disk($diskName ?: (string) config('filesystems.docutrust_disk', 'local'));
 
         if ($relativePath === null || $relativePath === '' || ! $disk->exists($relativePath)) {
@@ -23,7 +25,9 @@ final class PublicPdfStream
         return $disk->response($relativePath, $filename, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="'.$filename.'"',
-            'Cache-Control' => 'private, max-age=600, stale-while-revalidate=3600',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
         ]);
     }
 }

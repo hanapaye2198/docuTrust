@@ -14,7 +14,6 @@ use App\Models\Signature;
 use App\Models\SignatureField;
 use App\Models\TrustAuthorizationSession;
 use App\Services\CompletedDocumentArtifactService;
-use App\Services\DocumentPdfStampingService;
 use App\Services\DocumentSigningWorkflowService;
 use App\Services\FieldSignatureCaptureService;
 use App\Services\Signature\SadLifecycleService;
@@ -43,7 +42,6 @@ class SignDocumentController extends Controller
 
     public function __construct(
         private readonly CompletedDocumentArtifactService $completedDocumentArtifactService,
-        private readonly DocumentPdfStampingService $documentPdfStampingService,
         private readonly DocumentSigningWorkflowService $documentSigningWorkflowService,
         private readonly FieldSignatureCaptureService $fieldSignatureCaptureService,
         private readonly TrustAuthorizationWorkflowService $trustAuthorizationWorkflowService,
@@ -100,9 +98,9 @@ class SignDocumentController extends Controller
         // Case 2: Logged in as the wrong account
         if ($signer->user_id !== Auth::id()) {
             return response()->view('sign.wrong-account', [
-                'signerEmail'  => $signer->email,
+                'signerEmail' => $signer->email,
                 'currentEmail' => Auth::user()?->email,
-                'signerId'     => $signerId,
+                'signerId' => $signerId,
             ]);
         }
 
@@ -1135,14 +1133,20 @@ class SignDocumentController extends Controller
             $signedByFieldId[$signature->signature_field_id] = $this->signatureFieldResponsePayload($signature, $signer, $authenticated);
         }
 
+        $pdfVersion = md5(implode('|', [
+            (string) $document->sourcePdfPath(),
+            (string) $document->updated_at?->getTimestamp(),
+            (string) $signer->updated_at?->getTimestamp(),
+        ]));
+
         return view('sign.show', [
             'signer' => $signer,
             'pdfUrl' => $authenticated
                 ? route(
                     Auth::user()?->role->value === 'notary' ? 'notary.sign.account.document.pdf' : 'sign.account.document.pdf',
-                    ['signerId' => $signer->id]
+                    ['signerId' => $signer->id, 'v' => $pdfVersion]
                 )
-                : route('sign.document.pdf', $this->signerRouteToken($signer)),
+                : route('sign.document.pdf', ['token' => $this->signerRouteToken($signer), 'v' => $pdfVersion]),
             'documentHasSignatureFields' => ($document->signature_fields_count > 0),
             'fieldsJson' => $fieldsForSigner->map(fn (SignatureField $f) => [
                 'id' => $f->id,
@@ -1238,18 +1242,8 @@ class SignDocumentController extends Controller
                 ->previewPdfPath();
         }
 
-        $hasCompletedFieldSignatures = $document->signatures()
-            ->whereNotNull('signature_field_id')
-            ->exists();
-
-        if ($hasCompletedFieldSignatures) {
-            $signedPreviewPath = $this->documentPdfStampingService->generateSignedPreviewPdf($document);
-
-            if (is_string($signedPreviewPath) && $signedPreviewPath !== '') {
-                return $signedPreviewPath;
-            }
-        }
-
-        return $document->activeSigningPdfPath() ?: $document->sourcePdfPath();
+        // Keep the live signing view on the immutable source PDF. The interactive
+        // overlay is responsible for showing completed fields during signing.
+        return $document->sourcePdfPath() ?: $document->activeSigningPdfPath();
     }
 }

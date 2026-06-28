@@ -333,7 +333,7 @@ class SignatureEngineTest extends TestCase
         $this->assertDatabaseHas('signature_fields', ['id' => $attorneyField->id]);
     }
 
-    public function test_authenticated_attorney_signing_stream_uses_signed_preview_when_prior_signatures_exist(): void
+    public function test_authenticated_attorney_signing_stream_uses_source_pdf_when_prior_signatures_exist(): void
     {
         Storage::fake('local');
 
@@ -381,17 +381,48 @@ class SignatureEngineTest extends TestCase
             'signature_algorithm' => 'RSA-SHA256',
         ]);
 
-        $this->actingAs($notary)
+        $response = $this->actingAs($notary)
             ->get(route('notary.sign.account.document.pdf', ['signerId' => $attorneySigner->id]))
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
 
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('cache-control'));
+
         $generatedFiles = collect(Storage::disk('local')->allFiles('documents/generated'));
 
-        $this->assertTrue(
+        $this->assertFalse(
             $generatedFiles->contains(fn (string $file): bool => str_contains($file, $document->id.'-signed_preview-')),
-            'Expected the authenticated attorney signing stream to generate a signed preview PDF.'
+            'Pending live signing should stream the source PDF instead of generating a signed preview PDF.'
         );
+    }
+
+    public function test_field_signing_view_includes_completion_modal(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $path = 'documents/signing-completion-modal-source.pdf';
+        $this->putValidPdf($path);
+
+        $document = Document::factory()->for($user)->create([
+            'status' => DocumentStatus::Pending,
+            'file_path' => $path,
+        ]);
+
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        SignatureField::factory()->create([
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'type' => SignatureFieldType::Signature,
+        ]);
+
+        $this->get(route('sign.show', $signer->access_token))
+            ->assertOk()
+            ->assertSee('sign-completion-modal', false)
+            ->assertSee('Signing complete');
     }
 
     public function test_authenticated_notary_signature_save_returns_notary_signature_image_route(): void

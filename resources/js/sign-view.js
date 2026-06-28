@@ -90,6 +90,9 @@ function createSignViewSession(cfgEl) {
     const pdfLoadingLabel = document.getElementById('pdf-loading-label');
     const pdfLoadingProgress = document.getElementById('pdf-loading-progress');
     const modal = document.getElementById('sign-modal');
+    const completionModal = document.getElementById('sign-completion-modal');
+    const completionCloseButton = document.getElementById('sign-completion-close');
+    const completionContinueButton = document.getElementById('sign-completion-continue');
     const modalTitle = document.getElementById('sign-modal-title');
     const modalDescription = document.getElementById('sign-modal-description');
     const modalTabs = document.getElementById('sign-modal-tabs');
@@ -153,6 +156,8 @@ function createSignViewSession(cfgEl) {
     let renderSequence = 0;
     let realtimeChannelName = null;
     let destroyed = false;
+    let completionModalShown = false;
+    let completionRedirectUrl = null;
     let trustAuthorizationSession = trustAuthorizationConfig.currentSession || null;
     let trustAuthorizationStartInFlight = false;
     let trustAuthorizationPollTimerId = null;
@@ -773,17 +778,52 @@ function createSignViewSession(cfgEl) {
         currentCanEditFields = Boolean(summary.can_edit_fields);
     }
 
-    function scheduleSessionRefresh(targetUrl = null) {
-        const destination = typeof targetUrl === 'string' && targetUrl !== '' ? targetUrl : window.location.href;
+    function summaryIsComplete(summary) {
+        if (!summary) {
+            return false;
+        }
 
-        window.setTimeout(() => {
-            if (destination === window.location.href) {
-                window.location.reload();
-                return;
-            }
+        return Number(summary.assigned ?? fieldsJson.length) > 0
+            && Number(summary.remaining ?? 1) === 0;
+    }
 
-            window.location.assign(destination);
-        }, 150);
+    function closeCompletionModal() {
+        if (!completionModal?.open) {
+            return;
+        }
+
+        completionModal.close();
+    }
+
+    function showCompletionModal(redirectUrl = null) {
+        completionRedirectUrl = typeof redirectUrl === 'string' && redirectUrl !== '' ? redirectUrl : null;
+
+        if (!completionModal || completionModalShown) {
+            return;
+        }
+
+        completionModalShown = true;
+
+        if (typeof completionModal.showModal === 'function') {
+            completionModal.showModal();
+        }
+    }
+
+    function continueAfterCompletion() {
+        if (completionRedirectUrl) {
+            window.location.assign(completionRedirectUrl);
+            return;
+        }
+
+        closeCompletionModal();
+    }
+
+    async function refreshVisibleFields() {
+        if (!fabricCanvas || !currentViewport) {
+            return;
+        }
+
+        await renderPageFields(currentViewport.width, currentViewport.height);
     }
 
     function handleRealtimeSessionUpdate(payload) {
@@ -804,6 +844,10 @@ function createSignViewSession(cfgEl) {
         currentSignerStatus = payload.signer_status || payload.summary?.signer_status || currentSignerStatus;
         currentDocumentStatus = payload.document_status || payload.summary?.document_status || currentDocumentStatus;
 
+        if (summaryIsComplete(payload.summary)) {
+            showCompletionModal(payload.redirect_url || null);
+        }
+
         const stateChanged = previousCanEditFields !== currentCanEditFields
             || previousCanTakeAction !== currentCanTakeAction
             || previousSignerStatus !== currentSignerStatus
@@ -813,7 +857,9 @@ function createSignViewSession(cfgEl) {
             return;
         }
 
-        scheduleSessionRefresh(payload.redirect_url || null);
+        refreshVisibleFields().catch((error) => {
+            showFeedback(error.message || messages.genericSaveError, 'error');
+        });
     }
 
     function subscribeToRealtimeUpdates() {
@@ -983,6 +1029,11 @@ function createSignViewSession(cfgEl) {
             updateSummary(payload.summary);
             showFeedback(payload.message || messages.fieldSaved, 'success');
 
+            if (summaryIsComplete(payload.summary)) {
+                showCompletionModal(payload.redirect_url || null);
+                return;
+            }
+
             if (payload.redirect_url) {
                 window.setTimeout(() => {
                     window.location.assign(payload.redirect_url);
@@ -1004,13 +1055,7 @@ function createSignViewSession(cfgEl) {
         modal.open && closeModal();
         showFeedback(payload.message || messages.fieldSaved, 'success');
 
-        if (payload.redirect_url && Number(payload?.summary?.remaining ?? 0) === 0) {
-            showFeedback(messages.returningToWorkflow || payload.message || messages.fieldSaved, 'success');
-            window.setTimeout(() => {
-                window.location.assign(payload.redirect_url);
-            }, 500);
-            return;
-        }
+        const signingComplete = summaryIsComplete(payload.summary);
 
         if (currentCanEditFields) {
             // Navigate to the next unsigned field, preferring forward progress.
@@ -1024,12 +1069,20 @@ function createSignViewSession(cfgEl) {
 
         if (currentPage !== previousPage) {
             await renderPage(currentPage);
+            if (signingComplete) {
+                showCompletionModal(payload.redirect_url || null);
+            }
+
             return;
         }
 
         if (fabricCanvas && currentViewport) {
             const nextFieldId = firstUnsignedField()?.id ?? null;
             await renderFieldsByIds([payload.field.id, previousNextFieldId, nextFieldId].filter(Boolean), currentViewport.width, currentViewport.height);
+        }
+
+        if (signingComplete) {
+            showCompletionModal(payload.redirect_url || null);
         }
     }
 
@@ -1820,6 +1873,8 @@ function createSignViewSession(cfgEl) {
         listen(tabDraw, 'click', () => showTab('draw'));
         listen(tabUpload, 'click', () => showTab('upload'));
         listen(document.getElementById('modal-cancel'), 'click', closeModal);
+        listen(completionCloseButton, 'click', closeCompletionModal);
+        listen(completionContinueButton, 'click', continueAfterCompletion);
         listen(modalSubmitButton, 'click', (event) => {
             event.preventDefault();
             submitModalForm();

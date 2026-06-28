@@ -854,8 +854,9 @@ new #[Layout('components.layouts.app')] class extends Component {
                     <h3 class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Signing methods') }}</h3>
                     <p class="mt-0.5 text-sm text-zinc-400 dark:text-zinc-500">{{ __('How participants are asked to sign') }}</p>
                 </div>
-                <div class="relative flex h-64 items-center justify-center" wire:ignore>
-                    <canvas id="docutrust-signing-method-chart" class="absolute inset-0 z-10 mx-auto h-full w-full max-w-[260px]" data-chart="@json($signingMethodPayload)"></canvas>
+                <div class="space-y-4" wire:ignore>
+                    <div class="relative flex h-44 items-center justify-center">
+                        <canvas id="docutrust-signing-method-chart" class="absolute inset-0 z-10 mx-auto h-full w-full max-w-[220px]" data-chart="@json($signingMethodPayload)"></canvas>
                     <div data-chart-fallback="docutrust-signing-method-chart" class="absolute inset-0 z-0 flex items-center justify-center">
                         <div class="relative flex size-40 items-center justify-center rounded-full" style="background: {{ $signingMethodGradient }};">
                             <div class="flex size-24 flex-col items-center justify-center rounded-full bg-white text-center shadow-sm dark:bg-zinc-900">
@@ -864,7 +865,8 @@ new #[Layout('components.layouts.app')] class extends Component {
                             </div>
                         </div>
                     </div>
-                    <div data-chart-fallback="docutrust-signing-method-chart" class="absolute bottom-0 left-0 right-0 z-0 grid gap-1.5 text-xs">
+                    </div>
+                    <div data-chart-fallback="docutrust-signing-method-chart" class="grid gap-1.5 text-xs">
                         @foreach ($signingMethodPayload['labels'] as $methodIndex => $methodLabel)
                             <div class="flex items-center justify-between gap-3 rounded-xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-1.5 dark:border-white/10 dark:bg-white/5">
                                 <span class="flex min-w-0 items-center gap-2 text-zinc-600 dark:text-zinc-300">

@@ -82,6 +82,16 @@
         $showAwaitingAssignedFields = false;
         $showCompletedFieldsNotice = false;
     }
+
+    $signBackUrl = null;
+    if ($authenticatedSigning ?? false) {
+        $signBackUrl = $isNotaryUser && $signer->document->notary_request_id !== null
+            ? route('notary.requests.show', [
+                'notaryRequest' => $signer->document->notary_request_id,
+                'page' => 'document',
+            ])
+            : route('sign-requests.index');
+    }
 @endphp
 
 <x-layouts.guest-simple>
@@ -90,6 +100,24 @@
     {{-- ── Sticky header ── --}}
     <header class="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-200 bg-white px-5 py-3 dark:border-zinc-800 dark:bg-zinc-950">
         <div class="flex items-center gap-3">
+            @if (is_string($signBackUrl))
+                <a href="{{ $signBackUrl }}"
+                   class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-700 dark:hover:bg-teal-950/30 dark:hover:text-teal-300">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/>
+                    </svg>
+                    <span class="hidden sm:inline">{{ __('Back') }}</span>
+                </a>
+            @else
+                <button type="button"
+                    onclick="window.history.length > 1 ? window.history.back() : window.close()"
+                    class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-700 dark:hover:bg-teal-950/30 dark:hover:text-teal-300">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/>
+                    </svg>
+                    <span class="hidden sm:inline">{{ __('Back') }}</span>
+                </button>
+            @endif
             <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600">
                 <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/>
@@ -454,6 +482,33 @@
         </form>
     </dialog>
 
+    <dialog
+        id="sign-completion-modal"
+        class="w-[calc(100vw-2rem)] max-w-md rounded-3xl border border-emerald-200/90 bg-white p-0 text-left shadow-2xl shadow-emerald-950/20 backdrop:bg-zinc-950/60 dark:border-emerald-900/50 dark:bg-zinc-900 dark:shadow-black/60"
+    >
+        <div class="px-6 pb-6 pt-7 text-center">
+            <span class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-8 ring-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-950/30">
+                <svg class="h-8 w-8" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                </svg>
+            </span>
+            <h3 class="mt-5 text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{{ __('Signing complete') }}</h3>
+            <p class="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                {{ __('All required fields have been completed. Your signed document is being finalized securely.') }}
+            </p>
+        </div>
+        <div class="flex flex-col gap-2 border-t border-zinc-200/90 bg-zinc-50/70 px-6 py-4 dark:border-zinc-700 dark:bg-zinc-950/40 sm:flex-row sm:justify-end">
+            <button type="button" id="sign-completion-close"
+                class="rounded-xl px-4 py-2.5 text-sm font-semibold text-zinc-600 transition hover:bg-zinc-200/80 dark:text-zinc-300 dark:hover:bg-zinc-800">
+                {{ __('Stay here') }}
+            </button>
+            <button type="button" id="sign-completion-continue"
+                class="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-500 dark:shadow-none">
+                {{ __('Continue') }}
+            </button>
+        </div>
+    </dialog>
+
 </main>
 
     @if ($showFieldViewer || $showLegacySign)
@@ -504,6 +559,8 @@
                     'uploadRequired' => __('Please choose an image.'),
                     'progressPending' => __('The next required field is highlighted on the page.'),
                     'progressDone' => __('All assigned fields have been completed.'),
+                    'signingComplete' => __('Signing complete'),
+                    'signingCompleteDescription' => __('All required fields have been completed. Your signed document is being finalized securely.'),
                     'signatureModalTitle' => __('Add your signature'),
                     'signatureModalDescription' => __('Choose how you want to sign this field.'),
                     'signatureTypeLabel' => __('Your name'),
