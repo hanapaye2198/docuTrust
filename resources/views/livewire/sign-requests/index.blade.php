@@ -6,9 +6,17 @@ use App\Enums\SigningMethod;
 use App\Models\DocumentSigner;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Volt\Component;
 
 new #[Layout('components.layouts.app')] class extends Component {
+    public ?string $realtimeNotice = null;
+
+    #[On('sign-request-received')]
+    public function showRealtimeNotice(): void
+    {
+        $this->realtimeNotice = __('New sign request received. Your inbox has been updated.');
+    }
 
     public function with(): array
     {
@@ -55,6 +63,16 @@ new #[Layout('components.layouts.app')] class extends Component {
 }; ?>
 
 <div class="flex w-full min-w-0 max-w-none flex-col gap-5 px-0 py-4 sm:gap-6 sm:px-2 lg:px-3">
+
+    @if ($realtimeNotice !== null)
+        <div class="flex items-start gap-3 rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 shadow-sm dark:border-teal-900/60 dark:bg-teal-950/40 dark:text-teal-200">
+            <span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-teal-500"></span>
+            <div>
+                <p class="font-semibold">{{ $realtimeNotice }}</p>
+                <p class="mt-1 text-teal-700/80 dark:text-teal-200/80">{{ __('You can open it below without refreshing this page.') }}</p>
+            </div>
+        </div>
+    @endif
 
     <div class="overflow-hidden rounded-3xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div class="relative isolate px-4 py-6 sm:px-5 lg:px-6">

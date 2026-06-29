@@ -8,6 +8,7 @@ let idleSessionModulePromise = null;
 let templatePrepareModulePromise = null;
 let signViewModulePromise = null;
 let notaryStatusPollModulePromise = null;
+let signRequestNotificationsModulePromise = null;
 
 function destroyDocuTrustChart() {
     if (docuTrustStatusChart) {
@@ -58,6 +59,12 @@ function loadNotaryStatusPollModule() {
     notaryStatusPollModulePromise ??= import('./notary-status-poll');
 
     return notaryStatusPollModulePromise;
+}
+
+function loadSignRequestNotificationsModule() {
+    signRequestNotificationsModulePromise ??= import('./sign-request-notifications');
+
+    return signRequestNotificationsModulePromise;
 }
 
 function hideDocuTrustChartFallback(id) {
@@ -803,6 +810,17 @@ async function initNotaryStatusPoll() {
     initPoll();
 }
 
+async function initSignRequestNotifications() {
+    const hasSignRequestNotificationsConfig = Boolean(document.getElementById('sign-request-notifications-config'));
+
+    if (!hasSignRequestNotificationsConfig && !signRequestNotificationsModulePromise) {
+        return;
+    }
+
+    const { initSignRequestNotifications: initNotifications } = await loadSignRequestNotificationsModule();
+    initNotifications();
+}
+
 function bootDocuTrustUi() {
     void initDocuTrustDashboardChart();
     void initDocuTrustActivityChart();
@@ -813,6 +831,7 @@ function bootDocuTrustUi() {
     void initIdleSession();
     void initSignView();
     void initNotaryStatusPoll();
+    void initSignRequestNotifications();
 }
 
 document.addEventListener('DOMContentLoaded', bootDocuTrustUi);

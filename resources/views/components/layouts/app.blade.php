@@ -1,4 +1,11 @@
 <x-layouts.app.sidebar>
+    <script id="sign-request-notifications-config" type="application/json">
+        {!! json_encode([
+            'userId' => auth()->id(),
+            'signRequestsUrl' => route('sign-requests.index'),
+        ]) !!}
+    </script>
+
     <main data-flux-main class="app-workspace [grid-area:main] !flex !h-full !min-h-0 !flex-col !p-0">
         <x-layouts.app.top-bar :breadcrumbs="$layoutBreadcrumbs ?? []" />
         <div

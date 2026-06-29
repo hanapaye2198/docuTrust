@@ -17,6 +17,7 @@ use App\Events\NotaryRequestStatusUpdated;
 use App\Events\NotaryRequestSubmitted;
 use App\Events\NotarySessionScheduled;
 use App\Events\SignerSessionUpdated;
+use App\Events\SignRequestReceived;
 use App\Models\Document;
 use App\Services\DatabaseSignerKeyStore;
 use App\Services\DocumentNotificationService;
@@ -28,9 +29,11 @@ use App\Services\SemaphoreService;
 use App\Services\Signature\BasicElectronicSignatureDriver;
 use App\Services\Signature\FuturePKISignatureDriver;
 use App\View\Breadcrumbs;
+use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -101,6 +104,7 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(DocumentSent::class, function (DocumentSent $event): void {
             app(DocumentNotificationService::class)->handleDocumentSent($event);
+            $this->broadcastSignRequests($event->document);
         });
 
         Event::listen(DocumentSignerCompleted::class, function (DocumentSignerCompleted $event): void {
@@ -160,12 +164,33 @@ class AppServiceProvider extends ServiceProvider
 
             try {
                 event(new SignerSessionUpdated($signer));
-            } catch (\Illuminate\Broadcasting\BroadcastException|\RuntimeException $e) {
+            } catch (BroadcastException|\RuntimeException $e) {
                 // Broadcasting is best-effort — a missing or unreachable Reverb
                 // server must not interrupt the signing workflow.
-                \Illuminate\Support\Facades\Log::warning('Broadcast failed for signer session', [
+                Log::warning('Broadcast failed for signer session', [
                     'signer_id' => $signer->id,
-                    'error'     => $e->getMessage(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    private function broadcastSignRequests(Document $document): void
+    {
+        $document->loadMissing('documentSigners.document.user');
+
+        foreach ($document->documentSigners as $signer) {
+            if ($signer->user_id === null || ! $signer->requiresAction()) {
+                continue;
+            }
+
+            try {
+                event(new SignRequestReceived($signer));
+            } catch (BroadcastException|\RuntimeException $e) {
+                Log::warning('Broadcast failed for sign request notification', [
+                    'signer_id' => $signer->id,
+                    'user_id' => $signer->user_id,
+                    'error' => $e->getMessage(),
                 ]);
             }
         }

@@ -7,6 +7,7 @@ use App\Enums\DocumentStatus;
 use App\Enums\SignatureFieldType;
 use App\Enums\SigningMethod;
 use App\Enums\TemplateRoleType;
+use App\Events\SignRequestReceived;
 use App\Livewire\DocumentSignersManager;
 use App\Models\Contact;
 use App\Models\Document;
@@ -980,6 +981,62 @@ class DocumentSignerWorkflowTest extends TestCase
             ->assertSee('Signed Lease Addendum')
             ->assertSee('Expires soon')
             ->assertSee('Account verified');
+    }
+
+    public function test_sign_requests_index_updates_when_realtime_notification_is_received(): void
+    {
+        /** @var User $owner */
+        $owner = User::factory()->create();
+        /** @var User $linkedUser */
+        $linkedUser = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+        $document = Document::factory()->for($owner)->create([
+            'title' => 'Realtime Signing Packet',
+            'status' => DocumentStatus::Pending,
+            'sent_at' => now(),
+        ]);
+
+        DocumentSigner::factory()->for($document)->create([
+            'name' => $linkedUser->name,
+            'email' => $linkedUser->email,
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        $this->actingAs($linkedUser);
+
+        LivewireVolt::test('sign-requests.index')
+            ->dispatch('sign-request-received')
+            ->assertSee('New sign request received. Your inbox has been updated.')
+            ->assertSee('Realtime Signing Packet');
+    }
+
+    public function test_sign_request_received_broadcast_targets_signer_private_channel(): void
+    {
+        /** @var User $owner */
+        $owner = User::factory()->create(['name' => 'Document Owner']);
+        /** @var User $linkedUser */
+        $linkedUser = User::factory()->signer()->organizationMember()->create([
+            'organization_id' => $owner->organization_id,
+        ]);
+        $document = Document::factory()->for($owner)->create([
+            'title' => 'Board Resolution',
+            'status' => DocumentStatus::Pending,
+        ]);
+        $signer = DocumentSigner::factory()->for($document)->create([
+            'signing_method' => SigningMethod::AccountVerified,
+            'user_id' => $linkedUser->id,
+            'status' => DocumentSignerStatus::Pending,
+        ]);
+
+        $event = new SignRequestReceived($signer);
+
+        $this->assertSame('private-App.Models.User.'.$linkedUser->id, $event->broadcastOn()->name);
+        $this->assertSame('sign.request.received', $event->broadcastAs());
+        $this->assertSame('Board Resolution', $event->broadcastWith()['title']);
+        $this->assertSame(route('sign-requests.index'), $event->broadcastWith()['url']);
     }
 
     public function test_document_cannot_be_sent_when_account_verified_signer_is_not_linked(): void
