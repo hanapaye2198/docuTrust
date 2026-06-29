@@ -13,6 +13,8 @@
             method="POST"
             action="{{ route('two-factor.verify') }}"
             class="flex flex-col gap-5"
+            x-ref="verificationForm"
+            x-on:submit="submitted = true"
             x-data="{
                 submitted: false,
                 normalize(event) {
@@ -25,8 +27,7 @@
                         return;
                     }
 
-                    this.submitted = true;
-                    this.$nextTick(() => this.$refs.submitButton.click());
+                    this.$refs.verificationForm.requestSubmit();
                 },
             }"
         >
@@ -79,7 +80,6 @@
             @enderror
 
             <flux:button
-                x-ref="submitButton"
                 variant="primary"
                 type="submit"
                 class="w-full disabled:cursor-not-allowed disabled:opacity-50"

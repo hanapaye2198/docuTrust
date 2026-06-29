@@ -60,7 +60,10 @@ class TwoFactorChallengeTest extends TestCase
             ])
             ->get(route('two-factor.challenge'))
             ->assertOk()
-            ->assertSeeText('Authentication code');
+            ->assertSeeText('Authentication code')
+            ->assertSee('x-ref="verificationForm"', false)
+            ->assertSee('requestSubmit()', false)
+            ->assertDontSee('$refs.submitButton.click()', false);
     }
 
     public function test_two_factor_rejects_invalid_code(): void
