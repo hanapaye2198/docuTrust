@@ -21,14 +21,16 @@ class CompletedDocumentArtifactService
             return $document;
         }
 
-        if ($document->final_pdf_path !== null && $document->final_pdf_path !== '') {
-            if ($document->certificate_path !== null && $document->certificate_path !== '') {
-                return $document;
-            }
+        if ($this->hasCompletedArtifacts($document) && ! $this->needsVerificationProofRefresh($document)) {
+            return $document;
         }
 
         $this->completedDocumentSealingService->seal($document);
         $document = $document->fresh() ?? $document;
+
+        if ($this->hasCompletedArtifacts($document)) {
+            return $document;
+        }
 
         $this->documentCertificateService->createForCompletedDocument($document);
         $document = $document->fresh() ?? $document;
@@ -36,5 +38,22 @@ class CompletedDocumentArtifactService
         $this->documentArchiveService->archiveCompletedDocument($document);
 
         return $document->fresh() ?? $document;
+    }
+
+    private function hasCompletedArtifacts(Document $document): bool
+    {
+        return is_string($document->final_pdf_path)
+            && $document->final_pdf_path !== ''
+            && is_string($document->certificate_path)
+            && $document->certificate_path !== '';
+    }
+
+    private function needsVerificationProofRefresh(Document $document): bool
+    {
+        return $document->documentHash === null
+            || ! is_string($document->documentHash->hash)
+            || $document->documentHash->hash === ''
+            || ! is_string($document->documentHash->transaction_id)
+            || $document->documentHash->transaction_id === '';
     }
 }

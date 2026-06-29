@@ -1,3 +1,5 @@
+@props(['containerClass' => 'max-w-sm'])
+
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
@@ -31,8 +33,8 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M7.05 7.05 5.636 5.636m12.728 0L16.95 7.05M7.05 16.95l-1.414 1.414M12 16a4 4 0 100-8 4 4 0 000 8z"></path>
             </svg>
         </button>
-        <div class="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
-            <div class="flex w-full max-w-sm flex-col gap-2">
+        <div class="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-4 sm:p-6 md:p-10">
+            <div class="flex w-full {{ $containerClass }} flex-col gap-2">
                 <a href="{{ route('home') }}" class="flex flex-col items-center gap-2 font-medium" wire:navigate>
                     <span class="flex h-9 w-9 mb-1 items-center justify-center rounded-md">
                         <x-app-logo-icon class="size-full fill-current text-black dark:text-white" />

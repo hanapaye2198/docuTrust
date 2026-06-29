@@ -60,6 +60,10 @@ Route::get('/enotary/video/{token}', [EnotarySignerVideoJoinController::class, '
     ->middleware('throttle:signing-links')
     ->name('enotary.video.join');
 
+Route::get('/enotary/video/{token}/status', [EnotarySignerVideoJoinController::class, 'status'])
+    ->middleware('throttle:signing-links')
+    ->name('enotary.video.status');
+
 Route::middleware('throttle:signing-links')->group(function () {
     Route::get('/sign/{token}', [SignDocumentController::class, 'show'])->name('sign.show');
     Route::post('/sign/{token}/unlock', [SignDocumentController::class, 'unlock'])->name('sign.unlock');
@@ -237,7 +241,9 @@ Route::middleware(['auth'])->group(function () {
     Volt::route('settings/trust-profile', 'settings.trust-profile')->name('settings.trust-profile');
     Volt::route('settings/attorney-application', 'settings.attorney-application')->name('settings.attorney-application');
     Route::get('settings/trust-profile/photo', [TrustProfileAssetController::class, 'photo'])->name('settings.trust-profile.photo');
+    Route::post('settings/trust-profile/photo', [TrustProfileAssetController::class, 'storePhoto'])->name('settings.trust-profile.photo.store');
     Route::get('settings/trust-profile/signature', [TrustProfileAssetController::class, 'signature'])->name('settings.trust-profile.signature');
+    Route::post('settings/trust-profile/signature', [TrustProfileAssetController::class, 'storeSignature'])->name('settings.trust-profile.signature.store');
     Route::get('settings/trust-profile/seal', [TrustProfileAssetController::class, 'seal'])->name('settings.trust-profile.seal');
     Route::post('settings/trust-profile/seal', [TrustProfileAssetController::class, 'storeSeal'])->name('settings.trust-profile.seal.store');
     Volt::route('settings/profile', 'settings.profile')->name('settings.profile');

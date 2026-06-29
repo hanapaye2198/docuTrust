@@ -120,7 +120,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
         Session::put(AuthSession::TWO_FACTOR_PASSED, true);
 
-        $this->redirect(route('settings.trust-profile', absolute: false), navigate: true);
+        $this->redirect(route('settings.trust-profile', absolute: false));
     }
 }; ?>
 

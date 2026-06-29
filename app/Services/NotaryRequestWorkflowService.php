@@ -934,6 +934,9 @@ class NotaryRequestWorkflowService
      *     has_certificate: bool,
      *     has_document_hash: bool,
      *     has_blockchain_transaction: bool,
+     *     document_hash: string|null,
+     *     document_hash_created_at: string|null,
+     *     blockchain_transaction_id: string|null,
      *     issues: list<string>
      *   }>
      * }
@@ -966,6 +969,8 @@ class NotaryRequestWorkflowService
             $hasBlockchainTransaction = $document->documentHash !== null
                 && is_string($document->documentHash->transaction_id)
                 && $document->documentHash->transaction_id !== '';
+            $documentHash = $hasDocumentHash ? (string) $document->documentHash->hash : null;
+            $blockchainTransactionId = $hasBlockchainTransaction ? (string) $document->documentHash->transaction_id : null;
 
             if (! $completed) {
                 $documentIssues[] = __('Document is not completed.');
@@ -1003,6 +1008,9 @@ class NotaryRequestWorkflowService
                 'has_certificate' => $hasCertificate,
                 'has_document_hash' => $hasDocumentHash,
                 'has_blockchain_transaction' => $hasBlockchainTransaction,
+                'document_hash' => $documentHash,
+                'document_hash_created_at' => $document->documentHash?->created_at?->timezone(config('docutrust.notary.timezone', 'Asia/Manila'))->format('M j, Y g:i A'),
+                'blockchain_transaction_id' => $blockchainTransactionId,
                 'issues' => $documentIssues,
             ];
         }

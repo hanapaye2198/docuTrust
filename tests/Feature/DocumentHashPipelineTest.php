@@ -7,6 +7,7 @@ use App\Enums\DocumentStatus;
 use App\Models\Document;
 use App\Models\DocumentSigner;
 use App\Models\User;
+use App\Services\CompletedDocumentArtifactService;
 use App\Services\DocumentHashService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -82,6 +83,37 @@ class DocumentHashPipelineTest extends TestCase
         $service->createForCompletedDocument($document);
 
         $this->assertSame(1, $document->documentHash()->count());
+    }
+
+    public function test_artifact_readiness_retries_missing_blockchain_transaction_for_completed_document(): void
+    {
+        Storage::fake('local');
+        Http::fake([
+            'http://127.0.0.1:3001/anchor' => Http::response([
+                'transactionHash' => '0xretriedproof',
+            ]),
+        ]);
+
+        $path = 'documents/retry-missing-blockchain.pdf';
+        $this->putValidPdf($path, 'Retry missing blockchain');
+
+        $document = Document::factory()->for(User::factory())->create([
+            'status' => DocumentStatus::Completed,
+            'file_path' => $path,
+            'final_pdf_path' => $path,
+            'certificate_path' => 'certificates/already-generated.pdf',
+        ]);
+
+        $document->documentHash()->create([
+            'hash' => app(DocumentHashService::class)->generateDocumentHash($path),
+            'transaction_id' => null,
+            'created_at' => now(),
+        ]);
+
+        app(CompletedDocumentArtifactService::class)->ensureReady($document);
+
+        $document->refresh();
+        $this->assertSame('0xretriedproof', $document->documentHash?->transaction_id);
     }
 
     public function test_transaction_can_be_verified_on_blockchain(): void

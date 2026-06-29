@@ -14,73 +14,14 @@
             action="{{ route('two-factor.verify') }}"
             class="flex flex-col gap-5"
             x-data="{
-                digits: ['', '', '', '', '', ''],
                 submitted: false,
-                init() {
-                    this.syncFromCode(this.$refs.codeInput.value);
-                    this.$watch(() => this.joinedCode, (value) => {
-                        this.$refs.codeInput.value = value;
-                    });
+                normalize(event) {
+                    const input = event.target;
+                    input.value = String(input.value ?? '').replace(/\D/g, '').slice(0, 6);
+                    this.autoSubmitIfComplete(input.value);
                 },
-                get joinedCode() {
-                    return this.digits.join('');
-                },
-                get isComplete() {
-                    return this.joinedCode.length === 6;
-                },
-                syncFromCode(value) {
-                    const clean = String(value ?? '').replace(/\D/g, '').slice(0, 6);
-                    this.digits = Array.from({ length: 6 }, (_, index) => clean[index] ?? '');
-                },
-                focusIndex(index) {
-                    this.$nextTick(() => {
-                        this.$el.querySelector(`[data-otp-index='${index}']`)?.focus();
-                    });
-                },
-                onInput(index, event) {
-                    const rawValue = String(event.target.value ?? '');
-                    const clean = rawValue.replace(/\D/g, '');
-
-                    if (clean.length > 1) {
-                        this.fillFromString(clean, index);
-                        return;
-                    }
-
-                    this.digits[index] = clean === '' ? '' : clean;
-                    event.target.value = this.digits[index];
-
-                    if (this.digits[index] !== '' && index < 5) {
-                        this.focusIndex(index + 1);
-                    }
-
-                    this.autoSubmitIfComplete();
-                },
-                onKeydown(index, event) {
-                    if (event.key === 'Backspace' && this.digits[index] === '' && index > 0) {
-                        this.focusIndex(index - 1);
-                    }
-                },
-                fillFromString(value, startIndex = 0) {
-                    const clean = String(value ?? '').replace(/\D/g, '').slice(0, 6 - startIndex);
-                    if (clean === '') {
-                        return;
-                    }
-
-                    for (let offset = 0; offset < clean.length; offset++) {
-                        this.digits[startIndex + offset] = clean[offset] ?? '';
-                    }
-
-                    const focusTo = Math.min(startIndex + clean.length - 1, 5);
-                    this.focusIndex(focusTo);
-                    this.autoSubmitIfComplete();
-                },
-                onPaste(event) {
-                    event.preventDefault();
-                    this.digits = ['', '', '', '', '', ''];
-                    this.fillFromString(event.clipboardData?.getData('text') ?? '', 0);
-                },
-                autoSubmitIfComplete() {
-                    if (! this.isComplete || this.submitted) {
+                autoSubmitIfComplete(value) {
+                    if (value.length !== 6 || this.submitted) {
                         return;
                     }
 
@@ -88,30 +29,25 @@
                     this.$nextTick(() => this.$refs.submitButton.click());
                 },
             }"
-            x-init="init(); focusIndex(0);"
         >
             @csrf
             <div>
                 <p class="mb-2 text-sm font-medium text-zinc-800 dark:text-zinc-100">{{ __('Authentication code') }}</p>
-                <div class="grid grid-cols-6 gap-2 sm:gap-3" @paste="onPaste($event)">
-                    <template x-for="index in 6" :key="index">
-                        <input
-                            :data-otp-index="index - 1"
-                            x-model="digits[index - 1]"
-                            x-on:input="onInput(index - 1, $event)"
-                            x-on:keydown="onKeydown(index - 1, $event)"
-                            x-on:focus="$event.target.select()"
-                            type="text"
-                            inputmode="numeric"
-                            autocomplete="one-time-code"
-                            maxlength="1"
-                            required
-                            class="h-12 rounded-lg border border-zinc-300 bg-white text-center text-lg font-semibold text-zinc-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-300/60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-teal-400 dark:focus:ring-teal-500/30 sm:h-14 sm:text-xl"
-                            :class="digits[index - 1] !== '' ? 'border-teal-500 dark:border-teal-400' : ''"
-                        />
-                    </template>
-                </div>
-                <input x-ref="codeInput" id="code" name="code" type="hidden" value="{{ old('code') }}" />
+                <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Type or paste the full 6-digit code.') }}</p>
+                <input
+                    id="code"
+                    name="code"
+                    type="text"
+                    value="{{ old('code') }}"
+                    x-on:input="normalize($event)"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    autocomplete="one-time-code"
+                    maxlength="6"
+                    placeholder="000000"
+                    class="w-full rounded-xl border-2 border-zinc-300 bg-white px-4 py-3 text-center font-mono text-xl font-semibold tracking-[0.35em] text-zinc-900 outline-none transition placeholder:text-zinc-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-300/60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder:text-zinc-600 dark:focus:border-teal-400 dark:focus:ring-teal-500/30 sm:px-5 sm:py-4 sm:text-2xl"
+                    required
+                />
             </div>
             <flux:input
                 name="recovery_code"

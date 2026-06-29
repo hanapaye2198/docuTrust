@@ -3,6 +3,10 @@
     use App\Enums\NotaryRequestStatus;
     use App\Enums\PaymentStatus;
     use App\Models\Payment;
+
+    $notarizationsHref = Auth::user()?->role->value === 'notary'
+        ? route('notary.requests.index')
+        : (Auth::user()?->isEnotaryPortalSigner() ? route('settings.trust-profile', [], false) : route('notary-requests.index'));
 @endphp
 
 <x-admin.page class="h-full flex-1" gap="gap-6" wide>
@@ -20,8 +24,7 @@
                 <flux:button
                     variant="ghost"
                     size="sm"
-                    :href="Auth::user()?->role->value === 'notary' ? route('notary.requests.index') : (Auth::user()?->isEnotaryPortalSigner() ? route('settings.trust-profile') : route('notary-requests.index'))"
-                    wire:navigate
+                    :href="$notarizationsHref"
                     icon="arrow-left"
                 >
                     {{ __('Notarizations') }}
@@ -966,7 +969,11 @@
 
                             @if ($currentPaymentExpired)
                                 <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
-                                    {{ __('This payment link has expired. Email a fresh payment link to the client or generate a new one to continue.') }}
+                                    @if ($isNotary)
+                                        {{ __('This payment link has expired. Email a fresh payment link to the client or generate a new one to continue.') }}
+                                    @else
+                                        {{ __('This payment link has expired. Ask your attorney to generate a new payment link.') }}
+                                    @endif
                                 </div>
                                 <div class="mt-4">
                                     @if ($isNotary)
@@ -1026,10 +1033,10 @@
                         </div>
                     @endif
 
-                    @if (($latestRegisterEntry || $attorneyRegistryDraft) && $paymentDue > 0 && (! ($latestPayment instanceof Payment) || $latestPayment->status !== PaymentStatus::Paid) && ($canCreatePayment || $canPayNotaryFee))
+                    @if (($latestRegisterEntry || $attorneyRegistryDraft) && $paymentDue > 0 && (! ($latestPayment instanceof Payment) || $latestPayment->status !== PaymentStatus::Paid) && $canCreatePayment)
                         <div class="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
                             <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                                {{ $canPayNotaryFee ? __('Choose a payment method') : ($currentPaymentExpired ? __('Generate a new GatewayHub payment') : __('Create GatewayHub payment')) }}
+                                {{ $currentPaymentExpired ? __('Generate a new GatewayHub payment') : __('Create GatewayHub payment') }}
                             </div>
                             @if ($enabledPaymentGateways !== [])
                                 <div class="mt-3 space-y-3">
@@ -1042,17 +1049,20 @@
                                         </select>
                                         <flux:error name="paymentGateway" />
                                     </flux:field>
-                                    <flux:button variant="primary" type="button" wire:click="{{ $canPayNotaryFee ? 'createGatewayPaymentForClient' : 'createGatewayPayment' }}">
-                                        {{ $canPayNotaryFee ? __('Continue to payment') : ($currentPaymentExpired ? __('Generate new payment') : __('Create payment')) }}
+                                    <flux:button variant="primary" type="button" wire:click="createGatewayPayment">
+                                        {{ $currentPaymentExpired ? __('Generate new payment') : __('Create payment') }}
                                     </flux:button>
                                     <flux:error name="createGatewayPayment" />
-                                    <flux:error name="createGatewayPaymentForClient" />
                                 </div>
                             @else
                                 <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
                                     {{ __('GatewayHub is not fully configured or enabled gateways could not be loaded.') }}
                                 </div>
                             @endif
+                        </div>
+                    @elseif ($canPayNotaryFee && $paymentDue > 0 && ! ($latestPayment instanceof Payment))
+                        <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                            {{ __('Waiting for the attorney to generate your payment link. The attorney will choose the payment method for this case.') }}
                         </div>
                     @endif
 

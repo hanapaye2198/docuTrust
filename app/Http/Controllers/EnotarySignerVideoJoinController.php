@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\NotarySession;
 use App\Services\NotarySchedulingService;
 use App\Services\NotarySignerVideoInvitationService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 
 class EnotarySignerVideoJoinController extends Controller
@@ -41,5 +42,25 @@ class EnotarySignerVideoJoinController extends Controller
         }
 
         return view('enotary.video-link-invalid');
+    }
+
+    public function status(string $token): JsonResponse
+    {
+        $session = NotarySession::query()
+            ->where('access_token', $token)
+            ->whereIn('status', ['scheduled', 'in_progress', 'completed', 'cancelled'])
+            ->first();
+
+        abort_if($session === null, 404);
+
+        $status = (string) $session->status;
+
+        return response()->json([
+            'status' => $status,
+            'ended' => in_array($status, ['completed', 'cancelled'], true),
+            'completed' => $status === 'completed',
+            'cancelled' => $status === 'cancelled',
+            'ended_at' => $session->ended_at?->toIso8601String(),
+        ]);
     }
 }

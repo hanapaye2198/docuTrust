@@ -7,12 +7,10 @@ use App\Services\TrustProfile\TrustProfileService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
-use Livewire\Features\SupportFileUploads\WithFileUploads;
+use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 
-new class extends Component {
-    use WithFileUploads;
-
+new #[Layout('components.layouts.app')] class extends Component {
     public string $address = '';
 
     public string $nationality = '';
@@ -26,12 +24,6 @@ new class extends Component {
     public string $signature_initials = '';
 
     public string $drawnSignature = '';
-
-    public $profilePhoto = null;
-
-    public $signatureUpload = null;
-
-    public $notarySealUpload = null;
 
     public function mount(): void
     {
@@ -81,26 +73,6 @@ new class extends Component {
         Session::flash('trust-status', __('Legal identity saved.'));
     }
 
-    public function uploadProfilePhoto(): void
-    {
-        $this->validate([
-            'profilePhoto' => ['required', 'image', 'max:2048'],
-        ]);
-
-        $user = Auth::user();
-        $disk = (string) config('filesystems.docutrust_disk', 'local');
-        $path = $this->profilePhoto->store('trust-profile/'.$user->id.'/photos', $disk);
-
-        if (filled($user->profile_photo_path) && Storage::disk($disk)->exists($user->profile_photo_path)) {
-            Storage::disk($disk)->delete($user->profile_photo_path);
-        }
-
-        $user->update(['profile_photo_path' => $path]);
-        $this->profilePhoto = null;
-
-        Session::flash('trust-status', __('Profile photo updated.'));
-    }
-
     public function saveDrawnSignature(): void
     {
         $this->validate([
@@ -111,47 +83,6 @@ new class extends Component {
         $this->drawnSignature = '';
 
         Session::flash('trust-status', __('Signature saved.'));
-    }
-
-    public function uploadNotarySeal(NotarySealProfileService $sealProfile): void
-    {
-        $user = Auth::user();
-        abort_unless($user !== null && $user->role === UserRole::Notary, 403);
-
-        $this->validate([
-            'notarySealUpload' => ['required', 'image', 'max:2048'],
-        ]);
-
-        $sealProfile->storeSeal($user, $this->notarySealUpload);
-        $this->notarySealUpload = null;
-
-        app(OnboardingAuditLogger::class)->log($user, 'trust_profile.notary_seal_updated');
-
-        Session::flash('trust-status', __('Notary seal saved. It will be used on all cases.'));
-    }
-
-    public function saveUploadedSignature(): void
-    {
-        $this->validate([
-            'signatureUpload' => ['required', 'image', 'max:2048'],
-        ]);
-
-        $user = Auth::user();
-        $disk = (string) config('filesystems.docutrust_disk', 'local');
-        $path = $this->signatureUpload->store('trust-profile/'.$user->id.'/signatures', $disk);
-
-        if (filled($user->signature_image_path) && Storage::disk($disk)->exists($user->signature_image_path)) {
-            Storage::disk($disk)->delete($user->signature_image_path);
-        }
-
-        $user->update([
-            'signature_image_path' => $path,
-            'signature_type' => 'uploaded',
-        ]);
-
-        $this->signatureUpload = null;
-
-        Session::flash('trust-status', __('Signature uploaded.'));
     }
 
     public function saveInitials(): void
@@ -236,20 +167,41 @@ new class extends Component {
             {{-- Hero --}}
             <div class="rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/40">
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-center">
-                    <div class="relative shrink-0">
+                    <div class="relative shrink-0" data-profile-photo-upload>
                         @if ($user->profile_photo_path)
                             <img
-                                src="{{ route('settings.trust-profile.photo') }}"
+                                src="{{ route('settings.trust-profile.photo', [], false) }}"
                                 alt=""
+                                data-profile-photo-preview
                                 class="size-20 rounded-2xl object-cover ring-2 {{ $tierRing }}"
                             />
                         @else
-                            <flux:avatar size="lg" :name="$user->name" class="!size-20 !rounded-2xl ring-2 {{ $tierRing }}" />
+                            <img
+                                src=""
+                                alt=""
+                                data-profile-photo-preview
+                                class="hidden size-20 rounded-2xl object-cover ring-2 {{ $tierRing }}"
+                            />
+                            <div data-profile-photo-empty>
+                                <flux:avatar size="lg" :name="$user->name" class="!size-20 !rounded-2xl ring-2 {{ $tierRing }}" />
+                            </div>
                         @endif
-                        <label class="absolute -bottom-1 -right-1 cursor-pointer rounded-full bg-teal-600 p-1.5 text-white shadow-md hover:bg-teal-500">
-                            <flux:icon name="camera" class="size-3.5" />
-                            <input type="file" class="sr-only" wire:model="profilePhoto" accept="image/*" />
-                        </label>
+                        <form method="POST" action="{{ route('settings.trust-profile.photo.store', [], false) }}" enctype="multipart/form-data">
+                            @csrf
+                            <label class="absolute -bottom-1 -right-1 cursor-pointer rounded-full bg-teal-600 p-1.5 text-white shadow-md hover:bg-teal-500">
+                                <flux:icon name="camera" class="size-3.5" />
+                                <input
+                                    type="file"
+                                    class="sr-only"
+                                    name="profile_photo"
+                                    accept="image/*"
+                                    onchange="(function(input){const root=input.closest('[data-profile-photo-upload]');const file=input.files&&input.files[0];const preview=root&&root.querySelector('[data-profile-photo-preview]');const empty=root&&root.querySelector('[data-profile-photo-empty]');const button=root&&root.querySelector('[data-profile-photo-save]');if(!file||!preview){if(button){button.classList.add('hidden');}return;}const reader=new FileReader();reader.onload=function(event){preview.src=String(event.target.result||'');preview.classList.remove('hidden');if(empty){empty.classList.add('hidden');}if(button){button.classList.remove('hidden');}};reader.readAsDataURL(file);})(this)"
+                                />
+                            </label>
+                            <button type="submit" data-profile-photo-save class="absolute -bottom-9 left-0 hidden rounded-lg bg-teal-600 px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-teal-500">
+                                {{ __('Save') }}
+                            </button>
+                        </form>
                     </div>
 
                     <div class="min-w-0 flex-1">
@@ -288,12 +240,9 @@ new class extends Component {
                                 </flux:button>
                             </div>
                         @endif
-                        @if ($profilePhoto)
-                            <div class="mt-3">
-                                <flux:button variant="primary" size="sm" type="button" wire:click="uploadProfilePhoto">{{ __('Save photo') }}</flux:button>
-                                <flux:error name="profilePhoto" class="mt-1" />
-                            </div>
-                        @endif
+                        @error('profile_photo')
+                            <p class="mt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     <div class="grid shrink-0 grid-cols-3 gap-3 text-center sm:gap-4">
@@ -458,7 +407,7 @@ new class extends Component {
                     @if ($notaryCredential)
                         <form
                             method="POST"
-                            action="{{ route('settings.trust-profile.seal.store') }}"
+                            action="{{ route('settings.trust-profile.seal.store', [], false) }}"
                             enctype="multipart/form-data"
                             data-seal-upload
                             class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]"
@@ -483,7 +432,7 @@ new class extends Component {
                                         name="notary_seal_upload"
                                         accept="image/png,image/jpeg"
                                         class="sr-only"
-                                        onchange="(function(input){const root=input.closest('[data-seal-upload]');const file=input.files&&input.files[0];const selected=root&&root.querySelector('[data-seal-selected]');const name=root&&root.querySelector('[data-seal-file-name]');const preview=root&&root.querySelector('[data-seal-preview]');const empty=root&&root.querySelector('[data-seal-empty]');const image=root&&root.querySelector('[data-seal-preview-image]');if(name){name.textContent=file?file.name:'';}if(selected){selected.classList.toggle('hidden',!file);}if(!file||!preview||!empty||!image){return;}const reader=new FileReader();reader.onload=function(event){image.src=event.target.result;preview.classList.remove('hidden');empty.classList.add('hidden');};reader.readAsDataURL(file);})(this)"
+                                        onchange="(function(input){const root=input.closest('[data-seal-upload]');const file=input.files&&input.files[0];const empty=root&&root.querySelector('[data-seal-empty]');const preview=root&&root.querySelector('[data-seal-preview]');const image=root&&root.querySelector('[data-seal-preview-image]');const name=root&&root.querySelector('[data-seal-file-name]');if(name){name.textContent=file?file.name:'';}if(!file||!preview||!image){if(preview){preview.classList.add('hidden');}if(empty){empty.classList.remove('hidden');}return;}const reader=new FileReader();reader.onload=function(event){image.src=String(event.target.result||'');preview.classList.remove('hidden');if(empty){empty.classList.add('hidden');}};reader.readAsDataURL(file);})(this)"
                                     />
                                     <span class="text-sm font-semibold text-teal-700 dark:text-teal-300">{{ $hasNotarySeal ? __('Choose replacement seal') : __('Choose seal image') }}</span>
                                     <span class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('PNG or JPG, max 2MB') }}</span>
@@ -493,8 +442,8 @@ new class extends Component {
                                     <p class="mt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                                 @enderror
 
-                                <p data-seal-selected class="mt-3 hidden truncate text-xs text-zinc-500 dark:text-zinc-400">
-                                    {{ __('Selected:') }} <span data-seal-file-name></span>
+                                <p class="mt-3 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Selected:') }} <span data-seal-file-name>{{ __('No file chosen') }}</span>
                                 </p>
 
                                 <flux:button variant="primary" size="sm" type="submit" class="mt-4 w-full sm:w-auto">
@@ -532,7 +481,7 @@ new class extends Component {
                                         </div>
                                         <div class="flex min-h-44 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/60">
                                             <img
-                                                src="{{ route('settings.trust-profile.seal') }}"
+                                                src="{{ route('settings.trust-profile.seal', [], false) }}"
                                                 alt=""
                                                 class="max-h-40 max-w-full rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-950"
                                             />
@@ -559,7 +508,7 @@ new class extends Component {
             @endif
 
             {{-- Signatures --}}
-            <div class="rounded-2xl border border-zinc-200/90 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
+            <div id="signature" class="scroll-mt-24 rounded-2xl border border-zinc-200/90 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
                 <flux:heading size="lg">{{ __('Signature & initials') }}</flux:heading>
                 <div class="mt-4 grid gap-6 lg:grid-cols-2">
                     <div
@@ -653,15 +602,26 @@ new class extends Component {
                         </div>
                     </div>
 
-                    <div class="space-y-4">
+                    <div class="space-y-4" data-signature-upload>
                         @if ($user->signature_image_path)
-                            <img src="{{ route('settings.trust-profile.signature') }}" alt="" class="max-h-20 dark:invert" />
+                            <img src="{{ route('settings.trust-profile.signature', [], false) }}" alt="" data-signature-preview class="max-h-20 dark:invert" />
+                        @else
+                            <img src="" alt="" data-signature-preview class="hidden max-h-20 dark:invert" />
                         @endif
-                        <input type="file" wire:model="signatureUpload" accept="image/*" class="w-full text-sm" />
-                        <flux:error name="signatureUpload" />
-                        @if ($signatureUpload)
-                            <flux:button variant="primary" size="sm" type="button" wire:click="saveUploadedSignature">{{ __('Upload') }}</flux:button>
-                        @endif
+                        <form method="POST" action="{{ route('settings.trust-profile.signature.store', [], false) }}" enctype="multipart/form-data" class="space-y-3">
+                            @csrf
+                            <input
+                                type="file"
+                                name="signature_upload"
+                                accept="image/*"
+                                class="w-full text-sm"
+                                onchange="(function(input){const root=input.closest('[data-signature-upload]');const file=input.files&&input.files[0];const preview=root&&root.querySelector('[data-signature-preview]');const button=root&&root.querySelector('[data-signature-save]');if(!file||!preview){if(button){button.classList.add('hidden');}return;}const reader=new FileReader();reader.onload=function(event){preview.src=String(event.target.result||'');preview.classList.remove('hidden');if(button){button.classList.remove('hidden');}};reader.readAsDataURL(file);})(this)"
+                            />
+                            @error('signature_upload')
+                                <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                            @enderror
+                            <flux:button data-signature-save variant="primary" size="sm" type="submit" class="hidden">{{ __('Upload') }}</flux:button>
+                        </form>
                         <form wire:submit="saveInitials" class="flex gap-2">
                             <flux:input wire:model="signature_initials" label="{{ __('Initials') }}" maxlength="10" class="flex-1" />
                             <flux:button variant="ghost" type="submit" class="self-end">{{ __('Save') }}</flux:button>

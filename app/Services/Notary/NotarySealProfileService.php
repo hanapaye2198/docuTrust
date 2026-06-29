@@ -37,11 +37,10 @@ class NotarySealProfileService
 
     public function hasSealOnFile(User $user): bool
     {
-        $credential = $this->activeCredential($user);
+        $path = $this->sealImagePath($user);
 
-        return $credential !== null
-            && is_string($credential->seal_image_path)
-            && $credential->seal_image_path !== '';
+        return $path !== null
+            && Storage::disk((string) config('filesystems.docutrust_disk', 'local'))->exists($path);
     }
 
     public function sealImagePath(User $user): ?string

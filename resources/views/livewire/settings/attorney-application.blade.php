@@ -336,7 +336,7 @@ new class extends Component {
         @endif
 
         <div class="mt-4">
-            <flux:button variant="ghost" :href="route('settings.trust-profile')" wire:navigate>{{ __('Back to trust profile') }}</flux:button>
+            <flux:button variant="ghost" :href="route('settings.trust-profile', [], false)">{{ __('Back to trust profile') }}</flux:button>
         </div>
     </x-settings.trust-layout>
 </section>

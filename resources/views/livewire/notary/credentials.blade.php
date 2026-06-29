@@ -199,7 +199,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         {{ __('Upload your personal seal in trust profile. It is reused on every case.') }}
                     @endif
                 </p>
-                <flux:button variant="ghost" size="sm" class="mt-3" :href="route('settings.trust-profile').'#notary-seal'" wire:navigate>
+                <flux:button variant="ghost" size="sm" class="mt-3" :href="route('settings.trust-profile', [], false).'#notary-seal'">
                     {{ __('Open trust profile') }}
                 </flux:button>
             </div>

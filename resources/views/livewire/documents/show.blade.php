@@ -296,7 +296,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <p class="mt-2 break-all font-mono text-sm text-zinc-900 dark:text-zinc-100">{{ $documentHash->transaction_id }}</p>
                         <p class="mt-2 text-xs font-semibold uppercase tracking-wider text-teal-600 dark:text-teal-400">{{ __('Anchored') }}</p>
                     @elseif ($documentHash !== null)
-                        <p class="mt-2 text-sm font-medium text-amber-700 dark:text-amber-300">{{ __('Transaction pending') }}</p>
+                        <p class="mt-2 text-sm font-medium text-amber-700 dark:text-amber-300">{{ __('Blockchain anchor pending') }}</p>
                         <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('The hash exists, but no blockchain transaction is recorded yet.') }}</p>
                     @else
                         <p class="mt-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">{{ __('Not available yet') }}</p>

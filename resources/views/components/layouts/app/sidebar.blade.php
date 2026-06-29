@@ -361,10 +361,9 @@
                 >
                     <flux:sidebar.item
                         icon="shield-check"
-                        :href="route('settings.trust-profile')"
+                        :href="route('settings.trust-profile', [], false)"
                         :current="request()->routeIs('settings.trust-profile')"
                         :tooltip="__('Trust profile')"
-                        wire:navigate
                     >{{ __('Trust profile') }}</flux:sidebar.item>
 
                     <flux:sidebar.item

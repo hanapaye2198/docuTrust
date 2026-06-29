@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\PaymentStatus;
 use App\Models\NotaryRequest;
 use App\Models\Payment;
-use App\Services\GatewayHubService;
-use App\Services\NotaryPaymentService;
 use App\Services\NotaryRequestWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -27,19 +26,7 @@ class PublicNotaryPaymentController extends Controller
             ->orderByDesc('id')
             ->first();
 
-        try {
-            $enabledGateways = app(GatewayHubService::class)->enabledGateways();
-        } catch (\Throwable $exception) {
-            $enabledGateways = [];
-            report($exception);
-        }
-
         $expiresAt = (int) $request->query('expires', now()->addDays(7)->timestamp);
-        $postUrl = URL::temporarySignedRoute(
-            'public.notary.payment.checkout',
-            Carbon::createFromTimestamp($expiresAt),
-            ['notaryRequest' => $notaryRequest->id],
-        );
         $statusUrl = URL::temporarySignedRoute(
             'public.notary.payment.status',
             Carbon::createFromTimestamp($expiresAt),
@@ -52,8 +39,6 @@ class PublicNotaryPaymentController extends Controller
             'paymentRequired' => $workflow->paymentRequired($notaryRequest),
             'hasSettledPayment' => $workflow->hasSettledPayment($notaryRequest),
             'settlementDueAmount' => $workflow->settlementDueAmount($notaryRequest),
-            'enabledGateways' => $enabledGateways,
-            'postUrl' => $postUrl,
             'statusUrl' => $statusUrl,
         ]);
     }
@@ -70,7 +55,7 @@ class PublicNotaryPaymentController extends Controller
             ->first();
 
         $currentPaymentExpired = $latestPayment instanceof Payment
-            && $latestPayment->status === \App\Enums\PaymentStatus::Pending
+            && $latestPayment->status === PaymentStatus::Pending
             && $latestPayment->expires_at?->isPast();
 
         return response()->json([
@@ -90,15 +75,22 @@ class PublicNotaryPaymentController extends Controller
 
     public function checkout(Request $request, NotaryRequest $notaryRequest): RedirectResponse
     {
-        $validated = $request->validate([
-            'payment_gateway' => ['required', 'string', 'max:50'],
-        ]);
+        $payment = Payment::query()
+            ->where('notary_request_id', $notaryRequest->id)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
 
-        $payment = app(NotaryPaymentService::class)->createGatewayPayment(
-            $notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']),
-            (string) $validated['payment_gateway'],
-            null,
-        );
+        $checkoutUrl = $payment?->checkout_url ?? $payment?->redirect_url;
+        $isActive = $payment instanceof Payment
+            && $payment->status === PaymentStatus::Pending
+            && ($payment->expires_at === null || $payment->expires_at->isFuture())
+            && is_string($checkoutUrl)
+            && $checkoutUrl !== '';
+
+        if ($isActive) {
+            return redirect()->away($checkoutUrl);
+        }
 
         return redirect()
             ->to(URL::temporarySignedRoute(
@@ -106,6 +98,6 @@ class PublicNotaryPaymentController extends Controller
                 Carbon::createFromTimestamp((int) $request->query('expires', now()->addDays(7)->timestamp)),
                 ['notaryRequest' => $notaryRequest->id],
             ))
-            ->with('status', __('Payment link created. Scan the QR code or open checkout below to continue.'));
+            ->with('status', __('Ask your attorney to generate a fresh payment link before paying.'));
     }
 }

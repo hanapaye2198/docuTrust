@@ -133,6 +133,11 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
         $response
             ->assertOk()
             ->assertSee('Joining your video call')
+            ->assertSee('max-w-7xl', false)
+            ->assertSee('h-[68svh] min-h-[360px] w-full sm:h-[72svh] sm:min-h-[460px] lg:h-[76svh]', false)
+            ->assertSee('test-video-token-123\/status', false)
+            ->assertSee('video-room-frame', false)
+            ->assertSee('This video call has ended automatically')
             ->assertSee('https://meet.jit.si/docutrust-test-room', false);
 
         $contentSecurityPolicy = (string) $response->headers->get('Content-Security-Policy');
@@ -144,6 +149,53 @@ class NotarySingleDocumentAndVideoInvitationTest extends TestCase
         $this->assertTrue($session->signer_confirmed);
         $this->assertNotNull($session->signer_confirmed_at);
         $this->assertNotNull($session->joined_at);
+    }
+
+    public function test_signer_video_status_reports_when_attorney_verification_ends_call(): void
+    {
+        $notary = User::factory()->notary()->create();
+        $request = NotaryRequest::factory()->for($notary)->create([
+            'notary_user_id' => $notary->id,
+            'status' => NotaryRequestStatus::SessionInProgress,
+        ]);
+        $party = NotarySigner::factory()->for($request, 'notaryRequest')->create();
+
+        $session = $request->sessions()->create([
+            'notary_user_id' => $notary->id,
+            'notary_signer_id' => $party->id,
+            'provider_name' => 'jitsi',
+            'status' => 'in_progress',
+            'room_name' => 'docutrust-complete-room',
+            'meeting_url' => 'https://meet.jit.si/docutrust-complete-room',
+            'access_token' => 'complete-video-token-123',
+            'scheduled_for' => now()->subMinute(),
+            'started_at' => now()->subMinute(),
+            'joined_at' => now()->subMinute(),
+        ]);
+
+        $this->getJson(route('enotary.video.status', ['token' => $session->access_token]))
+            ->assertOk()
+            ->assertJsonPath('status', 'in_progress')
+            ->assertJsonPath('ended', false);
+
+        app(NotarySchedulingService::class)->complete($session, [
+            'face_matches_id' => true,
+            'id_valid_not_expired' => true,
+            'signer_conscious_aware' => true,
+            'signer_agrees_voluntarily' => true,
+            'signer_in_philippines' => true,
+            'id_shown_on_camera' => true,
+        ], [
+            'verified_via' => 'test',
+            'verified_by_user_id' => $notary->id,
+            'verified_at' => now()->toDateTimeString(),
+        ]);
+
+        $this->getJson(route('enotary.video.status', ['token' => $session->access_token]))
+            ->assertOk()
+            ->assertJsonPath('status', 'completed')
+            ->assertJsonPath('ended', true)
+            ->assertJsonPath('completed', true);
     }
 
     public function test_status_payload_reports_signer_waiting_after_video_join(): void

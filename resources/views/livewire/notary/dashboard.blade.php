@@ -250,7 +250,7 @@ new #[Layout('components.layouts.app')] class extends Component {
         <flux:callout variant="warning" icon="exclamation-triangle" heading="{{ __('Action required before you can practice') }}">
             <p>{{ $eligibility['message'] }}</p>
             <div class="mt-3 flex flex-wrap gap-2">
-                <flux:button variant="ghost" size="sm" :href="route('settings.trust-profile')" wire:navigate>{{ __('Trust profile') }}</flux:button>
+                <flux:button variant="ghost" size="sm" :href="route('settings.trust-profile', [], false)">{{ __('Trust profile') }}</flux:button>
                 <flux:button variant="ghost" size="sm" :href="route('settings.profile', ['tab' => 'security'])" wire:navigate>{{ __('Security settings') }}</flux:button>
                 <flux:button variant="ghost" size="sm" :href="route('settings.attorney-application')" wire:navigate>{{ __('Attorney application') }}</flux:button>
             </div>
@@ -611,7 +611,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         <flux:icon.clipboard-document-list variant="outline" class="size-5 text-teal-700 dark:text-teal-400" />
                         <span class="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{{ __('Notarizations') }}</span>
                     </a>
-                    <a href="{{ route('settings.trust-profile') }}" wire:navigate class="flex flex-col gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-3 transition hover:border-teal-200 hover:bg-teal-50/50 dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-teal-500/30 dark:hover:bg-teal-500/5">
+                    <a href="{{ route('settings.trust-profile', [], false) }}" class="flex flex-col gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-3 transition hover:border-teal-200 hover:bg-teal-50/50 dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-teal-500/30 dark:hover:bg-teal-500/5">
                         <flux:icon.shield-check variant="outline" class="size-5 text-teal-700 dark:text-teal-400" />
                         <span class="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{{ __('Trust') }}</span>
                     </a>
@@ -657,7 +657,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                         </li>
                     @endforeach
                 </ul>
-                <flux:button variant="ghost" size="sm" class="mt-4 w-full" :href="route('settings.trust-profile')" wire:navigate icon="arrow-right" icon-position="right">
+                <flux:button variant="ghost" size="sm" class="mt-4 w-full" :href="route('settings.trust-profile', [], false)" icon="arrow-right" icon-position="right">
                     {{ __('Complete trust profile') }}
                 </flux:button>
             </div>

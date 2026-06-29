@@ -54,7 +54,7 @@ class OnboardingKycNameVerificationTest extends TestCase
         ]);
     }
 
-    public function test_kyc_rejects_when_ocr_name_does_not_match(): void
+    public function test_kyc_moves_to_pending_review_when_ocr_name_does_not_match(): void
     {
         $user = User::factory()->signer()->create([
             'first_name' => 'Juan',
@@ -77,20 +77,21 @@ class OnboardingKycNameVerificationTest extends TestCase
             ->set('kyc_id_type', 'drivers_license')
             ->set('id_document', UploadedFile::fake()->image('id.jpg', 200, 200))
             ->call('continue')
-            ->assertHasErrors(['id_document']);
+            ->assertHasNoErrors()
+            ->assertRedirect(route('onboarding.mfa', absolute: false));
 
         $user->refresh();
 
-        $this->assertSame(EkycStatus::Rejected, $user->ekyc_status);
-        $this->assertSame(OnboardingStep::Kyc, $user->onboarding_step);
+        $this->assertSame(EkycStatus::Pending, $user->ekyc_status);
+        $this->assertSame(OnboardingStep::Mfa, $user->onboarding_step);
         $this->assertNull($user->kyc_verified_at);
         $this->assertDatabaseHas('ekyc_records', [
             'user_id' => $user->id,
-            'status' => EkycStatus::Rejected->value,
+            'status' => EkycStatus::Pending->value,
         ]);
     }
 
-    public function test_kyc_shows_error_when_ocr_is_unavailable(): void
+    public function test_kyc_moves_to_pending_review_when_ocr_is_unavailable(): void
     {
         $user = User::factory()->signer()->create([
             'first_name' => 'Ana',
@@ -112,8 +113,18 @@ class OnboardingKycNameVerificationTest extends TestCase
             ->set('kyc_id_type', 'national_id')
             ->set('id_document', UploadedFile::fake()->image('id.jpg', 200, 200))
             ->call('continue')
-            ->assertHasErrors(['id_document']);
+            ->assertHasNoErrors()
+            ->assertRedirect(route('onboarding.mfa', absolute: false));
 
-        $this->assertSame(0, EkycRecord::query()->where('user_id', $user->id)->count());
+        $user->refresh();
+
+        $this->assertSame(EkycStatus::Pending, $user->ekyc_status);
+        $this->assertSame(OnboardingStep::Mfa, $user->onboarding_step);
+        $this->assertSame(1, EkycRecord::query()->where('user_id', $user->id)->count());
+        $this->assertDatabaseHas('ekyc_records', [
+            'user_id' => $user->id,
+            'status' => EkycStatus::Pending->value,
+            'rejection_reason' => 'OCR unavailable.',
+        ]);
     }
 }

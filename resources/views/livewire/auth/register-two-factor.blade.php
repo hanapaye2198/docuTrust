@@ -358,78 +358,10 @@ new #[Layout('components.layouts.auth.register')] class extends Component
                     @endif
 
                     <form wire:submit="verify" class="mt-6 flex flex-col gap-4">
-                        <div
-                            x-data="{
-                                codeModel: @entangle('code'),
-                                digits: ['', '', '', '', '', ''],
-                                get inputs() {
-                                    return this.$el.querySelectorAll('.otp-input');
-                                },
-                                syncFromModel() {
-                                    const clean = String(this.codeModel ?? '').replace(/\D/g, '').slice(0, 6);
-                                    this.digits = Array.from({ length: 6 }, (_, i) => clean[i] ?? '');
-                                },
-                                updateModel() {
-                                    this.codeModel = this.digits.join('');
-                                },
-                                focusInput(index) {
-                                    this.$nextTick(() => {
-                                        this.inputs[index]?.focus();
-                                    });
-                                },
-                                onInput(index, event) {
-                                    const value = event.target.value.replace(/\D/g, '');
-                                    this.digits[index] = value ? value.slice(-1) : '';
-                                    this.updateModel();
-
-                                    if (this.digits[index] !== '' && index < 5) {
-                                        this.focusInput(index + 1);
-                                    }
-                                },
-                                onKeydown(index, event) {
-                                    if (event.key === 'Backspace' && this.digits[index] === '' && index > 0) {
-                                        this.focusInput(index - 1);
-                                    }
-                                },
-                                onPaste(event) {
-                                    event.preventDefault();
-                                    const pasted = (event.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, 6);
-
-                                    if (pasted === '') {
-                                        return;
-                                    }
-
-                                    for (let i = 0; i < 6; i++) {
-                                        this.digits[i] = pasted[i] ?? '';
-                                    }
-
-                                    this.updateModel();
-                                    const focusIndex = Math.min(pasted.length, 6) - 1;
-                                    this.focusInput(Math.max(focusIndex, 0));
-                                },
-                            }"
-                            x-init="syncFromModel()"
-                            x-effect="if ((codeModel ?? '') !== digits.join('')) { syncFromModel(); }"
-                        >
+                        <div>
                             <p class="mb-2 text-sm text-[#1F2937]">{{ __('Authentication code') }}</p>
-                            <div class="grid grid-cols-6 gap-3 sm:gap-4" @paste="onPaste($event)">
-                                <template x-for="index in 6" :key="index">
-                                    <input
-                                        x-model="digits[index - 1]"
-                                        x-on:input="onInput(index - 1, $event)"
-                                        x-on:keydown="onKeydown(index - 1, $event)"
-                                        x-on:focus="$event.target.select()"
-                                        :data-otp-index="index - 1"
-                                        type="text"
-                                        inputmode="numeric"
-                                        autocomplete="one-time-code"
-                                        maxlength="1"
-                                        class="otp-input h-14 rounded-xl border-2 border-gray-300 bg-white text-center text-xl font-semibold text-[#1F2937] outline-none transition duration-200 focus:border-[#2EC4B6] focus:ring-2 focus:ring-[#2EC4B6]/30 sm:h-16 sm:text-2xl"
-                                        required
-                                    />
-                                </template>
-                            </div>
-                            <input type="hidden" wire:model="code" />
+                            <p class="mb-3 text-xs text-[#1F2937]/70">{{ __('Type or paste the full 6-digit code.') }}</p>
+                            <x-auth.otp-inputs model="code" :auto-submit="false" />
                         </div>
 
                         <flux:error name="code" />

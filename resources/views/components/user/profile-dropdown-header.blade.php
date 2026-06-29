@@ -7,7 +7,7 @@
 <div class="flex items-center gap-3 px-2 py-2.5 text-left">
     @if ($user->profile_photo_path)
         <img
-            src="{{ route('settings.trust-profile.photo') }}"
+            src="{{ route('settings.trust-profile.photo', [], false) }}"
             alt=""
             class="size-9 shrink-0 rounded-lg object-cover ring-1 ring-zinc-200 dark:ring-zinc-700"
         />

@@ -222,7 +222,7 @@ new class extends Component {
     >
         <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
             {{ __('Verification, signatures, and eNOTARY readiness are in') }}
-            <a href="{{ route('settings.trust-profile') }}" wire:navigate class="font-medium text-teal-700 hover:underline dark:text-teal-400">
+            <a href="{{ route('settings.trust-profile', [], false) }}" class="font-medium text-teal-700 hover:underline dark:text-teal-400">
                 {{ __('Trust profile') }}
             </a>.
         </p>

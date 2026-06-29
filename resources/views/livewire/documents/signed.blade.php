@@ -151,7 +151,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                                         <div class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-teal-600 dark:text-teal-400">{{ __('Anchored') }}</div>
                                         <div class="mt-1 max-w-xs break-all font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{{ $document->documentHash->transaction_id }}</div>
                                     @else
-                                        <div class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">{{ __('Transaction pending') }}</div>
+                                        <div class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">{{ __('Blockchain anchor pending') }}</div>
                                     @endif
                                 @else
                                     <span class="text-sm text-zinc-400 dark:text-zinc-500">{{ __('Hash pending') }}</span>

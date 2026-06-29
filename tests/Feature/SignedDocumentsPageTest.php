@@ -61,4 +61,25 @@ class SignedDocumentsPageTest extends TestCase
             ->assertSee(hash('sha256', 'signed-contract'))
             ->assertSee('0xsignedcontract');
     }
+
+    public function test_completed_documents_page_labels_missing_blockchain_transaction_as_anchor_pending(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+        $document = Document::factory()->for($user)->create([
+            'title' => 'Signed Contract Pending Anchor',
+            'status' => DocumentStatus::Completed,
+        ]);
+        $document->documentHash()->create([
+            'hash' => hash('sha256', 'pending-anchor'),
+            'transaction_id' => null,
+            'created_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('signed-documents.index'))
+            ->assertOk()
+            ->assertSee('Blockchain anchor pending')
+            ->assertDontSee('Transaction pending');
+    }
 }

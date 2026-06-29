@@ -124,7 +124,12 @@
                         <div class="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900">
                             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <a href="{{ route('documents.show', $document) }}" wire:navigate class="min-w-0 flex-1">
-                                    <div class="truncate font-medium text-zinc-800 dark:text-zinc-200">{{ $document->title }}</div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <div class="truncate font-medium text-zinc-800 dark:text-zinc-200">{{ $document->title }}</div>
+                                        @if (($artifactState['completed'] ?? false) || $document->status->value === 'completed')
+                                            <flux:badge size="sm" color="emerald">{{ __('Completed document') }}</flux:badge>
+                                        @endif
+                                    </div>
                                     <div class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $document->status->value }}</div>
                                     @if (is_array($workflowState))
                                         <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -144,7 +149,7 @@
                                             {{ trans_choice(':count approved|:count approved', $workflowState['participant_counts']['approved'], ['count' => $workflowState['participant_counts']['approved']]) }}
                                         </div>
                                     @endif
-                                    @if (is_array($artifactState) && ($attorneyHasSigned ?? false))
+                                    @if (is_array($artifactState) && (($attorneyHasSigned ?? false) || ($artifactState['completed'] ?? false) || ($artifactState['has_document_hash'] ?? false)))
                                         <div class="mt-2 flex flex-wrap gap-2">
                                             <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_final_pdf'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Final PDF') }}</span>
                                             <span class="rounded-full px-2.5 py-1 text-[11px] font-medium {{ $artifactState['has_certificate'] ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }}">{{ __('Certificate') }}</span>
@@ -154,6 +159,28 @@
                                         @if ($artifactState['issues'] !== [])
                                             <div class="mt-2 text-xs text-amber-700 dark:text-amber-300">
                                                 {{ implode(' ', $artifactState['issues']) }}
+                                            </div>
+                                        @endif
+                                        @if (($artifactState['document_hash'] ?? null) !== null)
+                                            <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+                                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                                    <span class="font-semibold">{{ __('Document hash') }}</span>
+                                                    @if (($artifactState['document_hash_created_at'] ?? null) !== null)
+                                                        <span class="text-[11px] text-emerald-700 dark:text-emerald-300">
+                                                            {{ __('Recorded :date', ['date' => $artifactState['document_hash_created_at']]) }}
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                                <div class="mt-1 break-all font-mono text-[11px] leading-5">{{ $artifactState['document_hash'] }}</div>
+                                                @if (($artifactState['blockchain_transaction_id'] ?? null) !== null)
+                                                    <div class="mt-1 break-all text-emerald-700 dark:text-emerald-300">
+                                                        {{ __('Blockchain transaction: :transaction', ['transaction' => $artifactState['blockchain_transaction_id']]) }}
+                                                    </div>
+                                                @else
+                                                    <div class="mt-1 text-amber-700 dark:text-amber-300">
+                                                        {{ __('Hash recorded. Blockchain proof is pending.') }}
+                                                    </div>
+                                                @endif
                                             </div>
                                         @endif
                                     @elseif ($isNotary && $document->status->value === 'completed' && ! ($attorneyHasSigned ?? false) && ($signingProgress['video_verification_complete'] ?? false))

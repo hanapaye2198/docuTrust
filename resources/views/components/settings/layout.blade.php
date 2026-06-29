@@ -8,9 +8,8 @@
     <div class="mr-8 w-full shrink-0 pb-4 md:w-[200px] lg:mr-10">
         <flux:navlist>
             <flux:navlist.item
-                :href="route('settings.trust-profile')"
+                :href="route('settings.trust-profile', [], false)"
                 :current="request()->routeIs('settings.trust-profile', 'settings.attorney-application')"
-                wire:navigate
             >
                 {{ __('Trust profile') }}
             </flux:navlist.item>

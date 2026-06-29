@@ -6,15 +6,30 @@
 
 @if (is_array($action))
     @if ($action['type'] === 'link' && ! empty($action['href']))
-        <flux:button
-            :variant="$action['variant'] ?? 'primary'"
-            :size="$size"
-            :href="$action['href']"
-            wire:navigate
-            :class="$class"
-        >
-            {{ $action['label'] }}
-        </flux:button>
+        @php
+            $shouldUseWireNavigate = ! str_contains((string) $action['href'], '#');
+        @endphp
+
+        @if ($shouldUseWireNavigate)
+            <flux:button
+                :variant="$action['variant'] ?? 'primary'"
+                :size="$size"
+                :href="$action['href']"
+                :class="$class"
+                wire:navigate
+            >
+                {{ $action['label'] }}
+            </flux:button>
+        @else
+            <flux:button
+                :variant="$action['variant'] ?? 'primary'"
+                :size="$size"
+                :href="$action['href']"
+                :class="$class"
+            >
+                {{ $action['label'] }}
+            </flux:button>
+        @endif
     @elseif ($action['type'] === 'wire' && ! empty($action['action']))
         @php
             $wireAction = $action['action'];

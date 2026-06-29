@@ -122,7 +122,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
     <form wire:submit="verify" class="mt-6 flex flex-col gap-6">
         <div class="rounded-2xl border border-[#2EC4B6]/20 bg-[#2EC4B6]/5 p-4 dark:border-teal-500/25 dark:bg-teal-500/5 sm:p-5">
             <p class="text-sm font-medium text-[#1F2937] dark:text-zinc-200">{{ __('Authentication code') }}</p>
-            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Single-digit OTP fields with auto-focus and instant progression.') }}</p>
+            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Type or paste the full 6-digit code from your authenticator app.') }}</p>
             <x-auth.otp-inputs model="code" :auto-submit="true" />
             <div class="mt-2">
                 <flux:error name="code" />

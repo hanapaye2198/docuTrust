@@ -271,6 +271,11 @@ new #[Layout('components.layouts.app')] class extends Component {
         $this->refreshRequest();
     }
 
+    public function refreshPaymentUpdates(): void
+    {
+        $this->refreshRequest();
+    }
+
     public function refreshVideoStatus(): void
     {
         $sessions = $this->notaryRequest
@@ -449,7 +454,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
         $workflow = app(NotaryRequestWorkflowService::class);
         $readiness = $workflow->finalizationReadiness($this->notaryRequest);
-        $requestDocuments = $this->notaryRequest->documents->loadMissing(['documentSigners', 'signatureFields']);
+        $requestDocuments = $this->notaryRequest->documents->loadMissing(['documentHash', 'documentSigners', 'signatureFields']);
 
         return [
             'isNotary' => $user->role->value === 'notary',
@@ -1532,39 +1537,7 @@ new #[Layout('components.layouts.app')] class extends Component {
 
     public function createGatewayPaymentForClient(): void
     {
-        $user = Auth::user();
-        abort_unless($user !== null, 401);
-
-        $canPay = ($this->notaryRequest->user_id === $user->id
-            || ($user->isEnotaryPortalSigner() && $user->isNotarySignerOn($this->notaryRequest)))
-            && $user->role->value !== 'notary';
-        abort_unless($canPay, 403);
-
-        $validated = $this->validate([
-            'paymentGateway' => ['required', Rule::in(collect($this->enabledPaymentGateways)->pluck('code')->all())],
-        ]);
-
-        try {
-            $payment = app(NotaryPaymentService::class)->createGatewayPayment(
-                $this->notaryRequest->fresh(['registerEntries', 'payments', 'attorneyNotarialRegistry']),
-                $validated['paymentGateway'],
-                $user->id,
-            );
-
-            $this->refreshRequest();
-            $this->navigateToSettlementSection('section-payment');
-
-            $paymentUrl = $payment->checkout_url ?? $payment->redirect_url;
-            if (is_string($paymentUrl) && $paymentUrl !== '') {
-                $this->redirect($paymentUrl, navigate: false);
-
-                return;
-            }
-
-            session()->flash('status', __('Payment link created. Open checkout below to continue.'));
-        } catch (\RuntimeException $exception) {
-            $this->addError('createGatewayPaymentForClient', $exception->getMessage());
-        }
+        abort(403);
     }
 
     public function resendPaymentLinkToClient(): void
@@ -2017,7 +1990,7 @@ new #[Layout('components.layouts.app')] class extends Component {
                 'label' => __('Upload your notary seal'),
                 'description' => __('Add your personal seal in your trust profile.'),
                 'variant' => 'primary',
-                'href' => route('settings.trust-profile').'#notary-seal',
+                'href' => route('settings.trust-profile', [], false).'#notary-seal',
                 'tab' => 'closing',
             ];
         }

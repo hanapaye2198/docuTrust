@@ -7,7 +7,7 @@
     >
         @if ($user->profile_photo_path)
             <img
-                src="{{ route('settings.trust-profile.photo') }}"
+                src="{{ route('settings.trust-profile.photo', [], false) }}"
                 alt=""
                 class="size-8 shrink-0 rounded-lg object-cover"
             />
@@ -32,7 +32,7 @@
         <flux:menu.separator />
 
         <flux:menu.radio.group>
-            <flux:menu.item :href="route('settings.trust-profile')" icon="shield-check" wire:navigate>{{ __('Trust profile') }}</flux:menu.item>
+            <flux:menu.item :href="route('settings.trust-profile', [], false)" icon="shield-check">{{ __('Trust profile') }}</flux:menu.item>
             <flux:menu.item :href="route('settings.profile')" icon="cog-6-tooth" wire:navigate>{{ __('Settings') }}</flux:menu.item>
         </flux:menu.radio.group>
 

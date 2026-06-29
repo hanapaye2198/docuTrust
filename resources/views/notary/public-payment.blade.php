@@ -33,11 +33,6 @@
             'expired', 'failed', 'cancelled', 'canceled' => 'rose',
             default => 'zinc',
         };
-
-        $avatarPalette = [
-            ['teal', '14b8a6'], ['sky', '0ea5e9'], ['violet', '8b5cf6'],
-            ['amber', 'f59e0b'], ['rose', 'f43f5e'], ['indigo', '6366f1'],
-        ];
     @endphp
 
     <main class="mx-auto flex min-h-screen w-full max-w-4xl flex-col justify-center px-4 py-10 sm:px-6">
@@ -53,7 +48,7 @@
                     </p>
                     <h1 class="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">{{ __('Pay notarial fee') }}</h1>
                     <p class="max-w-xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-                        {{ __('This secure payment page lets you choose your payment method and continue the notarization process without signing in.') }}
+                        {{ __('This secure payment page uses the payment method prepared by your attorney for this notarization case.') }}
                     </p>
                 </div>
                 <div class="shrink-0 rounded-2xl border border-teal-100 bg-teal-50/80 px-4 py-3 text-sm text-teal-900 dark:border-teal-900/40 dark:bg-teal-950/30 dark:text-teal-100">
@@ -68,7 +63,7 @@
             {{-- Progress steps --}}
             @php
                 $steps = [
-                    1 => __('Choose method'),
+                    1 => __('Prepared by attorney'),
                     2 => __('Complete payment'),
                     3 => __('Confirmed'),
                 ];
@@ -248,71 +243,18 @@
                             @elseif ($currentPaymentExpired)
                                 <div class="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
                                     <svg class="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-                                    <span>{{ __('Your previous payment link expired. Choose a payment method below to generate a fresh one.') }}</span>
+                                    <span>{{ __('Your previous payment link expired. Ask your attorney to generate a fresh checkout link.') }}</span>
                                 </div>
                             @endif
                         </div>
                     @endif
 
-                    <form id="payment-form" method="POST" action="{{ $postUrl }}" class="mt-6 rounded-[26px] border border-zinc-200 bg-zinc-50/70 p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/30 sm:p-6">
-                        @csrf
-
-                        <div class="flex items-center justify-between">
-                            <label class="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                                {{ $hasActiveLink ? __('Switch payment method') : __('Choose payment method') }}
-                            </label>
-                            @if ($enabledGateways !== [])
-                                <span class="hidden text-xs text-zinc-500 dark:text-zinc-400 sm:block">{{ __('Tap to select') }}</span>
-                            @endif
+                    @if (! $hasActiveLink && ! $hasSettledPayment)
+                        <div class="mt-6 flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                            <svg class="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                            <span>{{ __('Your attorney has not generated an active payment checkout yet. Please wait for a new payment link.') }}</span>
                         </div>
-
-                        @if ($enabledGateways !== [])
-                            <div class="mt-3 grid gap-2.5 sm:grid-cols-2">
-                                @foreach ($enabledGateways as $gateway)
-                                    @php
-                                        $code = (string) ($gateway['code'] ?? '');
-                                        $name = (string) ($gateway['name'] ?? $code);
-                                        $tint = $avatarPalette[abs(crc32($code)) % count($avatarPalette)];
-                                        $initial = strtoupper(mb_substr(trim($name) !== '' ? $name : $code, 0, 1));
-                                    @endphp
-                                    <label class="group relative block cursor-pointer">
-                                        <input type="radio" name="payment_gateway" value="{{ $code }}" class="peer sr-only" @checked($loop->first)>
-                                        <div class="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 shadow-sm transition group-hover:border-zinc-300 peer-checked:border-teal-500 peer-checked:ring-2 peer-checked:ring-teal-500/25 dark:border-zinc-700 dark:bg-zinc-900 dark:group-hover:border-zinc-600 dark:peer-checked:border-teal-500">
-                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm font-bold text-white shadow-sm" style="background:linear-gradient(135deg,#{{ $tint[1] }},#{{ $tint[1] }}cc)">
-                                                {{ $initial }}
-                                            </span>
-                                            <span class="min-w-0 flex-1">
-                                                <span class="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ $name }}</span>
-                                                <span class="block truncate text-xs text-zinc-500 dark:text-zinc-400">{{ __('Pay securely via :gateway', ['gateway' => $name]) }}</span>
-                                            </span>
-                                            <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-zinc-300 text-transparent transition peer-checked:border-teal-500 peer-checked:bg-teal-500 peer-checked:text-white dark:border-zinc-600">
-                                                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                                            </span>
-                                        </div>
-                                    </label>
-                                @endforeach
-                            </div>
-
-                            @error('payment_gateway')
-                                <p class="mt-2 text-sm text-rose-600 dark:text-rose-400">{{ $message }}</p>
-                            @enderror
-
-                            <button
-                                id="payment-submit"
-                                type="submit"
-                                class="group mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-5 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900/30 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-teal-600 dark:hover:bg-teal-500 dark:focus:ring-teal-500/40"
-                            >
-                                <svg data-submit-spinner class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.4 0 0 5.4 0 12h4Z"/></svg>
-                                <span data-submit-label>{{ $hasActiveLink ? __('Generate new payment link') : __('Continue to payment') }}</span>
-                                <svg data-submit-arrow class="h-4 w-4 transition group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                            </button>
-                        @else
-                            <div class="mt-3 flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                                <svg class="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-                                <span>{{ __('Online payment is not configured right now. Please contact your attorney.') }}</span>
-                            </div>
-                        @endif
-                    </form>
+                    @endif
                 @endif
             </div>
 
@@ -368,22 +310,6 @@
                 }
             });
         });
-
-        // Loading state on payment submit to prevent double-submission.
-        var form = document.getElementById('payment-form');
-        if (form) {
-            form.addEventListener('submit', function () {
-                var btn = document.getElementById('payment-submit');
-                if (!btn) return;
-                btn.disabled = true;
-                var spinner = btn.querySelector('[data-submit-spinner]');
-                var arrow = btn.querySelector('[data-submit-arrow]');
-                var label = btn.querySelector('[data-submit-label]');
-                if (spinner) spinner.classList.remove('hidden');
-                if (arrow) arrow.classList.add('hidden');
-                if (label) label.textContent = @json(__('Preparing your payment…'));
-            });
-        }
 
         // Public payment page polling: reload when payment state changes.
         (function () {

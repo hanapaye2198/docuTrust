@@ -4,6 +4,7 @@ use App\Enums\EkycStatus;
 use App\Enums\OnboardingStep;
 use App\Exceptions\EkycOcrUnavailableException;
 use App\Models\EkycRecord;
+use App\Models\User;
 use App\Services\Ekyc\EkycNameVerificationService;
 use App\Services\Ekyc\EkycProviderManager;
 use App\Services\OnboardingAuditLogger;
@@ -66,7 +67,7 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
     ): void {
         $this->validate([
             'kyc_id_type' => ['required', 'string', Rule::in(['passport', 'drivers_license', 'national_id'])],
-            'id_document' => ['required', 'image', 'max:5120'],
+            'id_document' => ['required', 'file', 'mimes:jpg,jpeg,png', 'max:10240'],
         ]);
 
         $user = Auth::user();
@@ -82,34 +83,25 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
         try {
             $result = $verificationService->verify($user, $absolutePath);
         } catch (EkycOcrUnavailableException $exception) {
-            Storage::disk('local')->delete($path);
-
-            $this->addError('id_document', $exception->getMessage());
+            $this->markKycPendingReview(
+                user: $user,
+                path: $path,
+                ocrText: null,
+                reason: $exception->getMessage(),
+                auditLogger: $auditLogger,
+            );
 
             return;
         }
 
         if (! $result->matched) {
-            EkycRecord::query()->create([
-                'user_id' => $user->id,
-                'document_type' => $this->kyc_id_type,
-                'document_path' => $path,
-                'provider' => 'tesseract',
-                'ocr_text' => $result->ocrText,
-                'status' => EkycStatus::Rejected->value,
-                'rejection_reason' => $result->message,
-            ]);
-
-            $user->forceFill([
-                'kyc_id_type' => $this->kyc_id_type,
-                'kyc_file_path' => $path,
-                'kyc_verified_at' => null,
-                'ekyc_status' => EkycStatus::Rejected,
-            ])->save();
-
-            $auditLogger->log($user, 'ekyc_name_mismatch');
-
-            $this->addError('id_document', $result->message);
+            $this->markKycPendingReview(
+                user: $user,
+                path: $path,
+                ocrText: $result->ocrText,
+                reason: $result->message,
+                auditLogger: $auditLogger,
+            );
 
             return;
         }
@@ -133,6 +125,38 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
         ])->save();
 
         $auditLogger->log($user, 'ekyc_submitted');
+
+        $this->redirect(route('onboarding.mfa', absolute: false), navigate: true);
+    }
+
+    protected function markKycPendingReview(
+        User $user,
+        string $path,
+        ?string $ocrText,
+        string $reason,
+        OnboardingAuditLogger $auditLogger,
+    ): void {
+        EkycRecord::query()->create([
+            'user_id' => $user->id,
+            'document_type' => $this->kyc_id_type,
+            'document_path' => $path,
+            'provider' => 'tesseract',
+            'ocr_text' => $ocrText,
+            'status' => EkycStatus::Pending->value,
+            'rejection_reason' => $reason,
+        ]);
+
+        $user->forceFill([
+            'kyc_id_type' => $this->kyc_id_type,
+            'kyc_file_path' => $path,
+            'kyc_verified_at' => null,
+            'ekyc_status' => EkycStatus::Pending,
+            'onboarding_step' => OnboardingStep::Mfa,
+        ])->save();
+
+        $auditLogger->log($user, 'ekyc_pending_review');
+
+        session()->flash('status', __('We received your ID. It needs manual review, so you can continue onboarding while we check it.'));
 
         $this->redirect(route('onboarding.mfa', absolute: false), navigate: true);
     }
@@ -289,18 +313,55 @@ new #[Layout('components.layouts.auth.register')] class extends Component {
 
             <div>
                 <flux:label>{{ __('ID image') }}</flux:label>
-                <label class="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 transition duration-300 hover:border-[#2EC4B6] hover:bg-[#2EC4B6]/5 dark:border-zinc-600 dark:bg-zinc-800/50 dark:hover:border-teal-500/60 motion-safe:hover:scale-[1.01]">
-                    <input type="file" wire:model="id_document" accept="image/*" class="sr-only" />
-                    <svg class="mb-2 size-10 text-gray-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span class="text-sm font-medium text-[#1F2937] dark:text-zinc-200">{{ __('Click to upload or drag an image') }}</span>
-                    <span class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Recommended: well-lit, full document in frame') }}</span>
-                </label>
-                <div wire:loading wire:target="id_document" class="mt-2 text-xs text-[#1B5E20] dark:text-teal-300">{{ __('Uploading…') }}</div>
-                @if ($id_document)
-                    <p class="mt-2 text-xs text-zinc-600 dark:text-zinc-400">{{ $id_document->getClientOriginalName() }}</p>
-                @endif
+                <div
+                    class="mt-2 rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-4 transition duration-300 hover:border-[#2EC4B6] hover:bg-[#2EC4B6]/5 dark:border-zinc-600 dark:bg-zinc-800/50 dark:hover:border-teal-500/60 sm:p-5"
+                    x-data="{ dragging: false, progress: 0 }"
+                    x-bind:class="dragging ? 'border-[#2EC4B6] bg-[#2EC4B6]/10 dark:border-teal-500/80' : ''"
+                    x-on:livewire-upload-start="progress = 1"
+                    x-on:livewire-upload-finish="progress = 0"
+                    x-on:livewire-upload-error="progress = 0"
+                    x-on:livewire-upload-progress="progress = $event.detail.progress"
+                    x-on:dragover.prevent="dragging = true"
+                    x-on:dragleave.prevent="dragging = false"
+                    x-on:drop.prevent="
+                        dragging = false;
+                        if ($event.dataTransfer.files.length) {
+                            $refs.idDocument.files = $event.dataTransfer.files;
+                            $refs.idDocument.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    "
+                >
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#2EC4B6]/10 text-[#1B5E20] dark:bg-teal-500/10 dark:text-teal-300">
+                                <flux:icon.identification class="size-5" />
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-[#1F2937] dark:text-zinc-100">{{ __('Upload your government ID') }}</p>
+                                <p class="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ __('JPG, JPEG, or PNG up to 10 MB. Use a clear, well-lit photo with the full ID inside the frame.') }}</p>
+                                @if ($id_document)
+                                    <p class="mt-2 truncate text-xs font-medium text-[#1B5E20] dark:text-teal-300">{{ $id_document->getClientOriginalName() }}</p>
+                                @endif
+                            </div>
+                        </div>
+
+                        <flux:button type="button" variant="outline" class="w-full sm:w-auto" x-on:click="$refs.idDocument.click()">
+                            {{ __('Browse ID') }}
+                        </flux:button>
+                    </div>
+
+                    <input x-ref="idDocument" type="file" wire:model="id_document" accept=".jpg,.jpeg,.png,image/jpeg,image/png" class="sr-only" />
+
+                    <div wire:loading wire:target="id_document" class="mt-4">
+                        <div class="flex items-center justify-between gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+                            <span>{{ __('Uploading ID') }}</span>
+                            <span class="font-semibold tabular-nums text-[#1B5E20] dark:text-teal-300" x-text="(progress > 0 ? progress : 0) + '%'"></span>
+                        </div>
+                        <div class="mt-2 h-2 overflow-hidden rounded-full bg-[#2EC4B6]/15 dark:bg-teal-950/50">
+                            <div class="h-full rounded-full bg-[#2EC4B6] transition-all duration-300" x-bind:style="'width: ' + Math.max(progress, 8) + '%'"></div>
+                        </div>
+                    </div>
+                </div>
                 <flux:error name="id_document" />
             </div>
 

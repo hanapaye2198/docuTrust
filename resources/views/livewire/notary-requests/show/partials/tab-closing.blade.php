@@ -4,7 +4,7 @@
 
         @include('livewire.notary-requests.show.partials.section-settlement-fee')
 
-        @if ($canManageLifecycle || $isEnotaryPortalSigner || $isRequester)
+        @if ($canCreatePayment || $canManageLifecycle || $isEnotaryPortalSigner || $isRequester)
             @include('livewire.notary-requests.show.partials.section-payment')
         @endif
 
@@ -70,7 +70,7 @@
                     {{ __('Upload your personal seal in trust profile before creating the official register entry.') }}
                 </div>
                 <div class="mt-4">
-                    <flux:button variant="outline" :href="route('settings.trust-profile').'#notary-seal'" wire:navigate>{{ __('Open trust profile') }}</flux:button>
+                    <flux:button variant="outline" :href="route('settings.trust-profile', [], false).'#notary-seal'">{{ __('Open trust profile') }}</flux:button>
                 </div>
             @endif
         </div>

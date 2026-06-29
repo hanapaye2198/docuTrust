@@ -16,15 +16,19 @@
     };
 @endphp
 
-<div id="section-payment" class="ui-panel scroll-mt-24 p-5 sm:p-6">
+<div
+    id="section-payment"
+    class="ui-panel scroll-mt-24 p-5 sm:p-6"
+    @if ($paymentRequired && ! $hasSettledPayment) wire:poll.5s="refreshPaymentUpdates" @endif
+>
     <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
         {{ $canPayNotaryFee && ! $canCreatePayment ? __('Pay notarial fee') : __('Notarial fee payment') }}
     </h2>
     <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         @if ($canCreatePayment)
-            {{ __('Email the client a no-login payment page after you save the notarial fee. The client will choose a payment method there before you complete the register entry.') }}
+            {{ __('Set the recipient and payment method here. The client will only receive the checkout prepared by the attorney.') }}
         @elseif ($canPayNotaryFee)
-            {{ __('Choose a payment method to create your checkout link. Payment must be completed before notarization can finish.') }}
+            {{ __('Use the attorney-generated checkout below. The payment method is already selected for this case.') }}
         @else
             {{ __('Payment status for this case.') }}
         @endif
@@ -47,48 +51,90 @@
         </div>
     @endif
 
-    @if ($canCreatePayment)
-        <div class="mt-4 rounded-xl border border-zinc-200 bg-white px-4 py-4 dark:border-zinc-700 dark:bg-zinc-950/40">
-            <label for="payment-recipient-email" class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Payment recipient email') }}</label>
-            <input
-                id="payment-recipient-email"
-                type="email"
-                wire:model.live="paymentRecipientEmail"
-                placeholder="client@example.com"
-                class="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-            >
-            <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                {{ __('Enter the exact recipient before emailing the no-login payment page.') }}
-                @if ($notaryRequest->requester?->email)
-                    {{ __('Requester on file: :email', ['email' => $notaryRequest->requester->email]) }}
-                @endif
-            </p>
-            @error('paymentRecipientEmail')
-                <p class="mt-2 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
-            @enderror
-        </div>
-    @endif
+    @if ($canCreatePayment && $paymentDue > 0)
+        <form method="POST" action="{{ route('notary.requests.payment-link', $notaryRequest) }}" class="mt-4 rounded-2xl border border-teal-200 bg-teal-50/40 p-4 dark:border-teal-900/40 dark:bg-teal-950/20 sm:p-5">
+            @csrf
 
-    @if ($paymentDue > 0 && ($canCreatePayment || $canManageLifecycle) && $paymentEmailUrl)
-        <div class="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-4 text-sm text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <div class="font-medium">{{ __('Direct payment page') }}</div>
-                    <p class="mt-1 text-xs text-violet-800/85 dark:text-violet-200/85">
-                        {{ __('Open the same no-login payment page the client would receive by email. Use this for faster local QA without checking Mailpit or email first.') }}
-                    </p>
+                    <div class="text-sm font-semibold text-teal-950 dark:text-teal-100">{{ __('Payment setup wizard') }}</div>
+                    <p class="mt-1 text-xs text-teal-800/90 dark:text-teal-200/90">{{ __('Complete these three steps, then send one prepared checkout link to the client.') }}</p>
                 </div>
-                <a href="{{ $paymentEmailPreviewUrl }}"
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   class="inline-flex items-center justify-center rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200 dark:hover:bg-violet-900">
-                    {{ __('See what the client will pay') }}
-                </a>
+                <span class="inline-flex w-fit rounded-full border border-teal-200 bg-white px-3 py-1 text-xs font-semibold text-teal-700 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-200">
+                    {{ __('Attorney chooses gateway') }}
+                </span>
             </div>
-            <div class="mt-3 break-all rounded-lg border border-violet-200/80 bg-white/70 px-3 py-2 text-[11px] text-violet-800/80 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-200/80">
-                {{ $paymentEmailUrl }}
+
+            <div class="grid gap-3 lg:grid-cols-3">
+                <div class="rounded-xl border border-white/80 bg-white px-4 py-3 shadow-sm dark:border-teal-900/30 dark:bg-zinc-950/50">
+                    <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+                        <span class="grid size-6 place-items-center rounded-full bg-teal-600 text-white">1</span>
+                        {{ __('Fee') }}
+                    </div>
+                    <div class="mt-3 text-2xl font-semibold text-zinc-950 dark:text-zinc-100">PHP {{ number_format($paymentDue, 2) }}</div>
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Based on the saved settlement fee.') }}</p>
+                </div>
+
+                <div class="rounded-xl border border-white/80 bg-white px-4 py-3 shadow-sm dark:border-teal-900/30 dark:bg-zinc-950/50">
+                    <label for="payment-recipient-email" class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+                        <span class="grid size-6 place-items-center rounded-full bg-teal-600 text-white">2</span>
+                        {{ __('Recipient') }}
+                    </label>
+                    <input
+                        id="payment-recipient-email"
+                        name="recipient_email"
+                        type="email"
+                        wire:model.live="paymentRecipientEmail"
+                        value="{{ old('recipient_email', $paymentRecipientEmail) }}"
+                        placeholder="client@example.com"
+                        class="mt-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                    >
+                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        @if ($notaryRequest->requester?->email)
+                            {{ __('Requester on file: :email', ['email' => $notaryRequest->requester->email]) }}
+                        @else
+                            {{ __('Use the email address that should receive the payment link.') }}
+                        @endif
+                    </p>
+                    @error('recipient_email')
+                        <p class="mt-2 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div class="rounded-xl border border-white/80 bg-white px-4 py-3 shadow-sm dark:border-teal-900/30 dark:bg-zinc-950/50">
+                    <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+                        <span class="grid size-6 place-items-center rounded-full bg-teal-600 text-white">3</span>
+                        {{ __('Method') }}
+                    </div>
+                    @if ($enabledPaymentGateways !== [])
+                        <select name="payment_gateway" class="mt-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                            @foreach ($enabledPaymentGateways as $gatewayOption)
+                                <option value="{{ $gatewayOption['code'] }}" @selected($paymentGateway === $gatewayOption['code'])>{{ $gatewayOption['name'] }}</option>
+                            @endforeach
+                        </select>
+                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('The client will not be asked to choose another method.') }}</p>
+                    @else
+                        <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                            {{ __('Online payment is not configured. Set GATEWAYHUB_API_KEY or enable GATEWAYHUB_DEMO_MODE=true.') }}
+                        </div>
+                    @endif
+                    @error('payment_gateway')
+                        <p class="mt-2 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
             </div>
-        </div>
+
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-xs text-zinc-600 dark:text-zinc-400">{{ __('Generating a new link creates the checkout using the selected gateway and emails it to the recipient.') }}</p>
+                <button
+                    type="submit"
+                    @disabled($enabledPaymentGateways === [])
+                    class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    {{ $currentPaymentExpired ? __('Generate and send fresh link') : __('Generate and send payment link') }}
+                </button>
+            </div>
+        </form>
     @endif
 
     @if ($paymentRequired && ! $hasSettledPayment)
@@ -228,94 +274,9 @@
         </div>
     @endif
 
-    @if (($canCreatePayment || $canPayNotaryFee) && $paymentDue > 0 && (! ($latestPayment instanceof Payment) || $latestPayment->status !== PaymentStatus::Paid))
-        <div class="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
-            <div class="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                {{ $canPayNotaryFee ? __('Choose a payment method') : ($currentPaymentExpired ? __('Generate a new payment link') : __('Send client to payment page')) }}
-            </div>
-            @if ($enabledPaymentGateways !== [])
-                @if ($canPayNotaryFee)
-                <div class="mt-3 space-y-3">
-                    <div class="space-y-1.5">
-                        <label for="payment-gateway" class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Payment method') }}</label>
-                        <select id="payment-gateway" wire:model="paymentGateway" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-                            @foreach ($enabledPaymentGateways as $gatewayOption)
-                                <option value="{{ $gatewayOption['code'] }}">{{ $gatewayOption['name'] }}</option>
-                            @endforeach
-                        </select>
-                        @error('paymentGateway')
-                            <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
-                        @enderror
-                    </div>
-                    @if ($canPayNotaryFee)
-                        <button
-                            type="button"
-                            wire:click="createGatewayPaymentForClient"
-                            wire:loading.attr="disabled"
-                            wire:target="createGatewayPaymentForClient"
-                            class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            <span wire:loading.remove wire:target="createGatewayPaymentForClient">
-                                {{ __('Continue to payment') }}
-                            </span>
-                            <span wire:loading wire:target="createGatewayPaymentForClient">
-                                {{ __('Processing...') }}
-                            </span>
-                        </button>
-                    @else
-                <form method="POST" action="{{ route('notary.requests.payment-link', $notaryRequest) }}">
-                            @csrf
-                            <input type="hidden" name="payment_gateway" value="{{ $paymentGateway }}">
-                            <input type="hidden" name="recipient_email" value="{{ $paymentRecipientEmail }}">
-                            <button
-                                type="submit"
-                                class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {{ $currentPaymentExpired ? __('Generate new payment link') : __('Email payment page to client') }}
-                            </button>
-                        </form>
-                    @endif
-                    @error('createGatewayPayment')
-                        <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
-                    @enderror
-                    @error('createGatewayPaymentForClient')
-                        <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
-                    @enderror
-                </div>
-                @else
-                <form method="POST" action="{{ route('notary.requests.payment-link', $notaryRequest) }}" class="mt-3 space-y-3">
-                    @csrf
-                    <div class="space-y-1.5">
-                        <label for="payment-gateway" class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Payment method') }}</label>
-                        <select id="payment-gateway" name="payment_gateway" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-                            @foreach ($enabledPaymentGateways as $gatewayOption)
-                                <option value="{{ $gatewayOption['code'] }}" @selected($paymentGateway === $gatewayOption['code'])>{{ $gatewayOption['name'] }}</option>
-                            @endforeach
-                        </select>
-                        @error('payment_gateway')
-                            <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
-                        @enderror
-                    </div>
-                    <div class="space-y-1.5">
-                        <label for="recipient-email" class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ __('Recipient email') }}</label>
-                        <input id="recipient-email" type="email" name="recipient_email" value="{{ old('recipient_email', $paymentRecipientEmail) }}" placeholder="client@example.com" class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-                        @error('recipient_email')
-                            <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
-                        @enderror
-                    </div>
-                    <button
-                        type="submit"
-                        class="inline-flex items-center justify-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {{ $currentPaymentExpired ? __('Generate new payment link') : __('Email payment page to client') }}
-                    </button>
-                </form>
-                @endif
-            @else
-                <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                    {{ __('Online payment is not configured. Set GATEWAYHUB_API_KEY or enable GATEWAYHUB_DEMO_MODE=true for committee demos.') }}
-                </div>
-            @endif
+    @if ($canPayNotaryFee && $paymentDue > 0 && ! ($latestPayment instanceof Payment))
+        <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+            {{ __('Waiting for the attorney to generate your payment link. The attorney will choose the payment method for this case.') }}
         </div>
     @endif
 
